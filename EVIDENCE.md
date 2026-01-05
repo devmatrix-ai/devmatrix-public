@@ -198,6 +198,34 @@ SuperAdmin, User, Workspace
 | Healthcare (MediCloud) | 284 | 269 | 95.4% | A (98.6%) |
 | **TOTAL** | **1,125** | **995** | **88.4%** | **A** |
 
+### 3.4 Entendiendo Quality Grade vs Pass Rate
+
+**¿Por qué Grade ≠ Pass Rate?**
+
+El **Pass Rate** es el porcentaje bruto de tests que pasan. El **Quality Grade** es un score compuesto ponderado que considera la importancia de cada tier de tests:
+
+| Test Tier | Peso | Qué Mide |
+|-----------|------|----------|
+| Contract Tests | 40% | Correctitud HTTP (status codes, estructura de respuesta) |
+| Behavior Tests | 30% | Lógica de negocio y correctitud de workflows |
+| Security Tests | 20% | Autenticación, autorización, validación de input |
+| Validation Tests | 10% | Edge cases, enforcement de constraints |
+
+**Cálculo del Grade**:
+
+```
+Grade = (Contract × 0.40) + (Behavior × 0.30) + (Security × 0.20) + (Validation × 0.10)
+```
+
+**Ejemplo (FLOWDESK)**:
+- Contract tests: 98% pass → contribuye 39.2%
+- Behavior tests: 95% pass → contribuye 28.5%
+- Security tests: 99% pass → contribuye 19.8%
+- Validation tests: 94% pass → contribuye 9.4%
+- **Grade Total: 96.9%** (aunque el pass rate bruto sea 89.8%)
+
+Esta ponderación refleja que una falla en contract tests (HTTP status incorrecto) es más crítica que una falla en un edge case de validación. El Grade mide **production readiness**, mientras que Pass Rate mide **completitud de cobertura de tests**.
+
 ---
 
 ## 4. Reproducibility Verification

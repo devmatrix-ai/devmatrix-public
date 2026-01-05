@@ -288,3 +288,14 @@ This is not a promise. It is evidence.
 
 **Contact:** Ariel Eduardo Ghysels
 **Repository:** [Private - Available under NDA]
+
+---
+
+## Intellectual Property and Disclosure
+
+DevMatrix™ is a proprietary software system.
+This paper discloses architectural concepts, empirical evidence, and reproducibility artifacts for research and evaluation purposes.
+
+The underlying compiler implementation and associated technologies are protected intellectual property, with registrations and filings in multiple jurisdictions.
+
+This disclosure does not grant rights to use, reproduce, or derive commercial implementations of the DevMatrix compiler.

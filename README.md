@@ -32,6 +32,7 @@ It is a **compiler** that produces:
 | [PAPER_EN.md](PAPER_EN.md) | Technical paper (English - canonical) |
 | [EVIDENCE_EN.md](EVIDENCE_EN.md) | Reproducibility evidence (English) |
 | [HOW_TO_VERIFY.md](HOW_TO_VERIFY.md) | Verification instructions |
+| [REPRODUCIBILITY_SPEC.md](REPRODUCIBILITY_SPEC.md) | Canonical hash algorithm definitions |
 | [PAPER.md](PAPER.md) | Technical paper (Spanish) |
 | [EVIDENCE.md](EVIDENCE.md) | Reproducibility evidence (Spanish) |
 
@@ -87,15 +88,16 @@ See [HOW_TO_VERIFY.md](HOW_TO_VERIFY.md) for detailed instructions.
 
 ```
 DOCS/PRESENTATION/
-├── README.md              # This file
-├── PAPER_EN.md            # Technical paper (English)
-├── PAPER.md               # Technical paper (Spanish)
-├── EVIDENCE_EN.md         # Evidence (English)
-├── EVIDENCE.md            # Evidence (Spanish)
-├── HOW_TO_VERIFY.md       # Verification guide
-├── verify_fingerprint.py  # Verification script
-├── LICENSE                # CC-BY 4.0 (docs) + MIT (script)
-├── CITATION.cff           # Citation metadata
+├── README.md                  # This file
+├── PAPER_EN.md                # Technical paper (English - canonical)
+├── PAPER.md                   # Technical paper (Spanish)
+├── EVIDENCE_EN.md             # Evidence (English)
+├── EVIDENCE.md                # Evidence (Spanish)
+├── HOW_TO_VERIFY.md           # Verification guide
+├── REPRODUCIBILITY_SPEC.md    # Canonical hash algorithm definitions
+├── verify_fingerprint.py      # Verification script (reference implementation)
+├── LICENSE                    # CC-BY 4.0 (docs) + MIT (script)
+├── CITATION.cff               # Citation metadata
 └── examples/
     └── build_fingerprint_example.json
 ```
@@ -136,3 +138,13 @@ See [CITATION.cff](CITATION.cff) for full citation metadata.
 ---
 
 *This is not a demo. This is evidence.*
+
+*Evidence = cryptographic fingerprints + reproducible build hashing, not screenshots.*
+
+---
+
+**Intellectual Property Notice**
+
+DevMatrix™ and the underlying compilation technology are protected intellectual property.
+The concepts and evidence presented in this repository are disclosed for research and evaluation purposes.
+The DevMatrix compiler core is proprietary and registered under applicable jurisdictions.

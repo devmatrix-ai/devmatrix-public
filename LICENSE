@@ -56,3 +56,23 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+---
+
+INTELLECTUAL PROPERTY NOTICE
+
+DevMatrix™ and the underlying specification-to-system compilation technology
+are protected intellectual property of Ariel Eduardo Ghysels.
+
+The DevMatrix compiler, its architecture, algorithms, and associated technologies
+are registered and protected under applicable intellectual property laws in
+multiple jurisdictions.
+
+This repository discloses concepts and evidence for research and evaluation
+purposes only. This disclosure does not grant any rights to:
+
+  - Use, reproduce, or implement the DevMatrix compiler
+  - Create derivative works based on the compiler architecture
+  - Commercial use of the proprietary technology
+
+For licensing inquiries or supervised verification sessions, contact the author.

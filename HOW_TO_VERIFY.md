@@ -4,20 +4,39 @@ This document explains how to independently verify DevMatrix compilation evidenc
 
 ---
 
-## Quick Verification (3 Commands)
+## Quick Verification
+
+### Using the verification script (recommended)
 
 ```bash
-# 1. Read the build fingerprint
-cat build_fingerprint.json | jq '.spec_hash, .code_bundle_hash'
+# Verify spec and output against fingerprint
+python verify_fingerprint.py \
+  --fingerprint build_fingerprint.json \
+  --spec original_spec.md \
+  --output generated/
 
-# 2. Verify spec hash (SHA-256 of input specification)
-sha256sum original_spec.md
-# Output must match spec_hash in fingerprint
-
-# 3. Verify code bundle hash (SHA-256 of generated code)
-find generated/ -type f -exec sha256sum {} \; | sort | sha256sum
-# Output must match code_bundle_hash in fingerprint
+# Compare two fingerprints (from different runs)
+python verify_fingerprint.py \
+  --fingerprint fingerprint1.json \
+  --compare fingerprint2.json
 ```
+
+### Manual spec_hash verification
+
+```bash
+# Linux
+sha256sum original_spec.md
+
+# macOS
+shasum -a 256 original_spec.md
+
+# Windows PowerShell
+Get-FileHash -Algorithm SHA256 original_spec.md
+```
+
+The output must match `spec_hash` in the fingerprint.
+
+**Note**: Manual verification of `code_bundle_hash` requires the script due to the canonical stream format. See [REPRODUCIBILITY_SPEC.md](REPRODUCIBILITY_SPEC.md) for the exact algorithm.
 
 ---
 
@@ -47,29 +66,26 @@ Each DevMatrix compilation produces a `build_fingerprint.json`:
 | `ir_semantic_hash` | Captured semantics are identical |
 | `ir_structural_hash` | System structure is identical |
 
+**Important**: `build_timestamp` is for auditing only. It is NOT part of any hash calculation.
+
 ---
 
-## Verification Script
+## Cross-Platform Support
 
-Use the provided `verify_fingerprint.py`:
+The verification script (`verify_fingerprint.py`) works on:
+- Linux
+- macOS
+- Windows
 
-```bash
-python verify_fingerprint.py \
-  --fingerprint build_fingerprint.json \
-  --spec original_spec.md \
-  --output generated/
-```
+Requirements: Python 3.9+ with standard library only (no external dependencies).
 
-Expected output:
-```
-Verifying DevMatrix build fingerprint...
+### Platform-specific notes
 
-[OK] spec_hash matches: 51852a112e025db90685dcc997ccadca99fc5bee...
-[OK] code_bundle_hash matches: 94dc63a1162c6516426b9de92d199582a82b1a43...
-
-VERIFICATION PASSED
-All hashes match. This build is reproducible.
-```
+| Platform | sha256 command | Script works? |
+|----------|----------------|---------------|
+| Linux | `sha256sum` | Yes |
+| macOS | `shasum -a 256` | Yes |
+| Windows | `Get-FileHash -Algorithm SHA256` | Yes |
 
 ---
 
@@ -88,40 +104,80 @@ If DevMatrix is **non-deterministic**, one of these must occur:
 
 ---
 
-## Supervised Verification
+## Verification Script Usage
 
-For independent verification with access to the full system:
+### Installation
 
-**Contact**: Ariel Eduardo Ghysels
-- Supervised compilation sessions available
-- Access under NDA
+No installation required. The script uses Python standard library only.
+
+```bash
+# Download
+curl -O https://raw.githubusercontent.com/arielghysels/devmatrix-paper/main/verify_fingerprint.py
+
+# Or clone the repository
+git clone https://github.com/arielghysels/devmatrix-paper.git
+```
+
+### Commands
+
+```bash
+# Full verification against files
+python verify_fingerprint.py -f build_fingerprint.json -s spec.md -o generated/
+
+# Spec hash only
+python verify_fingerprint.py -f build_fingerprint.json -s spec.md
+
+# Code bundle hash only
+python verify_fingerprint.py -f build_fingerprint.json -o generated/
+
+# Compare two fingerprints (determinism test)
+python verify_fingerprint.py -f fingerprint1.json --compare fingerprint2.json
+```
+
+### Expected output
+
+```
+============================================================
+DevMatrix Build Fingerprint Verification
+============================================================
+
+Fingerprint: build_fingerprint.json
+Build ID: 61c051e66e545856
+Timestamp: 2026-01-05T01:42:53.428709+00:00
+
+[OK] spec_hash matches: 51852a112e025db9...
+[OK] code_bundle_hash matches: 94dc63a1162c6516...
+
+============================================================
+VERIFICATION PASSED
+All hashes match. This build is reproducible.
+```
 
 ---
 
-## Example Verification Session
+## Access to Build Artifacts
 
-```bash
-$ # Step 1: Obtain fingerprint from a published build
-$ curl -O https://example.com/builds/flowdesk/build_fingerprint.json
+Build fingerprints and specifications are available:
 
-$ # Step 2: Verify the spec hash
-$ sha256sum flowdesk-spec.md
-51852a112e025db90685dcc997ccadca99fc5bee...  flowdesk-spec.md
-# MATCHES spec_hash in fingerprint ✓
+- **Public**: Example fingerprint in this repository (`examples/`)
+- **Full access**: Contact author for supervised verification sessions (NDA required)
 
-$ # Step 3: If you have access to DevMatrix, recompile
-$ devmatrix compile flowdesk-spec.md --output recompiled/
+**Contact**: Ariel Eduardo Ghysels
 
-$ # Step 4: Compare fingerprints
-$ diff build_fingerprint.json recompiled/build_fingerprint.json
-# No output = identical = deterministic ✓
-```
+---
+
+## Technical Reference
+
+For the exact hash algorithms and canonical formats, see:
+- [REPRODUCIBILITY_SPEC.md](REPRODUCIBILITY_SPEC.md) - Canonical hash definitions
+- [verify_fingerprint.py](verify_fingerprint.py) - Reference implementation (MIT licensed)
 
 ---
 
 ## Notes
 
-- All hashes use SHA-256
+- All hashes use SHA-256 (64 hexadecimal characters)
 - Timestamps are for auditing only (not part of determinism)
 - Build ID is derived from content hashes
 - IR hashes prove semantic equivalence even if file order differs
+- The script excludes `__pycache__/`, `node_modules/`, `.git/`, and `*.pyc` files

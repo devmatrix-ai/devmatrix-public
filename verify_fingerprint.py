@@ -31,17 +31,53 @@ def sha256_directory(dirpath: Path) -> str:
     """
     Compute SHA-256 hash of a directory's contents.
 
-    Uses deterministic ordering (sorted paths) for reproducibility.
+    Canonical algorithm (see REPRODUCIBILITY_SPEC.md):
+    - List all files recursively
+    - Exclude: __pycache__/, node_modules/, .git/, *.pyc
+    - Sort lexicographically by relative path (Unix-style separators)
+    - Hash stream: rel_path + \n + file_hash + \n for each file
     """
     sha256 = hashlib.sha256()
 
-    files = sorted(dirpath.rglob("*"))
+    # Patterns to exclude
+    exclude_patterns = {
+        "__pycache__",
+        "node_modules",
+        ".git",
+    }
+    exclude_extensions = {".pyc"}
+
+    # List all files
+    files = list(dirpath.rglob("*"))
+
+    # Filter to files only, excluding patterns
+    def should_include(filepath: Path) -> bool:
+        if not filepath.is_file():
+            return False
+        if filepath.suffix in exclude_extensions:
+            return False
+        # Check if any parent directory matches exclude patterns
+        for part in filepath.relative_to(dirpath).parts:
+            if part in exclude_patterns:
+                return False
+        return True
+
+    files = [f for f in files if should_include(f)]
+
+    # Sort lexicographically by relative path (Unix-style separators)
+    files = sorted(files, key=lambda f: str(f.relative_to(dirpath)).replace("\\", "/"))
+
+    # Hash each file with delimiters
     for filepath in files:
-        if filepath.is_file():
-            # Include relative path in hash for structure verification
-            rel_path = filepath.relative_to(dirpath)
-            sha256.update(str(rel_path).encode())
-            sha256.update(sha256_file(filepath).encode())
+        # Use Unix-style separators for cross-platform consistency
+        rel_path = str(filepath.relative_to(dirpath)).replace("\\", "/")
+        file_hash = sha256_file(filepath)
+
+        # Canonical format: rel_path + \n + file_hash + \n
+        sha256.update(rel_path.encode("utf-8"))
+        sha256.update(b"\n")
+        sha256.update(file_hash.encode("utf-8"))
+        sha256.update(b"\n")
 
     return sha256.hexdigest()
 

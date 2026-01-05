@@ -249,3 +249,14 @@ No es una promesa. Es evidencia.
 
 **Contact:** Ariel Eduardo Ghysels
 **Repository:** [Private - Available under NDA]
+
+---
+
+## Propiedad Intelectual y Divulgación
+
+DevMatrix™ es un sistema de software propietario.
+Este paper divulga conceptos arquitectónicos, evidencia empírica y artefactos de reproducibilidad con fines de investigación y evaluación.
+
+La implementación del compilador y las tecnologías asociadas son propiedad intelectual protegida, con registros en múltiples jurisdicciones.
+
+Esta divulgación no otorga derechos para usar, reproducir o derivar implementaciones comerciales del compilador DevMatrix.
