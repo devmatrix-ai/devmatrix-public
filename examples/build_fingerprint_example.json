@@ -1,0 +1,22 @@
+{
+  "build_id": "61c051e66e545856",
+  "build_timestamp": "2026-01-05T01:42:53.428709+00:00",
+  "spec_hash": "51852a112e025db90685dcc997ccadca99fc5bee1721b522c21549933293c431",
+  "code_bundle_hash": "94dc63a1162c6516426b9de92d199582a82b1a43e6c3514da0259dc584c814fe",
+  "ir_canonical_hash": "414ea2de3a0ebe2b651214778eaa33dac688f804c81cb48cc0f304ee2fdafbc3",
+  "ir_semantic_hash": "5ca05d9cedcb90ef81c23faff5d858f6954166a20211cbfe2f5e4e4d26396d09",
+  "ir_structural_hash": "ff44e5acc42d6ce0c7b745e53d6cd7a2f614ec90be845ae7ab5237f1953c6b00",
+  "ir_version": "1.5.0",
+  "model_info": {
+    "model_id": "claude-3-sonnet",
+    "model_version": "unknown",
+    "temperature": 0.0,
+    "max_tokens": 4096
+  },
+  "pipeline_info": {
+    "version": "1.0.0",
+    "passes": [],
+    "features_enabled": []
+  },
+  "spec_name": "FLOWDESK"
+}

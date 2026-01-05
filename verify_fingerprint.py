@@ -1,0 +1,227 @@
+#!/usr/bin/env python3
+"""
+DevMatrix Build Fingerprint Verification Tool
+
+Verifies that a DevMatrix build is reproducible by checking
+cryptographic hashes against the build fingerprint.
+
+Usage:
+    python verify_fingerprint.py --fingerprint build_fingerprint.json --spec spec.md --output generated/
+    python verify_fingerprint.py --fingerprint build_fingerprint.json --compare other_fingerprint.json
+"""
+
+import argparse
+import hashlib
+import json
+import sys
+from pathlib import Path
+from typing import Optional
+
+
+def sha256_file(filepath: Path) -> str:
+    """Compute SHA-256 hash of a file."""
+    sha256 = hashlib.sha256()
+    with open(filepath, "rb") as f:
+        for chunk in iter(lambda: f.read(8192), b""):
+            sha256.update(chunk)
+    return sha256.hexdigest()
+
+
+def sha256_directory(dirpath: Path) -> str:
+    """
+    Compute SHA-256 hash of a directory's contents.
+
+    Uses deterministic ordering (sorted paths) for reproducibility.
+    """
+    sha256 = hashlib.sha256()
+
+    files = sorted(dirpath.rglob("*"))
+    for filepath in files:
+        if filepath.is_file():
+            # Include relative path in hash for structure verification
+            rel_path = filepath.relative_to(dirpath)
+            sha256.update(str(rel_path).encode())
+            sha256.update(sha256_file(filepath).encode())
+
+    return sha256.hexdigest()
+
+
+def load_fingerprint(filepath: Path) -> dict:
+    """Load and parse a build fingerprint JSON file."""
+    with open(filepath) as f:
+        return json.load(f)
+
+
+def verify_spec_hash(fingerprint: dict, spec_path: Path) -> tuple[bool, str]:
+    """Verify spec_hash matches the specification file."""
+    expected = fingerprint.get("spec_hash")
+    if not expected:
+        return False, "No spec_hash in fingerprint"
+
+    actual = sha256_file(spec_path)
+
+    if actual == expected:
+        return True, f"spec_hash matches: {actual[:16]}..."
+    else:
+        return False, f"spec_hash MISMATCH: expected {expected[:16]}..., got {actual[:16]}..."
+
+
+def verify_code_bundle_hash(fingerprint: dict, output_dir: Path) -> tuple[bool, str]:
+    """Verify code_bundle_hash matches the generated code."""
+    expected = fingerprint.get("code_bundle_hash")
+    if not expected:
+        return False, "No code_bundle_hash in fingerprint"
+
+    actual = sha256_directory(output_dir)
+
+    if actual == expected:
+        return True, f"code_bundle_hash matches: {actual[:16]}..."
+    else:
+        return False, f"code_bundle_hash MISMATCH: expected {expected[:16]}..., got {actual[:16]}..."
+
+
+def compare_fingerprints(fp1: dict, fp2: dict) -> list[tuple[str, bool, str]]:
+    """Compare two fingerprints and report differences."""
+    results = []
+
+    keys_to_compare = [
+        "spec_hash",
+        "code_bundle_hash",
+        "ir_canonical_hash",
+        "ir_semantic_hash",
+        "ir_structural_hash",
+    ]
+
+    for key in keys_to_compare:
+        v1 = fp1.get(key, "")
+        v2 = fp2.get(key, "")
+
+        if v1 == v2:
+            results.append((key, True, f"{key}: IDENTICAL ({v1[:16]}...)"))
+        else:
+            results.append((key, False, f"{key}: DIFFERENT ({v1[:16]}... vs {v2[:16]}...)"))
+
+    return results
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Verify DevMatrix build fingerprints",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Verify spec and output against fingerprint
+  python verify_fingerprint.py -f build_fingerprint.json -s spec.md -o generated/
+
+  # Compare two fingerprints (from different runs)
+  python verify_fingerprint.py -f fingerprint1.json --compare fingerprint2.json
+        """
+    )
+
+    parser.add_argument(
+        "-f", "--fingerprint",
+        type=Path,
+        required=True,
+        help="Path to build_fingerprint.json"
+    )
+
+    parser.add_argument(
+        "-s", "--spec",
+        type=Path,
+        help="Path to specification file (to verify spec_hash)"
+    )
+
+    parser.add_argument(
+        "-o", "--output",
+        type=Path,
+        help="Path to generated output directory (to verify code_bundle_hash)"
+    )
+
+    parser.add_argument(
+        "--compare",
+        type=Path,
+        help="Path to another fingerprint to compare (for determinism testing)"
+    )
+
+    args = parser.parse_args()
+
+    # Load primary fingerprint
+    if not args.fingerprint.exists():
+        print(f"ERROR: Fingerprint file not found: {args.fingerprint}")
+        sys.exit(1)
+
+    fingerprint = load_fingerprint(args.fingerprint)
+
+    print("=" * 60)
+    print("DevMatrix Build Fingerprint Verification")
+    print("=" * 60)
+    print(f"\nFingerprint: {args.fingerprint}")
+    print(f"Build ID: {fingerprint.get('build_id', 'N/A')}")
+    print(f"Timestamp: {fingerprint.get('build_timestamp', 'N/A')}")
+    print()
+
+    all_passed = True
+
+    # Mode 1: Compare two fingerprints
+    if args.compare:
+        if not args.compare.exists():
+            print(f"ERROR: Comparison fingerprint not found: {args.compare}")
+            sys.exit(1)
+
+        fp2 = load_fingerprint(args.compare)
+        print(f"Comparing with: {args.compare}")
+        print(f"Build ID: {fp2.get('build_id', 'N/A')}")
+        print()
+
+        results = compare_fingerprints(fingerprint, fp2)
+
+        for key, passed, message in results:
+            status = "[OK]" if passed else "[FAIL]"
+            print(f"{status} {message}")
+            if not passed:
+                all_passed = False
+
+    # Mode 2: Verify against actual files
+    else:
+        if args.spec:
+            if not args.spec.exists():
+                print(f"ERROR: Spec file not found: {args.spec}")
+                sys.exit(1)
+
+            passed, message = verify_spec_hash(fingerprint, args.spec)
+            status = "[OK]" if passed else "[FAIL]"
+            print(f"{status} {message}")
+            if not passed:
+                all_passed = False
+
+        if args.output:
+            if not args.output.exists():
+                print(f"ERROR: Output directory not found: {args.output}")
+                sys.exit(1)
+
+            passed, message = verify_code_bundle_hash(fingerprint, args.output)
+            status = "[OK]" if passed else "[FAIL]"
+            print(f"{status} {message}")
+            if not passed:
+                all_passed = False
+
+        if not args.spec and not args.output:
+            print("No verification targets specified.")
+            print("Use --spec and/or --output to verify hashes.")
+            print("Use --compare to compare two fingerprints.")
+
+    # Final result
+    print()
+    print("=" * 60)
+    if all_passed:
+        print("VERIFICATION PASSED")
+        print("All hashes match. This build is reproducible.")
+        sys.exit(0)
+    else:
+        print("VERIFICATION FAILED")
+        print("Hash mismatch detected. Build may not be reproducible.")
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

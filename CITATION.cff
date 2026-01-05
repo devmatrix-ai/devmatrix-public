@@ -1,0 +1,41 @@
+cff-version: 1.2.0
+message: "If you use DevMatrix or cite this work, please cite it as below."
+title: "DevMatrix: A Specification-to-System Compiler"
+type: software
+authors:
+  - family-names: "Ghysels"
+    given-names: "Ariel Eduardo"
+    orcid: ""
+version: "1.0.0"
+date-released: "2026-01-05"
+url: "https://github.com/arielghysels/devmatrix-paper"
+repository-code: "https://github.com/arielghysels/devmatrix-paper"
+license: "CC-BY-4.0"
+keywords:
+  - specification-to-system compiler
+  - deterministic code generation
+  - software engineering
+  - AI coding
+  - reproducible builds
+  - full-stack generation
+abstract: >-
+  DevMatrix is a specification-to-system compiler that transforms
+  natural language specifications into complete, verifiable full-stack
+  applications. Unlike LLM-based approaches (copilots, agents, prompting),
+  DevMatrix guarantees determinism (same specification produces same system
+  with same cryptographic hash), completeness (backend, frontend, tests,
+  infrastructure), and verifiability (cryptographic evidence of reproducibility).
+
+  This paper presents the problem, approach, guarantees, and empirical evidence
+  from compilations of three real-world specifications: FLOWDESK (workflow
+  management), Ghysels CRM, and MediCloud (healthcare).
+
+preferred-citation:
+  type: article
+  authors:
+    - family-names: "Ghysels"
+      given-names: "Ariel Eduardo"
+  title: "DevMatrix: A Specification-to-System Compiler"
+  year: 2026
+  month: 1
+  url: "https://github.com/arielghysels/devmatrix-paper"
