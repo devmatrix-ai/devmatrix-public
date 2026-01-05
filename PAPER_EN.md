@@ -8,10 +8,10 @@
 
 ## Abstract
 
-DevMatrix is a **specification-to-system compiler** that transforms natural language specifications into complete, verifiable full-stack applications. Unlike LLM-based approaches (copilots, agents, prompting), DevMatrix guarantees:
+DevMatrix is a **specification-to-system compiler** that transforms natural language specifications into complete, verifiable backend systems. Unlike LLM-based approaches (copilots, agents, prompting), DevMatrix guarantees:
 
 - **Determinism**: Same specification → same system → same hash
-- **Completeness**: Backend + Frontend + Tests + Infrastructure
+- **Completeness**: Backend + Tests + Infrastructure (Frontend in development)
 - **Verifiability**: Cryptographic evidence of reproducibility
 
 This paper presents the problem, approach, guarantees, and empirical evidence.
@@ -69,10 +69,10 @@ Specification (natural language / OpenAPI)
             ↓
     Complete System
     ├── Backend (Python/FastAPI)
-    ├── Frontend (React/Next.js)
     ├── Tests (pytest)
     ├── Infrastructure (Docker, migrations)
-    └── Evidence (fingerprints, manifests)
+    ├── Evidence (fingerprints, manifests)
+    └── Frontend (React/Next.js) [in development]
 ```
 
 ### 2.3 What DevMatrix is NOT
@@ -109,7 +109,7 @@ The compiler architecture eliminates entire categories of defects that plague LL
 
 **Claim**: Same specification → same system → same hash.
 
-**Mechanism**: The transformation from specification to code is deterministic. No sampling, no randomization, no variability.
+**Mechanism**: The transformation from specification to code is deterministic. No sampling, no randomization, no variability. Once a specification is accepted, the compilation pipeline is strictly non-interactive: no human-in-the-loop decisions or adaptive prompting occur during transformation.
 
 **Verification**: Each compilation generates a `build_fingerprint.json` with cryptographic hashes that can be independently verified.
 
@@ -142,13 +142,13 @@ Any compilation can be reproduced exactly:
 
 ### 5.1 Generated Stack
 
-| Layer | Technology | Content |
-|-------|------------|---------|
-| **Backend** | Python, FastAPI, SQLAlchemy | Entities, services, routes, auth |
-| **Frontend** | React, Next.js, TailwindCSS | Pages, forms, tables, navigation |
-| **Database** | PostgreSQL, Alembic | Models, migrations |
-| **Testing** | pytest | Contract, behavior, security tests |
-| **Infra** | Docker, docker-compose | Deployment-ready containers |
+| Layer | Technology | Content | Status |
+|-------|------------|---------|--------|
+| **Backend** | Python, FastAPI, SQLAlchemy | Entities, services, routes, auth | Production |
+| **Database** | PostgreSQL, Alembic | Models, migrations | Production |
+| **Testing** | pytest | Contract, behavior, security tests | Production |
+| **Infra** | Docker, docker-compose | Deployment-ready containers | Production |
+| **Frontend** | React, Next.js, TailwindCSS | Pages, forms, tables, navigation | In development |
 
 ### 5.2 Output Scale
 

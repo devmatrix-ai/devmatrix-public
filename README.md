@@ -1,10 +1,13 @@
 # DevMatrix
 
-A **specification-to-system compiler** that transforms natural language specifications into complete, verifiable full-stack applications.
+A **specification-to-system compiler** that transforms natural language specifications into complete, verifiable backend systems with API contracts, tests, and infrastructure.
 
 Same input. Same system. Same hash.
 
 Not as a promise — as a verifiable property.
+
+> **This repository contains public technical documentation, reproducibility evidence, and verification tools.**
+> **The DevMatrix compiler core is proprietary and not included here.**
 
 ---
 
@@ -16,10 +19,10 @@ DevMatrix is **not** a copilot, agent, or prompting tool.
 It is a **compiler** that produces:
 
 - Complete backend (Python/FastAPI)
-- Complete frontend (React/Next.js)
 - Generated tests (pytest)
 - Infrastructure (Docker, migrations)
 - Cryptographic evidence of reproducibility
+- Frontend generation (React/Next.js) — *in development*
 
 **Key guarantee**: Same specification → same system → same SHA-256 hash.
 

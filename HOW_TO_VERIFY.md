@@ -6,7 +6,10 @@ This document explains how to independently verify DevMatrix compilation evidenc
 
 ## Quick Verification
 
-### Using the verification script (recommended)
+### Using the verification script (authoritative method)
+
+> **The `verify_fingerprint.py` script is the canonical reference implementation.**
+> Shell commands below are illustrative only. For guaranteed correctness, always use the Python script.
 
 ```bash
 # Verify spec and output against fingerprint
@@ -78,6 +81,8 @@ The verification script (`verify_fingerprint.py`) works on:
 - Windows
 
 Requirements: Python 3.9+ with standard library only (no external dependencies).
+
+**Recommendation**: The Python verifier is cross-platform and recommended on all operating systems, including Windows where shell-based hash verification differs from Unix systems.
 
 ### Platform-specific notes
 

@@ -51,6 +51,8 @@ Cada compilación genera un `build_fingerprint.json` con hashes criptográficos 
 
 **Garantía**: Si `spec_hash` es idéntico, todos los demás hashes serán idénticos.
 
+**Definición canónica**: El algoritmo autoritativo para `code_bundle_hash` está implementado en [verify_fingerprint.py](verify_fingerprint.py). Ver [REPRODUCIBILITY_SPEC.md](REPRODUCIBILITY_SPEC.md) para especificación formal.
+
 ---
 
 ## 2. Compilaciones Verificadas
@@ -181,6 +183,8 @@ SuperAdmin, User, Workspace
 | **TOTAL** | **68** | **68** | **204** | **340** |
 
 ### 3.2 Frontend Components por Spec
+
+> **Nota**: La generación de frontend está actualmente en desarrollo. Las métricas a continuación representan conteos de archivos generados desde el IR (Representación Intermedia), no código frontend listo para producción.
 
 | Specification | Pages | Forms | UI Components | Total Frontend |
 |---------------|-------|-------|---------------|----------------|

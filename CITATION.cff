@@ -39,3 +39,7 @@ preferred-citation:
   year: 2026
   month: 1
   url: "https://github.com/arielghysels/devmatrix-paper"
+  notes: >-
+    This citation refers to the public verification package (paper, evidence,
+    verification script). The DevMatrix compiler core is proprietary and
+    requires separate licensing arrangements for access.

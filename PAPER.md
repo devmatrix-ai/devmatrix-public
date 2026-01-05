@@ -8,10 +8,10 @@
 
 ## Abstract
 
-DevMatrix es un **specification-to-system compiler** que transforma especificaciones en lenguaje natural en aplicaciones full-stack completas y verificables. A diferencia de los enfoques basados en LLMs (copilots, agentes, prompting), DevMatrix garantiza:
+DevMatrix es un **specification-to-system compiler** que transforma especificaciones en lenguaje natural en sistemas backend completos y verificables. A diferencia de los enfoques basados en LLMs (copilots, agentes, prompting), DevMatrix garantiza:
 
 - **Determinismo**: Misma especificación → mismo sistema → mismo hash
-- **Completitud**: Backend + Frontend + Tests + Infraestructura
+- **Completitud**: Backend + Tests + Infraestructura (Frontend en desarrollo)
 - **Verificabilidad**: Evidencia criptográfica de reproducibilidad
 
 Este paper presenta el problema, el enfoque, las garantías y la evidencia empírica.
@@ -69,10 +69,10 @@ Especificación (lenguaje natural / OpenAPI)
             ↓
     Sistema Completo
     ├── Backend (Python/FastAPI)
-    ├── Frontend (React/Next.js)
     ├── Tests (pytest)
     ├── Infraestructura (Docker, migrations)
-    └── Evidencia (fingerprints, manifests)
+    ├── Evidencia (fingerprints, manifests)
+    └── Frontend (React/Next.js) [en desarrollo]
 ```
 
 ### 2.3 Qué NO es DevMatrix
@@ -90,7 +90,7 @@ Especificación (lenguaje natural / OpenAPI)
 
 **Claim**: Misma especificación → mismo sistema → mismo hash.
 
-**Mecanismo**: La transformación de especificación a código es determinística. No hay sampling, no hay randomización, no hay variabilidad.
+**Mecanismo**: La transformación de especificación a código es determinística. No hay sampling, no hay randomización, no hay variabilidad. Una vez que la especificación es aceptada, el pipeline de compilación es estrictamente no-interactivo: no hay decisiones human-in-the-loop ni prompting adaptivo durante la transformación.
 
 **Verificación**: Cada compilación genera un `build_fingerprint.json` con hashes criptográficos que pueden ser verificados independientemente.
 
@@ -123,13 +123,13 @@ Cualquier compilación puede ser reproducida exactamente:
 
 ### 4.1 Stack Generado
 
-| Capa | Tecnología | Contenido |
-|------|------------|-----------|
-| **Backend** | Python, FastAPI, SQLAlchemy | Entities, services, routes, auth |
-| **Frontend** | React, Next.js, TailwindCSS | Pages, forms, tables, navigation |
-| **Database** | PostgreSQL, Alembic | Models, migrations |
-| **Testing** | pytest | Contract, behavior, security tests |
-| **Infra** | Docker, docker-compose | Deployment-ready containers |
+| Capa | Tecnología | Contenido | Estado |
+|------|------------|-----------|--------|
+| **Backend** | Python, FastAPI, SQLAlchemy | Entities, services, routes, auth | Producción |
+| **Database** | PostgreSQL, Alembic | Models, migrations | Producción |
+| **Testing** | pytest | Contract, behavior, security tests | Producción |
+| **Infra** | Docker, docker-compose | Deployment-ready containers | Producción |
+| **Frontend** | React, Next.js, TailwindCSS | Pages, forms, tables, navigation | En desarrollo |
 
 ### 4.2 Escala de Output
 
