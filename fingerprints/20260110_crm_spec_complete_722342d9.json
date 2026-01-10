@@ -1,0 +1,46 @@
+{
+  "evidence_version": "1.0.0",
+  "fingerprint": {
+    "build_id": "722342d9eac74376",
+    "build_timestamp": "2026-01-10T08:56:35.490044+00:00",
+    "code_bundle_hash": "7ab063f6817728da060dbdf43e3cc25a1f2855ea7738fdac6dc4052fb355e6e7",
+    "dependency_lock_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "ir_canonical_hash": "44b6c92b8853011c1f42b1f9569408db11e23715893e2bcc548c52b9e191bf7c",
+    "ir_semantic_hash": "2e2b9e1f34fb77265fadf1960bd0a3acbbb67e5e7139dc09c32f6ed4d23a4f10",
+    "ir_structural_hash": "36448e82c4a491fc4921d681fa118123332c366eec92663623885ede7e26b695",
+    "ir_version": "1.5.0",
+    "model_info": {
+      "frequency_penalty": 0.0,
+      "max_tokens": 4096,
+      "model_id": "claude-3-sonnet",
+      "model_version": "unknown",
+      "presence_penalty": 0.0,
+      "seed": null,
+      "stop_sequences": [],
+      "temperature": 0.0,
+      "top_p": 1.0
+    },
+    "model_parameters_hash": "eeea888d68137c0388ab53706fc9bc557922b2d31c8871f5b97a46c55329747d",
+    "pipeline_info": {
+      "features_enabled": [],
+      "pass_versions": {},
+      "passes": [],
+      "toolchain": null,
+      "version": "1.0.0"
+    },
+    "pipeline_version": "1.0.0",
+    "prompt_bundle_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "spec_hash": "25ecacbfce72fead4991796d1a71984a1a73cf10683d9a93165a430f3e17a3b9",
+    "spec_name": "ArgenCool CRM",
+    "toolchain_hash": ""
+  },
+  "published_at": "2026-01-10T19:36:25.997964+00:00",
+  "signature": {
+    "algorithm": "Ed25519",
+    "key_id": "dm-prod-2026-01",
+    "public_key": "d3K5w4q643StbRn9RCNJJOcVbez9iptg/SxffqBua5s=",
+    "signature": "ithAVy/ZwkDbRA2lRRLjlxgIPOKA4oWv2VCrrH0wUVR2LKAGHXJTw9o4kJtjj2ugwC3h6BkwkxAmWZlOMWaCDw==",
+    "signed_at": "2026-01-10T19:36:25.997959+00:00",
+    "signed_payload_hash": "sha256:48943a2d50e4d04d6e22ed767ba1057a83b31632a793d18eef4b3f9355749fa5"
+  }
+}
