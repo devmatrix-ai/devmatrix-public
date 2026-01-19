@@ -71,6 +71,20 @@ not AI systems:
 If a system cannot be rebuilt exactly,  
 **it is not governed**.
 
+Governance that cannot be replayed is not governance.
+
+---
+
+## Failure Mode
+
+DevMatrix is fail-closed.
+
+If determinism, invariants, or provenance
+cannot be guaranteed,
+the build fails.
+
+Silent degradation is not allowed.
+
 ---
 
 ## Why This Exists
@@ -143,8 +157,8 @@ Full details: [EVIDENCE_EN.md](EVIDENCE_EN.md)
 ```bash
 # Quick verification
 python verify_fingerprint.py \
-  --fingerprint build_fingerprint.json \
-  --compare other_build_fingerprint.json
+  -f fingerprints/20260110_crm_spec_complete_722342d9.json \
+  --compare fingerprints/20260110_argencool_crm_722342d9.json
 ```
 
 If DevMatrix is non-deterministic, one of these must occur:

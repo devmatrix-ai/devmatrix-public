@@ -1,4 +1,4 @@
-# DevMatrix: A Specification-to-System Compiler
+# DevMatrix: Formal Model Behind Deterministic Compilation
 
 **Version:** 1.0
 **Classification:** Public Technical Paper
@@ -17,6 +17,8 @@ into governed, replayable, and cryptographically verifiable software systems.
 
 The probabilistic nature of models is preserved.
 The architecture around them is strictly deterministic.
+
+This document is the formalization behind the evidence. The proof is the reproducible artifacts and verification flow in `EVIDENCE.md`, not this text.
 
 ---
 
