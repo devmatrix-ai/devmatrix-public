@@ -8,17 +8,19 @@
 
 ## Abstract
 
-DevMatrix es un **specification-to-system compiler** que transforma especificaciones en lenguaje natural en sistemas backend completos y verificables. A diferencia de los enfoques basados en LLMs (copilots, agentes, prompting), DevMatrix garantiza:
+Most failures in AI systems are not caused by model drift,
+but by architectures without invariants.
 
-- **Determinismo**: Misma especificación → mismo sistema → mismo hash
-- **Completitud**: Backend + Tests + Infraestructura (Frontend en desarrollo)
-- **Verificabilidad**: Evidencia criptográfica de reproducibilidad
+This paper presents DevMatrix,
+a deterministic software compiler that transforms system specifications
+into governed, replayable, and cryptographically verifiable software systems.
 
-Este paper presenta el problema, el enfoque, las garantías y la evidencia empírica.
+The probabilistic nature of models is preserved.
+The architecture around them is strictly deterministic.
 
 ---
 
-## 1. Problem Statement
+## 1. Problem Statement: Architectural Non-Determinism
 
 ### 1.1 La Premisa Incorrecta
 
@@ -44,9 +46,21 @@ Los copilots aceleran la escritura. No resuelven la ingeniería.
 
 ---
 
-## 2. Approach: Compilation, Not Generation
+## 2. Why Runtime Governance Fails
 
-### 2.1 Definición
+La gobernanza basada en documentos, dashboards o controles en runtime llega tarde.
+Una vez que el sistema está en producción, cualquier desviación ya ocurrió.
+
+Los controles runtime detectan, pero no garantizan. Si la arquitectura es estocástica,
+no hay forma de asegurar que el mismo input produzca el mismo sistema.
+
+Por eso la gobernanza debe existir en compilación, no en ejecución.
+
+---
+
+## 3. Deterministic Compilation as Governance
+
+### 3.1 Definición
 
 DevMatrix es un **compilador**, no un generador. La diferencia es fundamental:
 
@@ -58,7 +72,7 @@ DevMatrix es un **compilador**, no un generador. La diferencia es fundamental:
 | Contexto limitado | Semántica completa |
 | Output variable | Output reproducible |
 
-### 2.2 Pipeline de Alto Nivel
+### 3.2 Pipeline de Alto Nivel
 
 ```
 Especificación (lenguaje natural / OpenAPI)
@@ -75,7 +89,7 @@ Especificación (lenguaje natural / OpenAPI)
     └── Frontend (React/Next.js) [en desarrollo]
 ```
 
-### 2.3 Qué NO es DevMatrix
+### 3.3 Qué NO es DevMatrix
 
 - **No es un copilot**: No autocompleta código
 - **No es un agente**: No ejecuta tareas autónomamente
@@ -84,17 +98,12 @@ Especificación (lenguaje natural / OpenAPI)
 
 ---
 
-## 3. Guarantees
+## 4. Intermediate Representations and Invariants
 
-### 3.1 Determinismo
+DevMatrix trabaja sobre representaciones intermedias (IR) que capturan la semántica del sistema
+antes de generar código. Estas IRs son la base de invariantes verificables.
 
-**Claim**: Misma especificación → mismo sistema → mismo hash.
-
-**Mecanismo**: La transformación de especificación a código es determinística. No hay sampling, no hay randomización, no hay variabilidad. Una vez que la especificación es aceptada, el pipeline de compilación es estrictamente no-interactivo: no hay decisiones human-in-the-loop ni prompting adaptivo durante la transformación.
-
-**Verificación**: Cada compilación genera un `build_fingerprint.json` con hashes criptográficos que pueden ser verificados independientemente.
-
-### 3.2 Completitud Semántica
+### 4.1 Completitud Semántica
 
 El sistema captura y preserva la semántica completa de la especificación:
 
@@ -104,7 +113,24 @@ El sistema captura y preserva la semántica completa de la especificación:
 - **Validaciones y constraints** (business rules)
 - **Seguridad y permisos** (RBAC, JWT)
 
-### 3.3 Reproducibilidad
+### 4.2 Hashes de IR e Invariantes
+
+La representación intermedia se materializa en hashes canónicos, semánticos y estructurales.
+Si cualquiera cambia para la misma especificación, la compilación se considera no determinística.
+
+---
+
+## 5. Build Provenance and Replayability
+
+### 5.1 Determinismo
+
+**Claim**: Misma especificación → mismo sistema → mismo hash.
+
+**Mecanismo**: La transformación de especificación a código es determinística. No hay sampling, no hay randomización, no hay variabilidad. Una vez que la especificación es aceptada, el pipeline de compilación es estrictamente no-interactivo: no hay decisiones human-in-the-loop ni prompting adaptivo durante la transformación.
+
+**Verificación**: Cada compilación genera un `build_fingerprint.json` con hashes criptográficos que pueden ser verificados independientemente.
+
+### 5.2 Reproducibilidad
 
 Cualquier compilación puede ser reproducida exactamente:
 
@@ -119,34 +145,11 @@ Cualquier compilación puede ser reproducida exactamente:
 
 ---
 
-## 4. Output
+## 6. Unified Verification and Failure Modes
 
-### 4.1 Stack Generado
+La verificación es unificada: hashes + tests. Si cualquier verificación falla, el build se rechaza.
 
-| Capa | Tecnología | Contenido | Estado |
-|------|------------|-----------|--------|
-| **Backend** | Python, FastAPI, SQLAlchemy | Entities, services, routes, auth | Producción |
-| **Database** | PostgreSQL, Alembic | Models, migrations | Producción |
-| **Testing** | pytest | Contract, behavior, security tests | Producción |
-| **Infra** | Docker, docker-compose | Deployment-ready containers | Producción |
-| **Frontend** | React, Next.js, TailwindCSS | Pages, forms, tables, navigation | En desarrollo |
-
-### 4.2 Escala de Output
-
-| Métrica | Rango Típico |
-|---------|--------------|
-| Backend files | 50-150 |
-| Frontend files | 30-80 |
-| Test files | 20-40 |
-| Backend LOC | 5K-20K |
-| Frontend LOC | 3K-8K |
-| Tiempo total | 4-12 segundos |
-
----
-
-## 5. Quality Assurance
-
-### 5.1 Validación Multi-Tier
+### 6.1 Validación Multi-Tier
 
 El sistema genera y ejecuta tests automáticamente:
 
@@ -157,7 +160,7 @@ El sistema genera y ejecuta tests automáticamente:
 | **Security** | JWT, RBAC, permissions | 20% |
 | **Validation** | Input validation, constraints | 15% |
 
-### 5.2 Scoring
+### 6.2 Scoring
 
 ```
 Quality Score = (HTTP Correctness × 0.6) + (Semantic Completeness × 0.4)
@@ -170,11 +173,7 @@ Grades:
   F < 50%
 ```
 
----
-
-## 6. Evidence
-
-### 6.1 Compilaciones Reproducibles
+### 6.3 Compilaciones Reproducibles
 
 | Spec | Tests | Passed | Grade | Frontend Files | Status |
 |------|-------|--------|-------|----------------|--------|
@@ -183,7 +182,7 @@ Grades:
 | Healthcare (MediCloud) | 284 | 269 | A (98.6%) | 278 | ✅ PASS |
 | **TOTAL** | **1,125** | **995** | **A** | **953** | **88%+** |
 
-### 6.2 Verificación Independiente
+### 6.4 Verificación Independiente
 
 Cada compilación incluye:
 - `build_fingerprint.json` - Hashes criptográficos
@@ -195,9 +194,34 @@ Ver [EVIDENCE.md](EVIDENCE.md) para evidencia completa.
 
 ---
 
-## 7. Comparison
+## 7. Output
 
-### 7.1 vs Copilots (GitHub Copilot, Cursor, etc.)
+### 7.1 Stack Generado
+
+| Capa | Tecnología | Contenido | Estado |
+|------|------------|-----------|--------|
+| **Backend** | Python, FastAPI, SQLAlchemy | Entities, services, routes, auth | Producción |
+| **Database** | PostgreSQL, Alembic | Models, migrations | Producción |
+| **Testing** | pytest | Contract, behavior, security tests | Producción |
+| **Infra** | Docker, docker-compose | Deployment-ready containers | Producción |
+| **Frontend** | React, Next.js, TailwindCSS | Pages, forms, tables, navigation | En desarrollo |
+
+### 7.2 Escala de Output
+
+| Métrica | Rango Típico |
+|---------|--------------|
+| Backend files | 50-150 |
+| Frontend files | 30-80 |
+| Test files | 20-40 |
+| Backend LOC | 5K-20K |
+| Frontend LOC | 3K-8K |
+| Tiempo total | 4-12 segundos |
+
+---
+
+## 8. Comparison
+
+### 8.1 vs Copilots (GitHub Copilot, Cursor, etc.)
 
 | Aspecto | Copilot | DevMatrix |
 |---------|---------|-----------|
@@ -207,7 +231,7 @@ Ver [EVIDENCE.md](EVIDENCE.md) para evidencia completa.
 | Contexto | Limitado | Semántica completa |
 | Tests | No genera | Genera y ejecuta |
 
-### 7.2 vs Agentes (Devin, etc.)
+### 8.2 vs Agentes (Devin, etc.)
 
 | Aspecto | Agente | DevMatrix |
 |---------|--------|-----------|
@@ -216,7 +240,7 @@ Ver [EVIDENCE.md](EVIDENCE.md) para evidencia completa.
 | Auditabilidad | Difícil | Completa |
 | Consistencia | Variable | Garantizada |
 
-### 7.3 vs Code Generators Tradicionales
+### 8.3 vs Code Generators Tradicionales
 
 | Aspecto | Codegen Tradicional | DevMatrix |
 |---------|---------------------|-----------|
@@ -227,7 +251,7 @@ Ver [EVIDENCE.md](EVIDENCE.md) para evidencia completa.
 
 ---
 
-## 8. Conclusion
+## 9. Conclusion
 
 DevMatrix demuestra que es posible construir un compilador de software que:
 
@@ -235,6 +259,9 @@ DevMatrix demuestra que es posible construir un compilador de software que:
 2. **Produce sistemas completos y funcionales**
 3. **Garantiza determinismo y reproducibilidad**
 4. **Genera evidencia verificable**
+
+If a system cannot be rebuilt byte-for-byte from the same input,
+governance is still theoretical.
 
 No es una promesa. Es evidencia.
 
