@@ -1,28 +1,110 @@
-# DevMatrix
+# DevMatrix — Deterministic Software Compilation for AI-Generated Systems
 
-A **specification-to-system compiler** that transforms natural language specifications into complete, verifiable backend systems with API contracts, tests, and infrastructure.
-
-Same input. Same system. Same hash.
-
-Not as a promise — as a verifiable property.
-
-> **This repository contains public technical documentation, reproducibility evidence, and verification tools.**
-> **The DevMatrix compiler core is proprietary and not included here.**
+**Governance is not documented. It is compiled.**
 
 ---
 
-## What is DevMatrix?
+## What DevMatrix Is
 
-Most "AI coding" advances assume software is text. This works for autocomplete. It doesn't work for building systems.
+DevMatrix is a **software compiler**.
 
-DevMatrix is **not** a copilot, agent, or prompting tool.
+It transforms system specifications into **production-grade software**
+with **deterministic outputs**, **compile-time governance**, and
+**cryptographically verifiable evidence**.
+
+Same input → same system.  
+If not, the build **fails**.
+
+DevMatrix exists to solve a problem that AI tooling has not:
+**unpredictable systems caused by architectures without invariants**.
+
+Models can be probabilistic.  
+**Architecture cannot.**
+
 It is a **compiler** that produces:
 
 - Complete backend (Python/FastAPI)
 - Generated tests (pytest)
 - Infrastructure (Docker, migrations)
 - Cryptographic evidence of reproducibility
-- Frontend generation (React/Next.js) — *in development*
+- Frontend generation (React/Next.js)  *in development*
+
+---
+
+## What DevMatrix Is NOT
+
+DevMatrix is **not**:
+
+- an AI coding assistant  
+- an agent framework  
+- prompt engineering  
+- runtime AI governance  
+- probabilistic code generation  
+
+DevMatrix does not “suggest” software.  
+It **compiles** systems.
+
+---
+
+## What DevMatrix Guarantees
+
+DevMatrix provides guarantees that are normally expected from compilers,
+not AI systems:
+
+- **Deterministic builds**  
+  The same specification produces **byte-identical output**.
+
+- **Compile-time governance**  
+  Security, access control, and behavioral constraints are enforced
+  during compilation, not documented after the fact.
+
+- **Replayable decision graphs**  
+  Every structural decision can be replayed, inspected, and verified.
+
+- **Cryptographic provenance**  
+  Generated artifacts include signed manifests, hashes, and
+  reproducibility proofs.
+
+- **Fail-closed behavior**  
+  If determinism or invariants cannot be guaranteed, the build fails.
+
+If a system cannot be rebuilt exactly,  
+**it is not governed**.
+
+---
+
+## Why This Exists
+
+AI systems fail in production not because models drift,
+but because the **architecture around them has no invariants**.
+
+Common failure modes across industries:
+
+- Rules that shift between contexts  
+- No enforced boundaries  
+- No deterministic decision structure  
+- No way to replay or verify outcomes  
+- Governance that exists only in documentation  
+
+DevMatrix addresses this by moving governance
+**from policy and runtime into compilation itself**.
+
+---
+
+## Proof: Deterministic Compilation
+
+This repository contains **public, cryptographically verifiable evidence**
+that DevMatrix produces deterministic systems.
+
+Included:
+
+- A real system specification
+- Multiple independent compilation runs
+- Identical output hashes
+- Signed build manifests
+- Verification scripts
+
+### Verify It Yourself
 
 **Key guarantee**: Same specification → same system → same SHA-256 hash.
 
@@ -132,9 +214,46 @@ See [CITATION.cff](CITATION.cff) for full citation metadata.
 
 ---
 
+## Intended Audience
+
+DevMatrix is built for:
+
+- Principal / Staff / Distinguished Engineers
+- AI governance and reliability teams
+- Regulated and high-risk industries
+- Organizations that require auditability, replayability, and proof
+
+It is not optimized for tutorials, demos, or casual experimentation.
+
+## Status
+
+DevMatrix is an active compiler system with:
+
+- Deterministic IR
+- Invariant-driven compilation
+- Unified testing and verification
+- Cryptographic build provenance
+
+This repository is intentionally minimal and evidence-focused.
+
+## Final Note
+
+If your AI-generated system cannot be rebuilt
+byte-for-byte from the same input,
+
+then you cannot prove how it behaves,
+why it behaves that way,
+or how a decision was made.
+
+That is not governance.
+
+DevMatrix exists to eliminate that class of failure.
+
 ## Contact
 
 **Ariel Eduardo Ghysels**
+**aeghysels@gmail.com**
+
 - Supervised verification sessions available
 - Access to compilations under NDA
 
