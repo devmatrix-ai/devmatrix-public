@@ -1,0 +1,39 @@
+{
+  "evidence_version": "1.0.0",
+  "fingerprint": {
+    "aggregate_hashes": {
+      "ir_hash": "2a495528921a32e755ece3bd85154673ac53e480d06bc8440d833c655859fa6b",
+      "output_hash": "49e203d1fc5afb1d1f9eb7d2cb996b0b06c0f7513b57b2bc3bd5e53e20ad8373"
+    },
+    "build_id": "e2099b9572d24f8e",
+    "build_timestamp": "2026-01-22T13:22:30.656725",
+    "deterministic": true,
+    "manifest": "HIP",
+    "modules": {
+      "hip_insurance": {
+        "build_id": "b53c74890a8db40c",
+        "build_timestamp": "2026-01-22T13:22:30.653008",
+        "code_bundle_hash": "bd73d4db2f7e8716710b2e4734c18334",
+        "deterministic": true,
+        "ir_semantic_hash": "f4d0e08b4bc0437b188456a9fd9257e41c560dd20b4408bf104d6d1bee997d57",
+        "ir_structural_hash": "f4d0e08b4bc0437b188456a9fd9257e41c560dd20b4408bf104d6d1bee997d57",
+        "llm_calls": 0,
+        "module_id": "hip_insurance",
+        "pipeline_version": "4.0.0",
+        "spec_hash": "6d4f1f92f90704f4ba39773ae4bc5268416b5ac9bcb11f36ad209f9beb4b411e"
+      }
+    },
+    "pipeline_version": "4.0.0",
+    "total_llm_calls": 0,
+    "total_modules": 1
+  },
+  "published_at": "2026-01-22T13:02:34.116280+00:00",
+  "signature": {
+    "algorithm": "Ed25519",
+    "key_id": "dm-prod-2026-01",
+    "public_key": "d3K5w4q643StbRn9RCNJJOcVbez9iptg/SxffqBua5s=",
+    "signature": "s1gE0f+P8JVYVcxcH0UH8zzVgrfVa0R+qLGcg5XQBzr5rIXeeT8kaaWfgyHerLFNvKiRULAbc0Ns8kikIodLDQ==",
+    "signed_at": "2026-01-22T13:02:34.116271+00:00",
+    "signed_payload_hash": "sha256:cfd9c49aad3a6344671b290aaf3f7987a8d627b67fc17c05c4fddb124c23f3f7"
+  }
+}
