@@ -1,0 +1,39 @@
+{
+  "evidence_version": "1.0.0",
+  "fingerprint": {
+    "aggregate_hashes": {
+      "ir_hash": "635470497204d47f91e3d7df14e8aa6972517bdf60b3b391d77ea3a96f737ca4",
+      "output_hash": "23e539de90ee1319f80b7cc153eb022ea67cfa14e2b8ab8c4fd60bcbaca9fc53"
+    },
+    "build_id": "2ed1a6f5bc98aac4",
+    "build_timestamp": "2026-01-26T12:48:22.127923",
+    "deterministic": true,
+    "manifest": "HIP",
+    "modules": {
+      "hip_billing": {
+        "build_id": "6524be206781bed1",
+        "build_timestamp": "2026-01-26T12:48:21.807888",
+        "code_bundle_hash": "263b45ae5d2bd69ca689da5ec0bdd201",
+        "deterministic": true,
+        "ir_semantic_hash": "cca956f6b193c1de1e652103a71a5bdaa14162a0df7981d4a0f5945377328965",
+        "ir_structural_hash": "cca956f6b193c1de1e652103a71a5bdaa14162a0df7981d4a0f5945377328965",
+        "llm_calls": 0,
+        "module_id": "hip_billing",
+        "pipeline_version": "4.0.0",
+        "spec_hash": "a06fec68b45947c9fba57d19ae682773d6acfb48dd43ed5116fc93da122b99e6"
+      }
+    },
+    "pipeline_version": "4.0.0",
+    "total_llm_calls": 0,
+    "total_modules": 1
+  },
+  "published_at": "2026-01-26T11:54:59.024825+00:00",
+  "signature": {
+    "algorithm": "Ed25519",
+    "key_id": "dm-prod-2026-01",
+    "public_key": "d3K5w4q643StbRn9RCNJJOcVbez9iptg/SxffqBua5s=",
+    "signature": "saR1EtELvj9KKlA48+s3CcjC12qoiCvzJaGTDKbFtCln5fOahsgGgL1ZRE3BOa4Khw1n28RxMrqG5YPWI899BA==",
+    "signed_at": "2026-01-26T11:54:59.024817+00:00",
+    "signed_payload_hash": "sha256:0be94a7436abfc7701092693c01c742c4de4b540e6b16cad8a4629570da7e50d"
+  }
+}
