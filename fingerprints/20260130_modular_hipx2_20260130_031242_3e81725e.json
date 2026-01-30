@@ -1,0 +1,82 @@
+{
+  "evidence_version": "1.0.0",
+  "fingerprint": {
+    "aggregate_hashes": {
+      "ir_hash": "b570f80366c6f30947faac9e97b522f22a023a8201882e19ecc6e098ac48e708",
+      "output_hash": "b75cf5144fa7aeeaa1181cfbaa81b5d9d8100b0a597f379718f99d8badc17afa"
+    },
+    "build_id": "3e81725eab5f370c",
+    "build_mode": "dev",
+    "build_timestamp": "2026-01-30T04:20:45.763260",
+    "deterministic": true,
+    "git": {
+      "branch": "feat/adr-048-modular-integration",
+      "commit_date": "2026-01-30T01:05:06+01:00",
+      "commit_sha": "c2ce1b656c77db5b24e0a17f441488fe6ce48c07",
+      "dirty": true
+    },
+    "manifest": "HIP",
+    "modules": {
+      "hip_crm": {
+        "build_id": "8b8f647be32ba80a",
+        "build_timestamp": "2026-01-30T04:20:45.313114",
+        "code_bundle_hash": "8003b78c20215f1832edb61eab400b8c",
+        "deterministic": true,
+        "ir_semantic_hash": "6c4b8ecea72961143d31d1d7892841fb60cbb0bbb97f99615c77633b23a5071b",
+        "ir_structural_hash": "6c4b8ecea72961143d31d1d7892841fb60cbb0bbb97f99615c77633b23a5071b",
+        "llm_calls": 0,
+        "module_id": "hip_crm",
+        "pipeline_version": "4.0.0",
+        "spec_hash": "cb8a6d14456bb7599231b1987adac944521eaec1f1cbde816a5ce83a97f43421"
+      },
+      "hip_finance": {
+        "build_id": "8a18ce67bdd56813",
+        "build_timestamp": "2026-01-30T04:17:21.931933",
+        "code_bundle_hash": "dc626f1b89b53e6782bfc691247e82b8",
+        "deterministic": true,
+        "ir_semantic_hash": "06590978e787dba540a936706cc61bd763009f8a1c2b8c49e36f889e1764b771",
+        "ir_structural_hash": "06590978e787dba540a936706cc61bd763009f8a1c2b8c49e36f889e1764b771",
+        "llm_calls": 0,
+        "module_id": "hip_finance",
+        "pipeline_version": "4.0.0",
+        "spec_hash": "ff431b792fb82860708885c3590a280cb4516b5c4f050856c44f3e4653ac02d3"
+      },
+      "hip_marketplace": {
+        "build_id": "b28bf57da5a06ec8",
+        "build_timestamp": "2026-01-30T04:19:16.475021",
+        "code_bundle_hash": "98d59e1c0f8bc578ae6dcd4c03982e5a",
+        "deterministic": true,
+        "ir_semantic_hash": "0fb4d59c8bf3caed1a193ff4637807558daf619318026b516b4d1cb50dcf94a1",
+        "ir_structural_hash": "0fb4d59c8bf3caed1a193ff4637807558daf619318026b516b4d1cb50dcf94a1",
+        "llm_calls": 0,
+        "module_id": "hip_marketplace",
+        "pipeline_version": "4.0.0",
+        "spec_hash": "2452de7824074753877726c1d6edbd0dd57e5f908eef488c93a4869ae2a89017"
+      },
+      "hip_training": {
+        "build_id": "398fa289ed36ff32",
+        "build_timestamp": "2026-01-30T04:17:21.934918",
+        "code_bundle_hash": "56581eec954d3eb7b343364f83dd041c",
+        "deterministic": true,
+        "ir_semantic_hash": "15a9e32aa081e8f845a644bf45894ca79f4d57cd67c236709405a88324dc417e",
+        "ir_structural_hash": "15a9e32aa081e8f845a644bf45894ca79f4d57cd67c236709405a88324dc417e",
+        "llm_calls": 0,
+        "module_id": "hip_training",
+        "pipeline_version": "4.0.0",
+        "spec_hash": "a3862c6cadb3e3962ff7a820d60eeea6427e7328c61efec9fdcd8b82fc4245bf"
+      }
+    },
+    "pipeline_version": "c2ce1b656",
+    "total_llm_calls": 0,
+    "total_modules": 4
+  },
+  "published_at": "2026-01-30T03:23:54.189950+00:00",
+  "signature": {
+    "algorithm": "Ed25519",
+    "key_id": "dm-prod-2026-01",
+    "public_key": "d3K5w4q643StbRn9RCNJJOcVbez9iptg/SxffqBua5s=",
+    "signature": "GgGqM0k7TONgReJLpIRbjF6I29kJMSvKO5EycNzNUSldqwuiPLyb5+rTBqL1XIoybihEn55mFK+ciuLlNjAZCw==",
+    "signed_at": "2026-01-30T03:23:54.189945+00:00",
+    "signed_payload_hash": "sha256:a39a480875793d2bc7fc6206e4df9ef572b44ddad2ea249b587564737a2fed18"
+  }
+}
