@@ -70,13 +70,13 @@
     "total_llm_calls": 0,
     "total_modules": 4
   },
-  "published_at": "2026-01-30T13:19:35.463380+00:00",
+  "published_at": "2026-01-30T14:18:48.166052+00:00",
   "signature": {
     "algorithm": "Ed25519",
     "key_id": "dm-prod-2026-01",
     "public_key": "d3K5w4q643StbRn9RCNJJOcVbez9iptg/SxffqBua5s=",
     "signature": "GgGqM0k7TONgReJLpIRbjF6I29kJMSvKO5EycNzNUSldqwuiPLyb5+rTBqL1XIoybihEn55mFK+ciuLlNjAZCw==",
-    "signed_at": "2026-01-30T13:19:35.463371+00:00",
+    "signed_at": "2026-01-30T14:18:48.166045+00:00",
     "signed_payload_hash": "sha256:a39a480875793d2bc7fc6206e4df9ef572b44ddad2ea249b587564737a2fed18"
   }
 }
