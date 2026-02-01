@@ -1,0 +1,46 @@
+{
+  "evidence_version": "1.0.0",
+  "fingerprint": {
+    "aggregate_hashes": {
+      "ir_hash": "43450ed4037b417dba9eeb2e22dc6e7ef90c2ca40890bf3c9f3810cc47e097a6",
+      "output_hash": "7bed455bfce26e60f5d8e5c450fb399936bbc96b0225ead9f1e250d7f4b39db1"
+    },
+    "build_id": "da5dac15e995e644",
+    "build_mode": "dev",
+    "build_timestamp": "2026-01-31T23:48:01.166326",
+    "deterministic": true,
+    "git": {
+      "branch": "feat/adr-048-modular-integration",
+      "commit_date": "2026-01-30T20:53:59+01:00",
+      "commit_sha": "873b5edfefc5fbd77daf4c0c6e2c353cd4f3fb7f",
+      "dirty": true
+    },
+    "manifest": "HIP",
+    "modules": {
+      "hip_finance": {
+        "build_id": "1bb37944b17725c2",
+        "build_timestamp": "2026-01-31T23:48:00.669544",
+        "code_bundle_hash": "9b5aeef6d1853652a158909dd47a4c03",
+        "deterministic": true,
+        "ir_semantic_hash": "06590978e787dba540a936706cc61bd763009f8a1c2b8c49e36f889e1764b771",
+        "ir_structural_hash": "06590978e787dba540a936706cc61bd763009f8a1c2b8c49e36f889e1764b771",
+        "llm_calls": 0,
+        "module_id": "hip_finance",
+        "pipeline_version": "4.0.0",
+        "spec_hash": "ff431b792fb82860708885c3590a280cb4516b5c4f050856c44f3e4653ac02d3"
+      }
+    },
+    "pipeline_version": "873b5edfe",
+    "total_llm_calls": 0,
+    "total_modules": 1
+  },
+  "published_at": "2026-02-01T14:09:09.727653+00:00",
+  "signature": {
+    "algorithm": "Ed25519",
+    "key_id": "dm-prod-2026-01",
+    "public_key": "d3K5w4q643StbRn9RCNJJOcVbez9iptg/SxffqBua5s=",
+    "signature": "RFJYr85uosWlQQKBaupFxYX1SjaTHzfDTByOeCBC/FQ/onZtl9a5sov6T3dFBorxGj6UOUuTIQ1ldii2g3LNCQ==",
+    "signed_at": "2026-02-01T14:09:09.727634+00:00",
+    "signed_payload_hash": "sha256:a5d8c9dec9b3c65181dfe71643c8539e09fe066bf7e76dba6404960a6c3894bb"
+  }
+}
