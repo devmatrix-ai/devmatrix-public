@@ -34,13 +34,13 @@
     "total_llm_calls": 0,
     "total_modules": 1
   },
-  "published_at": "2026-02-06T18:34:39.056432+00:00",
+  "published_at": "2026-02-06T18:57:24.103045+00:00",
   "signature": {
     "algorithm": "Ed25519",
     "key_id": "dm-prod-2026-01",
     "public_key": "d3K5w4q643StbRn9RCNJJOcVbez9iptg/SxffqBua5s=",
     "signature": "NyF8JPHFqLJO7+YgD5FIHIvBrUmTXXwB+m/m2kFJCZla+e7vDGXonvPb/6ItTtnnNGVTpONHGKEj4bXAIuRUCw==",
-    "signed_at": "2026-02-06T18:34:39.056427+00:00",
+    "signed_at": "2026-02-06T18:57:24.103034+00:00",
     "signed_payload_hash": "sha256:c00eb62bf3a4794447604bf402c155afd5a8e665827990474ef8f6c5ab889232"
   }
 }
