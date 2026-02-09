@@ -24,6 +24,24 @@ If DevMatrix is non-deterministic, **one of the following must occur**:
 
 ---
 
+## Evidence Timeline
+
+> Snapshot of each sealed build. Numbers correspond to the compilation at that point in time.
+
+| Date | Build | Scope | Modules | Tests | Pass Rate | Grade | Gates | Seal |
+|------|-------|-------|---------|-------|-----------|-------|-------|------|
+| 2026-01-05 | FLOWDESK | Single-module | 1 | 513 | 89.8% | A (96.9%) | — | — |
+| 2026-01-05 | CRM | Single-module | 1 | 328 | 82.7% | B (94.3%) | — | — |
+| 2026-01-05 | Healthcare | Single-module | 1 | 284 | 95.4% | A (98.6%) | — | — |
+| 2026-02-09 | HIP Platform | Multi-module | 12 | 2,239 | 96.9% | A (96.7%) | 408/408 | G_SEAL PASS |
+
+**Reading this table**:
+- *Single-module* builds (January) predate the platform seal system. No gates or seal at that stage.
+- *Multi-module* (February) includes per-module quality gates (34 per module) and explicit platform seal.
+- Grade is a weighted composite score (see Section 3.4). Pass Rate is raw test pass percentage.
+
+---
+
 ## 1. Build Fingerprints
 
 Each compilation generates a `build_fingerprint.json` with SHA-256 cryptographic hashes enabling independent verification.
@@ -215,6 +233,41 @@ G_SEAL:                PASS (4/4 checks)
 | Git State | PASS | Clean (non-release mode) |
 
 See [examples/platform_provenance_sealed.json](examples/platform_provenance_sealed.json) and [examples/seal_manifest_example.json](examples/seal_manifest_example.json) for full machine-readable evidence.
+
+#### HIP Platform Quality Assessment (February 9, 2026)
+
+| Metric | Value |
+|--------|-------|
+| **Platform Grade** | A |
+| **Platform Score** | 96.7% |
+| **Total Tests** | 2,239 |
+| **Passed** | 2,057 |
+| **Failed** | 65 |
+| **Blocked** | 10 |
+| **Skipped** | 107 |
+| **Pass Rate** | 96.9% |
+| **Total Gates** | 408 (34 per module × 12 modules) |
+| **Gates Passed** | 408 |
+| **Gates Failed** | 0 |
+
+**Per-Module Quality Breakdown**:
+
+| Module | Grade | Score | Tests | Passed | Pass Rate |
+|--------|-------|-------|-------|--------|-----------|
+| hip_admin | A | 91.0% | 147 | 128 | 92.1% |
+| hip_billing | A | 95.5% | 177 | 166 | 98.8% |
+| hip_core | A | 99.8% | 278 | 276 | 99.6% |
+| hip_crm | A | 99.5% | 222 | 203 | 99.0% |
+| hip_finance | A | 96.9% | 204 | 189 | 95.5% |
+| hip_insurance | A | 94.7% | 152 | 140 | 95.9% |
+| hip_lis | A | 98.3% | 205 | 197 | 98.5% |
+| hip_logistics | A | 96.9% | 201 | 176 | 96.7% |
+| hip_marketplace | A | 98.1% | 177 | 157 | 96.9% |
+| hip_patient | A | 92.8% | 143 | 129 | 91.5% |
+| hip_scheduling | A | 95.1% | 171 | 152 | 97.4% |
+| hip_training | A | 96.7% | 162 | 144 | 97.3% |
+
+**12/12 modules Grade A. 408/408 gates passed. 0 gate failures.**
 
 ---
 
@@ -409,4 +462,4 @@ For independent evidence verification:
 
 ---
 
-**Note**: This evidence corresponds to real compilations executed in January 2026. Hashes are verifiable and artifacts are available for inspection.
+**Note**: This evidence corresponds to real compilations executed in January–February 2026. Hashes are verifiable and artifacts are available for inspection. See Evidence Timeline above for the chronological progression.

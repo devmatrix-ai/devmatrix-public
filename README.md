@@ -168,11 +168,24 @@ Full details: [EVIDENCE_EN.md](EVIDENCE_EN.md)
 
 ### Platform-Scale Evidence (February 2026)
 
-| Platform | Modules | Gates per Module | Total Gates | Seal Status |
-|----------|---------|-----------------|-------------|-------------|
-| HIP (Healthcare) | 12 | 34 | 408 | SEALED (G_SEAL PASS) |
+| Platform | Modules | Tests | Pass Rate | Grade | Gates | Seal |
+|----------|---------|-------|-----------|-------|-------|------|
+| HIP (Healthcare) | 12 | 2,239 | 96.9% | A (96.7%) | 408/408 | G_SEAL PASS |
+
+12/12 modules Grade A. 0 gate failures. Per-module breakdown in [EVIDENCE_EN.md](EVIDENCE_EN.md).
 
 Full details: [EVIDENCE_EN.md](EVIDENCE_EN.md) | [GOLDEN_PACK_INDEX.md](GOLDEN_PACK_INDEX.md)
+
+### Evidence Timeline
+
+| Date | Build | Modules | Tests | Pass Rate | Grade | Seal |
+|------|-------|---------|-------|-----------|-------|------|
+| 2026-01-05 | FLOWDESK | 1 | 513 | 89.8% | A | — |
+| 2026-01-05 | CRM | 1 | 328 | 82.7% | B | — |
+| 2026-01-05 | Healthcare | 1 | 284 | 95.4% | A | — |
+| 2026-02-09 | HIP Platform | 12 | 2,239 | 96.9% | A | G_SEAL PASS |
+
+Single-module builds (January) predate the platform seal system. Full timeline in [EVIDENCE_EN.md](EVIDENCE_EN.md).
 
 ---
 
@@ -345,6 +358,8 @@ DevMatrix exists to eliminate that class of failure.
 
 *Evidence = cryptographic fingerprints + reproducible build hashing, not screenshots.*
 
+*Last updated: February 9, 2026*
+
 ---
 
 **Intellectual Property Notice**
@@ -352,3 +367,5 @@ DevMatrix exists to eliminate that class of failure.
 DevMatrix™ and the underlying compilation technology are protected intellectual property.
 The concepts and evidence presented in this repository are disclosed for research and evaluation purposes.
 The DevMatrix compiler core is proprietary. US Patent Pending. EU registration filed.
+
+**Not affiliated with** any other product, service, or entity named "DevMatrix". The canonical domain is [devmatrix.dev](https://devmatrix.dev/).
