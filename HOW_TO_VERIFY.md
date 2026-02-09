@@ -73,6 +73,32 @@ Each DevMatrix compilation produces a `build_fingerprint.json`:
 
 ---
 
+## Understanding the Platform Fingerprint
+
+For platform-scale compilations (multiple modules sealed together), the provenance includes aggregate hashes:
+
+```json
+{
+  "build_id": "532effc61fabcad3",
+  "aggregate_ir_hash": "3a9925b169b54079...e3",
+  "aggregate_output_hash": "bf22f63e7f794355...10",
+  "deterministic_seed": "67dcbe6c565b7da7...f9",
+  "total_modules": 12,
+  "g_seal_passed": true
+}
+```
+
+| Hash | What It Verifies |
+|------|------------------|
+| `aggregate_ir_hash` | Combined IR of all modules is identical |
+| `aggregate_output_hash` | Combined generated code of all modules is identical |
+| `deterministic_seed` | Full pipeline state (IR + output + versions) is identical |
+| `build_id` | Derived from content hashes — same modules → same build_id |
+
+See [SEALING.md](SEALING.md) for the sealing protocol and [REPRODUCIBILITY_SPEC.md](REPRODUCIBILITY_SPEC.md) for hash algorithms.
+
+---
+
 ## Cross-Platform Support
 
 The verification script (`verify_fingerprint.py`) works on:
@@ -117,10 +143,10 @@ No installation required. The script uses Python standard library only.
 
 ```bash
 # Download
-curl -O https://raw.githubusercontent.com/arielghysels/devmatrix-paper/main/verify_fingerprint.py
+curl -O https://raw.githubusercontent.com/devmatrix-ai/devmatrix-public/main/verify_fingerprint.py
 
 # Or clone the repository
-git clone https://github.com/arielghysels/devmatrix-paper.git
+git clone https://github.com/devmatrix-ai/devmatrix-public.git
 ```
 
 ### Commands
@@ -167,7 +193,43 @@ Build fingerprints and specifications are available:
 - **Public**: Example fingerprint in this repository (`examples/`)
 - **Full access**: Contact author for supervised verification sessions (NDA required)
 
-**Contact**: Ariel Eduardo Ghysels
+**Contact**: Ariel Eduardo Ghysels — [aeghysels@devmatrix.dev](mailto:aeghysels@devmatrix.dev) | [https://devmatrix.dev/](https://devmatrix.dev/) | [LinkedIn](https://www.linkedin.com/in/ariel-ghysels-52469198/) | [X @builddevmatrix](https://x.com/builddevmatrix)
+
+---
+
+## Platform Seal Verification
+
+For platform-scale compilations, the sealing step produces platform-level provenance:
+
+```bash
+# Seal platform provenance (explicit governance step)
+devmatrix seal -m manifest.yaml -o output/
+
+# Verify idempotence
+devmatrix seal -m manifest.yaml -o output/
+# Run twice on identical modules → build_id and deterministic_seed must be identical
+
+# Verify completeness enforcement
+mv output/hip_core/build_fingerprint.json /tmp/
+devmatrix seal -m manifest.yaml -o output/
+# Expected: Seal refuses with specific missing module error
+mv /tmp/build_fingerprint.json output/hip_core/
+
+# Verify release governance
+devmatrix seal -m manifest.yaml -o output/ --release
+# Expected: Seal refuses if git working tree is dirty
+```
+
+**What seal validates (G_SEAL)**:
+
+| Check | Failure Mode |
+|-------|-------------|
+| Completeness | Missing module → hard fail |
+| Gate Results | Any module with failing gates → hard fail |
+| Version Consistency | Pipeline version mismatch → fail (release) or warning |
+| Git State | Dirty working tree → fail (release) or warning |
+
+See [GOLDEN_PACK_INDEX.md](GOLDEN_PACK_INDEX.md) for the full 10-minute verification table.
 
 ---
 

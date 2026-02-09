@@ -199,4 +199,46 @@ The canonical implementation is `verify_fingerprint.py` in this repository, lice
 
 ---
 
-*Version 1.0 | January 2026*
+## 10. Platform Seal Hashes
+
+For platform-scale compilations (multiple modules sealed together), aggregate hashes are computed as follows:
+
+### 10.1 Aggregate IR Hash
+
+```
+aggregate_ir_hash = SHA256(sorted per-module ir_structural_hash values, concatenated)
+```
+
+All `ir_structural_hash` values from individual module fingerprints are sorted lexicographically and concatenated into a single string, then hashed with SHA-256.
+
+### 10.2 Aggregate Output Hash
+
+```
+aggregate_output_hash = SHA256(sorted per-module code_bundle_hash values, concatenated)
+```
+
+Same algorithm as aggregate IR hash, applied to `code_bundle_hash` values.
+
+### 10.3 Deterministic Seed
+
+```
+deterministic_seed = SHA256(aggregate_ir_hash | aggregate_output_hash | pipeline_version | python_version)
+```
+
+The pipe (`|`) represents string concatenation. The deterministic seed captures the full pipeline state.
+
+### 10.4 Platform Build ID
+
+```
+build_id = SHA256(aggregate_ir_hash[:16] + aggregate_output_hash[:16])[:16]
+```
+
+The build ID is a 16-character hex string derived from the first 16 characters of each aggregate hash.
+
+### 10.5 Timestamp Exclusion
+
+Timestamps appear only in metadata fields (`build_timestamp`, `seal_timestamp`). They are **never** included in hash inputs. Same modules at different times produce identical hashes.
+
+---
+
+*Version 2.0 | February 2026*

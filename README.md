@@ -65,8 +65,13 @@ not AI systems:
   Generated artifacts include signed manifests, hashes, and
   reproducibility proofs.
 
-- **Fail-closed behavior**  
+- **Fail-closed behavior**
   If determinism or invariants cannot be guaranteed, the build fails.
+
+- **Platform provenance**
+  Platform provenance is sealed explicitly, never as a build side-effect.
+  Sealing is a governance decision that validates completeness, quality gates,
+  and determinism before emitting evidence.
 
 If a system cannot be rebuilt exactly,  
 **it is not governed**.
@@ -132,12 +137,17 @@ Included:
 | [EVIDENCE_EN.md](EVIDENCE_EN.md) | Reproducibility evidence (English) |
 | [HOW_TO_VERIFY.md](HOW_TO_VERIFY.md) | Verification instructions |
 | [REPRODUCIBILITY_SPEC.md](REPRODUCIBILITY_SPEC.md) | Canonical hash algorithm definitions |
+| [SEALING.md](SEALING.md) | Platform provenance sealing protocol |
+| [GOLDEN_PACK_INDEX.md](GOLDEN_PACK_INDEX.md) | Verification in 10 minutes |
+| [DD_READINESS_CHECKLIST.md](DD_READINESS_CHECKLIST.md) | 8 binary PASS/FAIL DD checks |
 | [PAPER.md](PAPER.md) | Technical paper (Spanish) |
 | [EVIDENCE.md](EVIDENCE.md) | Reproducibility evidence (Spanish) |
 
 ---
 
 ## Evidence Summary
+
+### Single-Module Evidence (January 2026)
 
 Compilations from 3 real-world specifications:
 
@@ -149,6 +159,14 @@ Compilations from 3 real-world specifications:
 | **TOTAL** | **68** | **68** | **1,125** | **88.4%** | **A** |
 
 Full details: [EVIDENCE_EN.md](EVIDENCE_EN.md)
+
+### Platform-Scale Evidence (February 2026)
+
+| Platform | Modules | Gates per Module | Total Gates | Seal Status |
+|----------|---------|-----------------|-------------|-------------|
+| HIP (Healthcare) | 12 | 34 | 408 | SEALED (G_SEAL PASS) |
+
+Full details: [EVIDENCE_EN.md](EVIDENCE_EN.md) | [GOLDEN_PACK_INDEX.md](GOLDEN_PACK_INDEX.md)
 
 ---
 
@@ -186,20 +204,67 @@ See [HOW_TO_VERIFY.md](HOW_TO_VERIFY.md) for detailed instructions.
 ## Files in This Package
 
 ```
-DOCS/PRESENTATION/
-├── README.md                  # This file
-├── PAPER_EN.md                # Technical paper (English - canonical)
-├── PAPER.md                   # Technical paper (Spanish)
-├── EVIDENCE_EN.md             # Evidence (English)
-├── EVIDENCE.md                # Evidence (Spanish)
-├── HOW_TO_VERIFY.md           # Verification guide
-├── REPRODUCIBILITY_SPEC.md    # Canonical hash algorithm definitions
-├── verify_fingerprint.py      # Verification script (reference implementation)
-├── LICENSE                    # CC-BY 4.0 (docs) + MIT (script)
-├── CITATION.cff               # Citation metadata
-└── examples/
-    └── build_fingerprint_example.json
+├── README.md                          # This file
+├── PAPER_EN.md                        # Technical paper (English - canonical)
+├── PAPER.md                           # Technical paper (Spanish)
+├── EVIDENCE_EN.md                     # Evidence (English)
+├── EVIDENCE.md                        # Evidence (Spanish)
+├── HOW_TO_VERIFY.md                   # Verification guide
+├── REPRODUCIBILITY_SPEC.md            # Canonical hash algorithm definitions
+├── SEALING.md                         # Platform sealing protocol
+├── GOLDEN_PACK_INDEX.md               # Quick verification table
+├── DD_READINESS_CHECKLIST.md          # DD readiness checks
+├── verify_fingerprint.py              # Verification script (reference implementation)
+├── LICENSE                            # CC-BY 4.0 (docs) + MIT (script)
+├── CITATION.cff                       # Citation metadata
+├── examples/
+│   ├── build_fingerprint_example.json # Single-module fingerprint
+│   ├── platform_provenance_sealed.json  # 12-module platform example
+│   └── seal_manifest_example.json       # G_SEAL validation example
+└── fingerprints/
+    ├── 20260110_crm_spec_complete_722342d9.json
+    └── 20260110_argencool_crm_722342d9.json
 ```
+
+---
+
+## Relationship to Models
+
+DevMatrix is model-agnostic infrastructure designed to sit downstream of reasoning models, turning their outputs into deterministic, verifiable, and auditable systems. Models produce candidate specifications and decisions; DevMatrix deterministically compiles, verifies, and governs the resulting systems.
+
+---
+
+## What You Will NOT See Here (By Design)
+
+This repository contains evidence, not implementation. Proprietary components — including
+IR schemas (~390 types), compilation passes (42), emitter source, gate logic, and
+LLM prompt architecture — are excluded by design.
+
+See [DD_READINESS_CHECKLIST.md](DD_READINESS_CHECKLIST.md) for the complete list.
+
+---
+
+## Public Evidence vs NDA-Only Artifacts
+
+This repository intentionally contains only verification artifacts and documentation required for pre-NDA technical due diligence.
+
+### Included (Public)
+- Sealed platform provenance examples
+- Build fingerprints and verification script
+- Gate results and QA summaries
+- Reproducibility specification and hash algorithms
+- SEAL process documentation and Golden Pack verification
+
+### Excluded (NDA Required)
+- Internal IR schemas and pass implementations
+- Compiler pipeline source code
+- Domain-specific generation templates
+- Prompting logic and repair strategies
+- Runtime orchestration internals
+
+This separation is deliberate and designed to allow independent verification without exposing proprietary compiler internals.
+
+**To request NDA access**: [aeghysels@devmatrix.dev](mailto:aeghysels@devmatrix.dev)
 
 ---
 
@@ -212,7 +277,7 @@ If you reference this work:
   author = {Ghysels, Ariel Eduardo},
   title = {DevMatrix: A Specification-to-System Compiler},
   year = {2026},
-  url = {https://github.com/arielghysels/devmatrix-paper}
+  url = {https://devmatrix.dev/}
 }
 ```
 
@@ -266,8 +331,11 @@ DevMatrix exists to eliminate that class of failure.
 ## Contact
 
 **Ariel Eduardo Ghysels**
-**aeghysels@gmail.com**
+**aeghysels@devmatrix.dev**
 
+- [https://devmatrix.dev/](https://devmatrix.dev/)
+- [LinkedIn](https://www.linkedin.com/in/ariel-ghysels-52469198/)
+- [X @builddevmatrix](https://x.com/builddevmatrix)
 - Supervised verification sessions available
 - Access to compilations under NDA
 
@@ -283,4 +351,4 @@ DevMatrix exists to eliminate that class of failure.
 
 DevMatrix™ and the underlying compilation technology are protected intellectual property.
 The concepts and evidence presented in this repository are disclosed for research and evaluation purposes.
-The DevMatrix compiler core is proprietary and registered under applicable jurisdictions.
+The DevMatrix compiler core is proprietary. US Patent Pending. EU registration filed.

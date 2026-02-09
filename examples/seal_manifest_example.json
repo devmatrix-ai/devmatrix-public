@@ -1,0 +1,70 @@
+{
+  "schema_version": "1.0.0",
+  "seal_timestamp": "2026-02-09T00:40:39.208155",
+  "manifest_name": "HIP",
+  "output_path": "generated/HIP_ADR87_20260204_135124",
+  "release_mode": false,
+  "g_seal": {
+    "passed": true,
+    "checks": {
+      "completeness": {
+        "passed": true,
+        "expected": 12,
+        "found": 12,
+        "missing": [],
+        "errors": []
+      },
+      "gates": {
+        "passed": true,
+        "modules_checked": 12,
+        "failing_modules": [],
+        "errors": []
+      },
+      "version_consistency": {
+        "passed": true,
+        "pipeline_version": "2786acffc",
+        "inconsistent": []
+      },
+      "git_state": {
+        "passed": true,
+        "commit_sha": "2786acffcb1b42fa4371664a81efcfe5521153b8",
+        "branch": "fix/hip_admin_deterministic",
+        "dirty": true,
+        "errors": [],
+        "warnings": [
+          "Git working tree is dirty (non-release mode, continuing)"
+        ]
+      }
+    },
+    "errors": [],
+    "warnings": []
+  },
+  "provenance_summary": {
+    "build_id": "532effc61fabcad3",
+    "aggregate_ir_hash": "3a9925b169b54079e97caf23ab8d0d095ab4d942f31176f389c3708dbdcfede3",
+    "aggregate_output_hash": "bf22f63e7f794355f4b035d9b48e0fc9bd4777454b831ed288fdb5bd616a7910",
+    "deterministic_seed": "67dcbe6c565b7da7c68666e8f32406eeba3ac515c3c1f4a9f79d6cff4496c8f9",
+    "total_modules": 12,
+    "pipeline_version": "2786acffc"
+  },
+  "artifacts_written": [
+    "evidence_pack/build_provenance.json",
+    "evidence_pack/platform_provenance.json",
+    "evidence_pack/REPLAY.md",
+    "evidence_pack/seal_manifest.json"
+  ],
+  "sealed_modules": [
+    "hip_admin",
+    "hip_billing",
+    "hip_core",
+    "hip_crm",
+    "hip_finance",
+    "hip_insurance",
+    "hip_lis",
+    "hip_logistics",
+    "hip_marketplace",
+    "hip_patient",
+    "hip_scheduling",
+    "hip_training"
+  ]
+}

@@ -8,8 +8,8 @@ authors:
     orcid: ""
 version: "1.0.0"
 date-released: "2026-01-05"
-url: "https://github.com/arielghysels/devmatrix-paper"
-repository-code: "https://github.com/arielghysels/devmatrix-paper"
+url: "https://devmatrix.dev/"
+repository-code: "https://devmatrix.dev/"
 license: "CC-BY-4.0"
 keywords:
   - specification-to-system compiler
@@ -38,7 +38,7 @@ preferred-citation:
   title: "DevMatrix: A Specification-to-System Compiler"
   year: 2026
   month: 1
-  url: "https://github.com/arielghysels/devmatrix-paper"
+  url: "https://devmatrix.dev/"
   notes: >-
     This citation refers to the public verification package (paper, evidence,
     verification script). The DevMatrix compiler core is proprietary and

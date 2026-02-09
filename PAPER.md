@@ -276,8 +276,8 @@ No es una promesa. Es evidencia.
 
 ---
 
-**Contact:** Ariel Eduardo Ghysels
-**Repository:** [Private - Available under NDA]
+**Contact:** Ariel Eduardo Ghysels — [aeghysels@devmatrix.dev](mailto:aeghysels@devmatrix.dev)
+**Web:** [https://devmatrix.dev/](https://devmatrix.dev/) | [LinkedIn](https://www.linkedin.com/in/ariel-ghysels-52469198/) | [X @builddevmatrix](https://x.com/builddevmatrix)
 
 ---
 

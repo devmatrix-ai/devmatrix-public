@@ -148,6 +148,7 @@ Any compilation can be reproduced exactly:
 | **Database** | PostgreSQL, Alembic | Models, migrations | Production |
 | **Testing** | pytest | Contract, behavior, security tests | Production |
 | **Infra** | Docker, docker-compose | Deployment-ready containers | Production |
+| **Evidence** | JSON, Markdown | Build provenance, seal manifest, replay instructions | Production |
 | **Frontend** | React, Next.js, TailwindCSS | Pages, forms, tables, navigation | In development |
 
 ### 5.2 Output Scale
@@ -201,6 +202,7 @@ Grades:
 | CRM (Ghysels CRM) | 328 | 268 | B (94.3%) | 313 | PASS |
 | Healthcare (MediCloud) | 284 | 269 | A (98.6%) | 278 | PASS |
 | **TOTAL** | **1,125** | **995** | **A** | **953** | **88%+** |
+| HIP (Healthcare Platform) | — | — | 12 modules × 34 gates | — | SEALED (G_SEAL PASS) |
 
 ### 7.2 Generated Artifacts per Spec
 
@@ -264,6 +266,23 @@ DevMatrix operates in a fundamentally different problem space than existing tool
 
 **Not competing**: Codegen reduces boilerplate. DevMatrix produces complete applications.
 
+### 8.4 Platform Sealing
+
+DevMatrix separates compilation from provenance sealing:
+
+- **Compilation** emits per-module code, tests, infrastructure, and fingerprints
+- **Sealing** is a separate governance step that validates completeness, gate results,
+  version consistency, and git state before emitting platform-level provenance
+
+Sealing is never automatic. It is an explicit command (`devmatrix seal`) that produces
+an `evidence_pack/` directory containing aggregate hashes, build ID, deterministic seed,
+and reproduction instructions.
+
+The seal validates four checks (G_SEAL): module completeness, gate enforcement (34/34 per module),
+pipeline version consistency, and git state. If any check fails, sealing refuses.
+
+See [SEALING.md](SEALING.md) for protocol details.
+
 ---
 
 ## 9. Conclusion
@@ -286,8 +305,8 @@ This is not a promise. It is evidence.
 
 ---
 
-**Contact:** Ariel Eduardo Ghysels
-**Repository:** [Private - Available under NDA]
+**Contact:** Ariel Eduardo Ghysels — [aeghysels@devmatrix.dev](mailto:aeghysels@devmatrix.dev)
+**Web:** [https://devmatrix.dev/](https://devmatrix.dev/) | [LinkedIn](https://www.linkedin.com/in/ariel-ghysels-52469198/) | [X @builddevmatrix](https://x.com/builddevmatrix)
 
 ---
 
@@ -296,6 +315,6 @@ This is not a promise. It is evidence.
 DevMatrix™ is a proprietary software system.
 This paper discloses architectural concepts, empirical evidence, and reproducibility artifacts for research and evaluation purposes.
 
-The underlying compiler implementation and associated technologies are protected intellectual property, with registrations and filings in multiple jurisdictions.
+The underlying compiler implementation and associated technologies are protected intellectual property. US Patent Pending. EU registration filed.
 
 This disclosure does not grant rights to use, reproduce, or derive commercial implementations of the DevMatrix compiler.

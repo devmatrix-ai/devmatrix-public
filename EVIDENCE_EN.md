@@ -14,6 +14,9 @@ If DevMatrix is non-deterministic, **one of the following must occur**:
 | Same `spec_hash`, different `code_bundle_hash` | Transformation is stochastic |
 | Same `spec_hash`, different `ir_canonical_hash` | IR construction varies |
 | Same `spec_hash`, different test results | Runtime dependencies leak |
+| Same modules, different `build_id` after seal | Seal is non-deterministic |
+| Seal succeeds with missing module | Completeness check is broken |
+| Seal succeeds with failing gates | Gate enforcement is broken |
 
 **Challenge**: Run the same specification through DevMatrix N times. If ANY hash differs between runs, the determinism claim is false.
 
@@ -171,6 +174,48 @@ SuperAdmin, User, Workspace
 
 **Pydantic Schemas**: 17 Create + 17 Update + 17 Read = **51 schemas**
 
+### 2.4 HIP Healthcare Platform (12 Modules)
+
+> This is a platform-scale compilation, not a single-spec build. Each module is compiled independently and sealed as a platform.
+
+```
+Platform Build ID:     532effc61fabcad3
+Aggregate IR Hash:     3a9925b169b54079e97caf23ab8d0d095ab4d942f31176f389c3708dbdcfede3
+Aggregate Output Hash: bf22f63e7f794355f4b035d9b48e0fc9bd4777454b831ed288fdb5bd616a7910
+Deterministic Seed:    67dcbe6c565b7da7c68666e8f32406eeba3ac515c3c1f4a9f79d6cff4496c8f9
+Pipeline Version:      2786acffc
+Total Modules:         12
+G_SEAL:                PASS (4/4 checks)
+```
+
+**Sealed Modules**:
+
+| Module | Build ID | Deterministic |
+|--------|----------|---------------|
+| hip_admin | `8e8e2dfdc36ce686` | Yes |
+| hip_billing | `1149fc9da67940c5` | Yes |
+| hip_core | `51831353420b12e8` | Yes |
+| hip_crm | `147dd45c926fe70f` | Yes |
+| hip_finance | `d1ffa512fd3c7a4f` | Yes |
+| hip_insurance | `8eff6b7a8ed73e54` | Yes |
+| hip_lis | `cec8ab247acc0b35` | Yes |
+| hip_logistics | `94b005459101882f` | Yes |
+| hip_marketplace | `fe6643e0ff64a940` | Yes |
+| hip_patient | `2df1e5716a751f76` | Yes |
+| hip_scheduling | `f85a9a1fb96f7f88` | Yes |
+| hip_training | `81c67f65773641f3` | Yes |
+
+**G_SEAL Validation**:
+
+| Check | Status | Detail |
+|-------|--------|--------|
+| Completeness | PASS | 12 expected, 12 found, 0 missing |
+| Gate Results | PASS | 12 modules checked, 0 failing |
+| Version Consistency | PASS | Pipeline version `2786acffc` across all modules |
+| Git State | PASS | Clean (non-release mode) |
+
+See [examples/platform_provenance_sealed.json](examples/platform_provenance_sealed.json) and [examples/seal_manifest_example.json](examples/seal_manifest_example.json) for full machine-readable evidence.
+
 ---
 
 ## 3. Generated Artifacts Summary
@@ -253,6 +298,37 @@ Run N: spec_hash=ABC → code_hash=XYZ
 
 **No variability**. Same input → same output → same hash.
 
+### 4.3 Platform Seal Verification
+
+Platform-level provenance can be verified independently:
+
+```bash
+# Seal platform provenance
+devmatrix seal -m manifest.yaml -o output/
+
+# Verify idempotence (run twice → identical build_id and deterministic_seed)
+devmatrix seal -m manifest.yaml -o output/
+# Compare seal_manifest.json from both runs
+
+# Verify completeness enforcement (remove one module → seal refuses)
+mv output/hip_core/build_fingerprint.json /tmp/
+devmatrix seal -m manifest.yaml -o output/
+# Expected: ❌ Seal FAILED: Missing modules: ['hip_core']
+
+# Verify release governance (dirty git → seal refuses in release mode)
+devmatrix seal -m manifest.yaml -o output/ --release
+# Expected: ❌ Seal FAILED (if git is dirty)
+```
+
+**Falsification conditions for seal**:
+
+| Test | Expected if Seal is Broken |
+|------|----------------------------|
+| Same modules → different `build_id` | Seal is non-deterministic |
+| Missing module → seal succeeds | Completeness enforcement is broken |
+| Failing gates → seal succeeds | Gate enforcement is broken |
+| Dirty git + `--release` → seal succeeds | Release governance is broken |
+
 ---
 
 ## 5. Generated Artifacts
@@ -326,7 +402,8 @@ Available upon request:
 
 For independent evidence verification:
 
-**Ariel Eduardo Ghysels**
+**Ariel Eduardo Ghysels** — [aeghysels@devmatrix.dev](mailto:aeghysels@devmatrix.dev)
+- [https://devmatrix.dev/](https://devmatrix.dev/) | [LinkedIn](https://www.linkedin.com/in/ariel-ghysels-52469198/) | [X @builddevmatrix](https://x.com/builddevmatrix)
 - Access to compilations under NDA
 - Supervised reproduction available
 

@@ -1,0 +1,109 @@
+{
+  "generated_at": "2026-02-09T00:40:39.192519",
+  "folder_name": "HIP_ADR87_20260204_135124",
+  "platform": {
+    "build_id": "532effc61fabcad3",
+    "output_hash": "bf22f63e7f794355f4b035d9b48e0fc9bd4777454b831ed288fdb5bd616a7910",
+    "build_timestamp": "2026-02-09T00:40:39.192163",
+    "deterministic": true,
+    "total_modules": 12
+  },
+  "modules": [
+    {
+      "module_id": "hip_admin",
+      "build_id": "8e8e2dfdc36ce686",
+      "spec_hash": "7738ac8cae1f23c2d5fb0370660dad9cef353980fa953a691cb48d0769646d88",
+      "code_bundle_hash": "a1af665b4359dd5120575cf58cde765e",
+      "build_timestamp": "2026-02-08T23:43:44.568240",
+      "deterministic": true
+    },
+    {
+      "module_id": "hip_billing",
+      "build_id": "1149fc9da67940c5",
+      "spec_hash": "56a85c84965960f26bfcd9c801b3dddf4a28eaa7659a454f8ea110ee81339abf",
+      "code_bundle_hash": "eaf8c3608b4da0c26225701e5f2b6164",
+      "build_timestamp": "2026-02-09T00:38:10.714708",
+      "deterministic": true
+    },
+    {
+      "module_id": "hip_core",
+      "build_id": "51831353420b12e8",
+      "spec_hash": "101d8c83cec7c5d8c6bbda770fa5dcf5116e4cfcb1ae034eeca34f1c4d252730",
+      "code_bundle_hash": "4b49b7f63de3e2831542b82a833f3681",
+      "build_timestamp": "2026-02-08T21:51:05.015117",
+      "deterministic": true
+    },
+    {
+      "module_id": "hip_crm",
+      "build_id": "147dd45c926fe70f",
+      "spec_hash": "6354ab2aa6199dedc6b30834baca6c8691ad326f5a6bf13ecc35ab3d300df613",
+      "code_bundle_hash": "ba1f07b9f016112f8d3ff84c3e69d6f7",
+      "build_timestamp": "2026-02-08T22:02:35.038536",
+      "deterministic": true
+    },
+    {
+      "module_id": "hip_finance",
+      "build_id": "d1ffa512fd3c7a4f",
+      "spec_hash": "0a6e4f2b9b019fba877ff8a1c4c6245355ff2522de98d01058de8d2df0248765",
+      "code_bundle_hash": "c9ad4066a83d470f62992289b24d9665",
+      "build_timestamp": "2026-02-08T21:54:42.587300",
+      "deterministic": true
+    },
+    {
+      "module_id": "hip_insurance",
+      "build_id": "8eff6b7a8ed73e54",
+      "spec_hash": "b0c777d6703acbfe805be2db5b5caf95dc3b196983b65fb89e43916f001439d4",
+      "code_bundle_hash": "67abcda8b613089e68fbf54ba2fbfa36",
+      "build_timestamp": "2026-02-08T22:04:34.089735",
+      "deterministic": true
+    },
+    {
+      "module_id": "hip_lis",
+      "build_id": "cec8ab247acc0b35",
+      "spec_hash": "ae8166f6262c1b7e961ad1bcca27c80ebc35d71bd92912bb9ee0096c3c422760",
+      "code_bundle_hash": "64fbed6297c90138075feeeab1b27267",
+      "build_timestamp": "2026-02-08T22:06:43.378538",
+      "deterministic": true
+    },
+    {
+      "module_id": "hip_logistics",
+      "build_id": "94b005459101882f",
+      "spec_hash": "afad364c0cf47f6e39ac1d8616afb92af51a97af07ef6cfcd4829c3a1f995660",
+      "code_bundle_hash": "b070b704d1250445abc87195abe29bb5",
+      "build_timestamp": "2026-02-09T00:27:49.445783",
+      "deterministic": true
+    },
+    {
+      "module_id": "hip_marketplace",
+      "build_id": "fe6643e0ff64a940",
+      "spec_hash": "c26b6ba6b8ccf9234b8e309a200e054c9c48d1d4f470bae270ec4fb390315e1a",
+      "code_bundle_hash": "fbafc65935ac4c8f419e08a2f4318537",
+      "build_timestamp": "2026-02-08T22:00:36.851169",
+      "deterministic": true
+    },
+    {
+      "module_id": "hip_patient",
+      "build_id": "2df1e5716a751f76",
+      "spec_hash": "cb890ff6532a62293b50e5e596ef0300e494b452c04c676953c00e545a528d36",
+      "code_bundle_hash": "ddd7e2e14bf80b46c6c5ddeecfc58cbe",
+      "build_timestamp": "2026-02-08T21:58:26.554662",
+      "deterministic": true
+    },
+    {
+      "module_id": "hip_scheduling",
+      "build_id": "f85a9a1fb96f7f88",
+      "spec_hash": "6570f754e56a0e0efa67ec334e3d99eae9e6a31686cc8129b1f97c0f6a571ad4",
+      "code_bundle_hash": "97ad3ed642ac30df1d31e920580ea34e",
+      "build_timestamp": "2026-02-08T22:08:50.824030",
+      "deterministic": true
+    },
+    {
+      "module_id": "hip_training",
+      "build_id": "81c67f65773641f3",
+      "spec_hash": "bcaf5e31828f2ae68228fd425e53695c055d4c426c3217294849455088fd5fe0",
+      "code_bundle_hash": "d105255e98afcf91a2525e07657be20c",
+      "build_timestamp": "2026-02-08T21:56:33.674253",
+      "deterministic": true
+    }
+  ]
+}
