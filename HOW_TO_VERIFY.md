@@ -241,6 +241,19 @@ For the exact hash algorithms and canonical formats, see:
 
 ---
 
+## Platform Builds
+
+Platform builds follow the same verification principles as single-module builds.
+Verification is performed against the sealed platform IR and its associated `build_id`.
+
+For platform-scale evidence, the IR graph metrics (nodes, edges, cross-service
+dependencies) are structural invariants that must remain identical across
+re-executions with the same specification.
+
+See [PLATFORM_VERIFICATION.md](PLATFORM_VERIFICATION.md) for the full verification model.
+
+---
+
 ## Notes
 
 - All hashes use SHA-256 (64 hexadecimal characters)

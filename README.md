@@ -145,6 +145,7 @@ Included:
 | [REPRODUCIBILITY_SPEC.md](REPRODUCIBILITY_SPEC.md) | Canonical hash algorithm definitions |
 | [SEALING.md](SEALING.md) | Platform provenance sealing protocol |
 | [GOLDEN_PACK_INDEX.md](GOLDEN_PACK_INDEX.md) | Verification in 10 minutes |
+| [PLATFORM_VERIFICATION.md](PLATFORM_VERIFICATION.md) | Platform-scale verification model |
 | [DD_READINESS_CHECKLIST.md](DD_READINESS_CHECKLIST.md) | 8 binary PASS/FAIL DD checks |
 | [PAPER.md](PAPER.md) | Technical paper (Spanish) |
 | [EVIDENCE.md](EVIDENCE.md) | Reproducibility evidence (Spanish) |
@@ -176,16 +177,22 @@ Full details: [EVIDENCE_EN.md](EVIDENCE_EN.md)
 
 Full details: [EVIDENCE_EN.md](EVIDENCE_EN.md) | [GOLDEN_PACK_INDEX.md](GOLDEN_PACK_INDEX.md)
 
-### Evidence Timeline
+### Evidence Timeline (Deterministic Builds)
 
-| Date | Build | Modules | Tests | Pass Rate | Grade | Seal |
-|------|-------|---------|-------|-----------|-------|------|
-| 2026-01-05 | FLOWDESK | 1 | 513 | 89.8% | A | — |
-| 2026-01-05 | CRM | 1 | 328 | 82.7% | B | — |
-| 2026-01-05 | Healthcare | 1 | 284 | 95.4% | A | — |
-| 2026-02-09 | HIP Platform | 12 | 2,239 | 96.9% | A | G_SEAL PASS |
+This repository exposes **verifiable evidence snapshots** of DevMatrix builds.
+Each snapshot corresponds to a sealed compilation run and can be independently
+validated without access to proprietary implementation.
 
-Single-module builds (January) predate the platform seal system. Full timeline in [EVIDENCE_EN.md](EVIDENCE_EN.md).
+| Build ID | Date (UTC) | Scope | Tests (Pass/Fail/Blocked) | IR Nodes | IR Edges | Cross-Svc | HTTP Deps | Seal |
+|----------|------------|-------|---------------------------|----------|----------|-----------|-----------|------|
+| FLOWDESK | 2026-01-05 | Single-module (1) | 513 (458/55/0) | — | — | — | — | — |
+| CRM | 2026-01-05 | Single-module (1) | 328 (268/60/0) | — | — | — | — | — |
+| Healthcare | 2026-01-05 | Single-module (1) | 284 (269/15/0) | — | — | — | — | — |
+| HIP_ADR87 | 2026-02-09 | Platform (12 modules) | 2,239 (2,057/65/10) | ~4,924 | ~6,068 | 91 | 19 | G_SEAL PASS |
+
+**Column definitions**: IR Nodes/Edges = structural graph size of the compiled IR. Cross-Svc = cross-service FK dependencies resolved at compile time. HTTP Deps = inter-service HTTP dependencies. Single-module builds (January) predate the platform IR graph and seal system.
+
+Full details: [EVIDENCE_EN.md](EVIDENCE_EN.md) | [PLATFORM_VERIFICATION.md](PLATFORM_VERIFICATION.md)
 
 ---
 
@@ -232,6 +239,7 @@ See [HOW_TO_VERIFY.md](HOW_TO_VERIFY.md) for detailed instructions.
 ├── REPRODUCIBILITY_SPEC.md            # Canonical hash algorithm definitions
 ├── SEALING.md                         # Platform sealing protocol
 ├── GOLDEN_PACK_INDEX.md               # Quick verification table
+├── PLATFORM_VERIFICATION.md           # Platform-scale verification model
 ├── DD_READINESS_CHECKLIST.md          # DD readiness checks
 ├── verify_fingerprint.py              # Verification script (reference implementation)
 ├── LICENSE                            # CC-BY 4.0 (docs) + MIT (script)

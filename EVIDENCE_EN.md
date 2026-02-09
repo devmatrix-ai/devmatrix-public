@@ -269,6 +269,36 @@ See [examples/platform_provenance_sealed.json](examples/platform_provenance_seal
 
 **12/12 modules Grade A. 408/408 gates passed. 0 gate failures.**
 
+#### Platform-Scale Determinism (HIP)
+
+The HIP platform evidence corresponds to a **single deterministic compilation**
+producing a multi-service system composed of 12 modules.
+
+**Observed Properties**:
+- Single canonical IR graph across all services
+- Cross-service dependencies resolved at compile time
+- No per-service isolated generation — modules are compiled as a unified graph
+- Deterministic fingerprints per `build_id`
+
+**Graph Metrics (HIP_ADR87_20260209)**:
+
+| Metric | Value |
+|--------|-------|
+| Services | 12 |
+| IR Nodes | ~4,924 |
+| IR Edges | ~6,068 |
+| Cross-Service FK Dependencies | 91 |
+| HTTP Dependencies | 19 |
+| Entities | 68 |
+| Attributes | 1,380 |
+| Endpoints | 681 |
+| Schemas | 353 |
+| Schema Fields | 2,113 |
+| Test Cases | 1,396 |
+
+These metrics are structural properties of the compiled system and are invariant
+under re-execution with the same specification. See [PLATFORM_VERIFICATION.md](PLATFORM_VERIFICATION.md) for the verification model.
+
 ---
 
 ## 3. Generated Artifacts Summary
