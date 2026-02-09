@@ -26,13 +26,13 @@
     "spec_name": "api",
     "toolchain_hash": ""
   },
-  "published_at": "2026-02-09T09:20:21.846631+00:00",
+  "published_at": "2026-02-09T10:17:59.984958+00:00",
   "signature": {
     "algorithm": "Ed25519",
     "key_id": "dm-prod-2026-01",
     "public_key": "d3K5w4q643StbRn9RCNJJOcVbez9iptg/SxffqBua5s=",
     "signature": "F1clDN2EXVI+g8Fm2QHAm1qlRExIh3DYA6oF2Vd4tV8zpH5+UOhWNviEE6D6GClzJrtT7yANWNDcziRE1aDrCA==",
-    "signed_at": "2026-02-09T09:20:21.846624+00:00",
+    "signed_at": "2026-02-09T10:17:59.984944+00:00",
     "signed_payload_hash": "sha256:3f5351fe0bc82ac2882049ccf8ec572a7a78e28f43f44b1160ca4a59b3505891"
   }
 }
