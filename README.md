@@ -41,8 +41,14 @@ DevMatrix is **not**:
 - runtime AI governance  
 - probabilistic code generation  
 
-DevMatrix does not “suggest” software.  
+DevMatrix does not "suggest" software.
 It **compiles** systems.
+
+---
+
+## Relationship to Models
+
+DevMatrix is model-agnostic infrastructure designed to sit downstream of reasoning models, turning their outputs into deterministic, verifiable, and auditable systems. Models produce candidate specifications and decisions; DevMatrix deterministically compiles, verifies, and governs the resulting systems.
 
 ---
 
@@ -225,12 +231,6 @@ See [HOW_TO_VERIFY.md](HOW_TO_VERIFY.md) for detailed instructions.
     ├── 20260110_crm_spec_complete_722342d9.json
     └── 20260110_argencool_crm_722342d9.json
 ```
-
----
-
-## Relationship to Models
-
-DevMatrix is model-agnostic infrastructure designed to sit downstream of reasoning models, turning their outputs into deterministic, verifiable, and auditable systems. Models produce candidate specifications and decisions; DevMatrix deterministically compiles, verifies, and governs the resulting systems.
 
 ---
 
