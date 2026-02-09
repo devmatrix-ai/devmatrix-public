@@ -1,9 +1,6 @@
 # Internal / drafts
 temp/
 
-# Claude Code
-.claude/
-
 # Python
 __pycache__/
 *.pyc
@@ -18,8 +15,7 @@ venv/
 .DS_Store
 Thumbs.db
 
-# IDE
-.vscode/
-.idea/
+# IDE / tooling
+.*/
 *.swp
 *.swo
