@@ -1,0 +1,38 @@
+{
+  "evidence_version": "1.0.0",
+  "fingerprint": {
+    "build_id": "438b3aed5a78da48",
+    "build_timestamp": "2026-02-08T14:35:15.247483+00:00",
+    "code_bundle_hash": "05e33c979278e5e2761715734896a4ce5b6300d3807c7fbaa8c9b88dd3a45a96",
+    "dependency_lock_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "deterministic": true,
+    "ir_canonical_hash": "08fff507ece51512ffc3ddc3afe98544f3958a29aa332ac6c575dd89ee9faa0a",
+    "ir_semantic_hash": "7ef4eae5cd4531854ac41278a0562927f2106e1c78c8859476767b8358992fbc",
+    "ir_structural_hash": "57c5d4ea2a04d4b3ffab7d83e8e51d7cdd1b543be659a979bd10ab7eb4943288",
+    "ir_version": "1.5.0",
+    "llm_calls": 0,
+    "model_parameters_hash": "",
+    "module_id": "HIP Scheduling Service",
+    "pipeline_info": {
+      "features_enabled": [],
+      "pass_versions": {},
+      "passes": [],
+      "toolchain": null,
+      "version": "1.0.0"
+    },
+    "pipeline_version": "1.0.0",
+    "prompt_bundle_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "spec_hash": "f24b26460ba26d594114cae1e6c6386b65c7e28eec610e7bbd34cc099a8cf494",
+    "spec_name": "api",
+    "toolchain_hash": ""
+  },
+  "published_at": "2026-02-17T23:21:53.601564+00:00",
+  "signature": {
+    "algorithm": "Ed25519",
+    "key_id": "dm-prod-2026-01",
+    "public_key": "d3K5w4q643StbRn9RCNJJOcVbez9iptg/SxffqBua5s=",
+    "signature": "F1clDN2EXVI+g8Fm2QHAm1qlRExIh3DYA6oF2Vd4tV8zpH5+UOhWNviEE6D6GClzJrtT7yANWNDcziRE1aDrCA==",
+    "signed_at": "2026-02-17T23:21:53.601555+00:00",
+    "signed_payload_hash": "sha256:3f5351fe0bc82ac2882049ccf8ec572a7a78e28f43f44b1160ca4a59b3505891"
+  }
+}
