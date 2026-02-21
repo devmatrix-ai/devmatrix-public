@@ -1,0 +1,52 @@
+{
+  "evidence_version": "1.0.0",
+  "fingerprint": {
+    "convergence": {
+      "builds_analyzed": 0,
+      "convergence_score": 0.0,
+      "convergence_trend": null,
+      "defect_rate": null,
+      "gates_skipped_count": 0,
+      "insufficient_builds": true,
+      "issue_density": null,
+      "regression_detected": false,
+      "total_gates_executed": 0,
+      "trend_confidence": null
+    },
+    "created_at": "2026-02-21T15:06:03.171776",
+    "fingerprint": "a57210ff6b35030323486d90c8fa1989fb1669eeee2186da6ce9a106255e37f2",
+    "gate_results_hash": "ba24b6e6808b48a5e9d66759593482a74dd3f62c9027b7b08dab5d9bcfb86baa",
+    "git": {
+      "commit_date": "2026-02-21T13:37:48+01:00",
+      "commit_sha": "82aef4413ecc091372cac5f0bb845089c759f0b4",
+      "dirty": true
+    },
+    "ir_hashes": {
+      "semantic_hash": "fbba8b59f62090bf2467d813164e7e4ca74fcf634b7d267348da00e183f898fd",
+      "spec_hash": "2f8c8ee55583ad1e83960332922de9b5fd70ec9b9019033216c6493b6185b394",
+      "structural_hash": "86ba69bca977d75682568673a54ef972aaa1391da8796b835f52fd57d331e4d4"
+    },
+    "merkle_root": "77b315243c522e5fb4b903037a612c8aff7e34127f13cae13821b157f734f673",
+    "pass_run_ledger": {
+      "blocked": 10,
+      "digest_hash": "475d8aa66133fc2c4247bca2b315f59ac53c239c1a8b28b1b9d364743f7bc4ab",
+      "executed": 1257,
+      "failed": 2,
+      "skipped": 0,
+      "skipped_dedup": 337,
+      "total": 1606
+    },
+    "run_id": "modular-20260221_154750-484a631d",
+    "schema_version": "1.0.0",
+    "source_map_hash": "a9c38f6e3b06f9f06cb60c690ef7fedf439c79c6e33294db5c2fe5a987927e21"
+  },
+  "published_at": "2026-02-21T15:12:37.090860+00:00",
+  "signature": {
+    "algorithm": "Ed25519",
+    "key_id": "dm-prod-2026-01",
+    "public_key": "d3K5w4q643StbRn9RCNJJOcVbez9iptg/SxffqBua5s=",
+    "signature": "X1EMEULR7HE6PBZk4goHggCMrZgTnlwbPhzLuVYsvDqm1bnaBtEZIhVA+Bqc14VM9fvWtspIcXl9dC4kipfiBQ==",
+    "signed_at": "2026-02-21T15:12:37.090851+00:00",
+    "signed_payload_hash": "sha256:2ba6fdbf136168ed497469bb6c89d97fb0c2b285fad3aee7a195ca4a1a06384e"
+  }
+}
