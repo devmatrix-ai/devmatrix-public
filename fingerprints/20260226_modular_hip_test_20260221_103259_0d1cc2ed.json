@@ -1,0 +1,65 @@
+{
+  "evidence_version": "1.0.0",
+  "fingerprint": {
+    "build_identity": {
+      "build_id": "modular-20260226_135809-c786e124",
+      "build_seq": 27,
+      "fingerprint": "0a29df9121c74bae",
+      "learning_enabled": true,
+      "parent_build_seq": 26,
+      "platform_id": "23b36fde9ce5",
+      "platform_id_source": "repo_origin_hash",
+      "resolution_method": "neo4j_counter",
+      "resolved_at": "2026-02-26T17:02:15.600820+00:00"
+    },
+    "build_identity_fingerprint": "0a29df9121c74bae",
+    "convergence": {
+      "builds_analyzed": 1,
+      "convergence_score": 0.0,
+      "convergence_trend": null,
+      "defect_rate": null,
+      "gates_skipped_count": 0,
+      "insufficient_builds": true,
+      "issue_density": null,
+      "regression_detected": false,
+      "total_gates_executed": 0,
+      "trend_confidence": null
+    },
+    "created_at": "2026-02-26T17:02:18.862406",
+    "fingerprint": "0d1cc2ed6dd58993c10212dbd87bc61a50b3e852650189e77a3fe5ecfc307ac2",
+    "gate_results_hash": "c6b91ece53b95c83f93650722db439e2cc7c4ca7d384bbb554ed59b918268d5c",
+    "git": {
+      "commit_date": "2026-02-26T10:26:14-03:00",
+      "commit_sha": "4ec4aeda3abf065a29b51736db5a5472ba1d362c",
+      "dirty": true
+    },
+    "ir_hashes": {
+      "semantic_hash": "40fb8f4d15757bb2d2046b699ad568039fe989a79f0d47fe50d7606537164770",
+      "spec_hash": "22ab4591608c37f188dbb0825481b26c09ea88aadeab83ce4848c515ced778cb",
+      "structural_hash": "aa5075e680f1345f808a4f94a0f7d5c61fcb57a4a2e2613828cbc483a4c4a5df"
+    },
+    "merkle_root": "c54736dfe22ae09dfc45970979866ab3085923aa67123de82afdb6de3fb323f9",
+    "pass_run_ledger": {
+      "blocked": 0,
+      "digest_hash": "477cd8fbc4c8fddaeca711ddb24bd27ee5c3655fc23b3ed3baf45f1dac74ac62",
+      "executed": 122,
+      "failed": 0,
+      "skipped": 0,
+      "skipped_dedup": 0,
+      "total": 122
+    },
+    "pipeline_version": "4ec4aeda3-dirty",
+    "run_id": "modular-20260226_135809-c786e124",
+    "schema_version": "1.0.0",
+    "source_map_hash": "020c5eb9ce2ce61d9f7ef5dad78bae3f5f0602b4d4d568ba137db4afb3028a3b"
+  },
+  "published_at": "2026-02-26T17:02:59.636227+00:00",
+  "signature": {
+    "algorithm": "Ed25519",
+    "key_id": "dm-dev-2026-02",
+    "public_key": "RebX75Rg9WWZUBKmiZm5auoJi+RxirNV7AcLDBrLjqE=",
+    "signature": "2+HmlYF7r9J2jpQP0Ra+JH08FcAhtG8kGBY9uNB7yN6dQKs06mkhwz/Zo2LbxrP5bYc9qFlRWUzoIiSj6aPxAA==",
+    "signed_at": "2026-02-26T17:02:59.636211+00:00",
+    "signed_payload_hash": "sha256:343a7575159f6946a03c7b8ab9248270502f0d4c05d104efa4bdb58742f9cd36"
+  }
+}
