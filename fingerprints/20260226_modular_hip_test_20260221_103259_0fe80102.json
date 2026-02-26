@@ -344,13 +344,13 @@
     "schema_version": "1.0.0",
     "source_map_hash": "071353dba40c842a2e859d8ea4bfb56c0ff96add8d81b593972414287faaf85e"
   },
-  "published_at": "2026-02-26T17:26:47.421520+00:00",
+  "published_at": "2026-02-26T17:42:11.463319+00:00",
   "signature": {
     "algorithm": "Ed25519",
     "key_id": "dm-dev-2026-02",
     "public_key": "RebX75Rg9WWZUBKmiZm5auoJi+RxirNV7AcLDBrLjqE=",
     "signature": "+KSB3qhE87KleTApx8v2u2qsBKx5+EQXoEFWBaKJzT7bgSGOSAFf9MOnNxq4oyYHak3kNm+nWWWSsx/z7xlaCQ==",
-    "signed_at": "2026-02-26T17:26:47.421491+00:00",
+    "signed_at": "2026-02-26T17:42:11.463252+00:00",
     "signed_payload_hash": "sha256:d40b3dcb96960605dd37ef3bf9a3fcc7865a456fc563dfb9b2b08423d9d6e5aa"
   }
 }
