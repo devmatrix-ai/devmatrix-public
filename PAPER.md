@@ -138,10 +138,10 @@ Cualquier compilación puede ser reproducida exactamente:
 
 ```json
 {
-  "build_id": "61c051e66e545856",
-  "spec_hash": "51852a112e025db90685dcc997ccadca...",
-  "code_bundle_hash": "94dc63a1162c6516426b9de92d199582...",
-  "timestamp": "2025-01-04T12:21:20Z"
+  "build_id": "modular-20260226_142414-2f3639c8",
+  "spec_hash": "22ab4591608c37f188dbb0825481b26c...",
+  "code_bundle_hash": "0fe801020d46e15fea036da0dbaf20b8...",
+  "timestamp": "2026-02-26T17:26:34Z"
 }
 ```
 
@@ -177,12 +177,9 @@ Grades:
 
 ### 6.3 Compilaciones Reproducibles
 
-| Spec | Tests | Passed | Grade | Frontend Files | Status |
-|------|-------|--------|-------|----------------|--------|
-| FLOWDESK (Workflow) | 513 | 458 | A (96.9%) | 362 | ✅ PASS |
-| CRM (Ghysels CRM) | 328 | 268 | B (94.3%) | 313 | ✅ PASS |
-| Healthcare (MediCloud) | 284 | 269 | A (98.6%) | 278 | ✅ PASS |
-| **TOTAL** | **1,125** | **995** | **A** | **953** | **88%+** |
+| Platform | Modules | Tests | Passed | Grade | Gates | Seal |
+|----------|---------|-------|--------|-------|-------|------|
+| HIP (Healthcare) | 12 | 2,391 | 2,248 | A+ (100.0%) | 594/594 | G_SEAL PASS |
 
 ### 6.4 Verificación Independiente
 

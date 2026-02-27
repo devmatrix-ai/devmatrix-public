@@ -129,10 +129,10 @@ Any compilation can be reproduced exactly:
 
 ```json
 {
-  "build_id": "61c051e66e545856",
-  "spec_hash": "51852a112e025db90685dcc997ccadca...",
-  "code_bundle_hash": "94dc63a1162c6516426b9de92d199582...",
-  "timestamp": "2026-01-05T01:42:53Z"
+  "build_id": "modular-20260226_142414-2f3639c8",
+  "spec_hash": "22ab4591608c37f188dbb0825481b26c...",
+  "code_bundle_hash": "0fe801020d46e15fea036da0dbaf20b8...",
+  "timestamp": "2026-02-26T17:26:34Z"
 }
 ```
 
@@ -196,22 +196,21 @@ Grades:
 
 ### 7.1 Reproducible Compilations
 
-| Spec | Tests | Passed | Grade | Frontend Files | Status |
-|------|-------|--------|-------|----------------|--------|
-| FLOWDESK (Workflow) | 513 | 458 | A (96.9%) | 362 | PASS |
-| CRM (Ghysels CRM) | 328 | 268 | B (94.3%) | 313 | PASS |
-| Healthcare (MediCloud) | 284 | 269 | A (98.6%) | 278 | PASS |
-| **TOTAL** | **1,125** | **995** | **A** | **953** | **88%+** |
-| HIP (Healthcare Platform) | — | — | 12 modules × 34 gates | — | SEALED (G_SEAL PASS) |
+| Platform | Modules | Tests | Passed | Grade | Gates | Seal |
+|----------|---------|-------|--------|-------|-------|------|
+| HIP (Healthcare) | 12 | 2,391 | 2,248 | A+ (100.0%) | 594/594 | G_SEAL PASS |
 
-### 7.2 Generated Artifacts per Spec
+### 7.2 Generated Artifacts (HIP)
 
-| Spec | Entities | API Routes | Schemas | Pages | Forms |
-|------|----------|------------|---------|-------|-------|
-| FLOWDESK | 29 | 29 | 87 | 87 | 29 |
-| CRM | 22 | 22 | 66 | 66 | 22 |
-| Healthcare | 17 | 17 | 51 | 51 | 17 |
-| **TOTAL** | **68** | **68** | **204** | **204** | **68** |
+| Metric | Value |
+|--------|-------|
+| Entities | 68 |
+| Endpoints | 794 |
+| Schemas | 459 |
+| Schema Fields | 3,348 |
+| Test Cases | 3,901 |
+| IR Nodes | ~6,390 |
+| IR Edges | ~7,622 |
 
 ### 7.3 Independent Verification
 
@@ -300,7 +299,7 @@ This is not a promise. It is evidence.
 
 ## References
 
-- See [EVIDENCE.md](EVIDENCE.md) for compilation evidence
+- See [EVIDENCE_EN.md](EVIDENCE_EN.md) for compilation evidence
 - See [README.md](README.md) for introduction
 
 ---

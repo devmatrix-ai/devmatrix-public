@@ -26,7 +26,7 @@
 | Artifact | Location | Content |
 |----------|----------|---------|
 | `build_fingerprint.json` | `hip_*/` | 5 cryptographic hashes + build metadata |
-| `gate_results.json` | `hip_*/` | 34 gate pass/fail results with evidence |
+| `gate_results.json` | `hip_*/` | ~50 gate pass/fail results with evidence |
 | `source_map.json` | `hip_*/` | File → IR traceability |
 | `uts_evidence.json` | `hip_*/` | Unit test simulation evidence |
 | `threat_model.json` | `hip_*/` | Structural threat coverage (not penetration testing) |
@@ -56,17 +56,17 @@
     "checks": {
       "completeness": { "passed": true, "expected": 12, "found": 12, "missing": [] },
       "gates":        { "passed": true, "modules_checked": 12, "failing_modules": [] },
-      "version_consistency": { "passed": true, "pipeline_version": "2786acffc" },
+      "version_consistency": { "passed": true, "pipeline_version": "60bc51c51" },
       "git_state":    { "passed": true, "dirty": true }
     }
   },
   "provenance_summary": {
-    "build_id": "532effc61fabcad3",
-    "aggregate_ir_hash": "3a9925b169b54079...e3",
-    "aggregate_output_hash": "bf22f63e7f794355...10",
-    "deterministic_seed": "67dcbe6c565b7da7...f9",
+    "build_id": "modular-20260226_142414-2f3639c8",
+    "aggregate_ir_hash": "3ee8b2589f7cf244...6f",
+    "aggregate_output_hash": "8b99cc65c84f3401...73",
+    "deterministic_seed": "c441af276334fc00...32",
     "total_modules": 12,
-    "pipeline_version": "2786acffc"
+    "pipeline_version": "60bc51c51"
   },
   "sealed_modules": [
     "hip_admin", "hip_billing", "hip_core", "hip_crm",
@@ -82,17 +82,17 @@
 
 ```json
 {
-  "folder_name": "HIP_ADR87_20260204_135124",
+  "folder_name": "HIP_TEST_20260221_103259",
   "platform": {
-    "build_id": "532effc61fabcad3",
-    "output_hash": "bf22f63e7f794355f4b035d9b48e0fc9bd4777454b831ed288fdb5bd616a7910",
+    "build_id": "modular-20260226_142414-2f3639c8",
+    "output_hash": "8a4ca548b75187c3c92e3bd9b59f6e459b9a3ee9fd1b65a1271538c81f2fa9e6",
     "deterministic": true,
     "total_modules": 12
   },
   "modules": [
-    { "module_id": "hip_admin",   "build_id": "8e8e2dfdc36ce686", "deterministic": true },
-    { "module_id": "hip_billing", "build_id": "1149fc9da67940c5", "deterministic": true },
-    { "module_id": "hip_core",    "build_id": "51831353420b12e8", "deterministic": true },
+    { "module_id": "hip_admin",   "deterministic": true },
+    { "module_id": "hip_billing", "deterministic": true },
+    { "module_id": "hip_core",    "deterministic": true },
     "..."
   ]
 }

@@ -49,13 +49,13 @@ Each DevMatrix compilation produces a `build_fingerprint.json`:
 
 ```json
 {
-  "build_id": "61c051e66e545856",
-  "build_timestamp": "2026-01-05T01:42:53.428709+00:00",
-  "spec_hash": "51852a112e025db90685dcc997ccadca99fc5bee...",
-  "code_bundle_hash": "94dc63a1162c6516426b9de92d199582a82b1a43...",
-  "ir_canonical_hash": "414ea2de3a0ebe2b651214778eaa33dac688f804...",
-  "ir_semantic_hash": "5ca05d9cedcb90ef81c23faff5d858f6954166a2...",
-  "ir_structural_hash": "ff44e5acc42d6ce0c7b745e53d6cd7a2f614ec90..."
+  "build_id": "modular-20260226_142414-2f3639c8",
+  "build_timestamp": "2026-02-26T17:26:34.130735+00:00",
+  "spec_hash": "22ab4591608c37f10685dcc997ccadca99fc5bee...",
+  "code_bundle_hash": "0fe801020d46e15f426b9de92d199582a82b1a43...",
+  "ir_canonical_hash": "feffbdc9b4c8bba3b8ee197486c5abcded94ec10...",
+  "ir_semantic_hash": "fb0eb96841b302cb5cd944556b1fc1df86057296...",
+  "ir_structural_hash": "a87e6a4113d7ae8ba8678c7619b3eb8e318d68b9..."
 }
 ```
 
@@ -79,10 +79,10 @@ For platform-scale compilations (multiple modules sealed together), the provenan
 
 ```json
 {
-  "build_id": "532effc61fabcad3",
-  "aggregate_ir_hash": "3a9925b169b54079...e3",
-  "aggregate_output_hash": "bf22f63e7f794355...10",
-  "deterministic_seed": "67dcbe6c565b7da7...f9",
+  "build_id": "modular-20260226_142414-2f3639c8",
+  "aggregate_ir_hash": "3ee8b2589f7cf244...6f",
+  "aggregate_output_hash": "8b99cc65c84f34d0...73",
+  "deterministic_seed": "c441af276334fc00...32",
   "total_modules": 12,
   "g_seal_passed": true
 }
@@ -142,10 +142,7 @@ If DevMatrix is **non-deterministic**, one of these must occur:
 No installation required. The script uses Python standard library only.
 
 ```bash
-# Download
-curl -O https://raw.githubusercontent.com/devmatrix-ai/devmatrix-public/main/verify_fingerprint.py
-
-# Or clone the repository
+# Clone the repository
 git clone https://github.com/devmatrix-ai/devmatrix-public.git
 ```
 
@@ -173,11 +170,11 @@ DevMatrix Build Fingerprint Verification
 ============================================================
 
 Fingerprint: build_fingerprint.json
-Build ID: 61c051e66e545856
-Timestamp: 2026-01-05T01:42:53.428709+00:00
+Build ID: modular-20260226_142414-2f3639c8
+Timestamp: 2026-02-26T17:26:34.130735+00:00
 
-[OK] spec_hash matches: 51852a112e025db9...
-[OK] code_bundle_hash matches: 94dc63a1162c6516...
+[OK] spec_hash matches: 22ab4591608c37f1...
+[OK] code_bundle_hash matches: 0fe801020d46e15f...
 
 ============================================================
 VERIFICATION PASSED

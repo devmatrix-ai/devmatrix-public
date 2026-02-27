@@ -35,12 +35,15 @@ Everything can be independently verified.
 
 ```
 fingerprints/
-├── 20260110_flowdesk_spec_complete_a4846466.json
-├── 20260110_crm_spec_complete_722342d9.json
-├── 20260110_argencool_crm_722342d9.json
-└── 20260110_healthcare_professional_advanc_956a1da0.json
+├── 20260221_modular_hip_test_..._a57210ff.json
+├── 20260226_modular_hip_test_..._0d1cc2ed.json
+├── 20260226_modular_hip_test_..._5ac138f8.json
+├── 20260226_modular_hip_test_..._0fe80102.json
+└── 20260227_modular_hip_test_..._0fe80102.json
 examples/
-└── build_fingerprint_example.json
+├── build_fingerprint_example.json
+├── platform_provenance_sealed.json
+└── seal_manifest_example.json
 verify_fingerprint.py
 REPRODUCIBILITY_SPEC.md
 ```
@@ -51,14 +54,9 @@ Each fingerprint was produced from the **same input specification** for that run
 
 ## Evidence Summary (This Repo)
 
-| Spec | Fingerprint | `spec_hash` | `code_bundle_hash` | `ir_canonical_hash` |
-|------|-------------|-------------|-------------------|---------------------|
-| FLOWDESK | `fingerprints/20260110_flowdesk_spec_complete_a4846466.json` | `51852a112e025db9…` | `9a9d280d7be8b23a…` | `69aabad140e1eb21…` |
-| ArgenCool CRM (run A) | `fingerprints/20260110_crm_spec_complete_722342d9.json` | `25ecacbfce72fead…` | `7ab063f6817728da…` | `44b6c92b8853011c…` |
-| ArgenCool CRM (run B) | `fingerprints/20260110_argencool_crm_722342d9.json` | `25ecacbfce72fead…` | `7ab063f6817728da…` | `44b6c92b8853011c…` |
-| MediCloud | `fingerprints/20260110_healthcare_professional_advanc_956a1da0.json` | `d6c0b58bdbb7e966…` | `78e98509a105e5e7…` | `4203fa99f3cf1871…` |
+The `fingerprints/` directory contains multiple independent compilation fingerprints from the HIP Healthcare Platform. The determinism check is the fact that compilations from the same specification produce byte-identical hashes across independent runs.
 
-The determinism check is the fact that the ArgenCool CRM runs are byte-identical (same hashes across independent runs).
+See [EVIDENCE_EN.md](EVIDENCE_EN.md) for complete platform-scale evidence.
 
 ---
 
@@ -68,8 +66,8 @@ The determinism check is the fact that the ArgenCool CRM runs are byte-identical
 
 ```bash
 python verify_fingerprint.py \
-  -f fingerprints/20260110_crm_spec_complete_722342d9.json \
-  --compare fingerprints/20260110_argencool_crm_722342d9.json
+  -f fingerprints/20260226_modular_hip_test_20260221_103259_0fe80102.json \
+  --compare fingerprints/20260227_modular_hip_test_20260221_103259_0fe80102.json
 ```
 
 **Expected result**: all compared hashes are `IDENTICAL`.

@@ -7,9 +7,9 @@ authors:
     given-names: "Ariel Eduardo"
     orcid: ""
 version: "1.0.0"
-date-released: "2026-01-05"
+date-released: "2026-02-26"
 url: "https://devmatrix.dev/"
-repository-code: "https://devmatrix.dev/"
+repository-code: "https://github.com/devmatrix-ai/devmatrix-public"
 license: "CC-BY-4.0"
 keywords:
   - specification-to-system compiler
@@ -27,8 +27,8 @@ abstract: >-
   NOTE: This repository contains documentation and verification tools only.
   The DevMatrix compiler itself is proprietary and not included.
 
-  Evidence is provided from compilations of three real-world specifications:
-  FLOWDESK (workflow management), Ghysels CRM, and MediCloud (healthcare).
+  Evidence is provided from the HIP Healthcare Platform, a 12-module
+  platform-scale compilation with 2,391 tests and 594 quality gates.
 
 preferred-citation:
   type: article

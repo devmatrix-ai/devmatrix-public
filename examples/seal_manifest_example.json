@@ -1,8 +1,7 @@
 {
   "schema_version": "1.0.0",
-  "seal_timestamp": "2026-02-09T00:40:39.208155",
+  "seal_timestamp": "2026-02-26T14:26:45.191310",
   "manifest_name": "HIP",
-  "output_path": "generated/HIP_ADR87_20260204_135124",
   "release_mode": false,
   "g_seal": {
     "passed": true,
@@ -22,13 +21,11 @@
       },
       "version_consistency": {
         "passed": true,
-        "pipeline_version": "2786acffc",
+        "pipeline_version": "60bc51c51",
         "inconsistent": []
       },
       "git_state": {
         "passed": true,
-        "commit_sha": "2786acffcb1b42fa4371664a81efcfe5521153b8",
-        "branch": "fix/hip_admin_deterministic",
         "dirty": true,
         "errors": [],
         "warnings": [
@@ -40,12 +37,12 @@
     "warnings": []
   },
   "provenance_summary": {
-    "build_id": "532effc61fabcad3",
-    "aggregate_ir_hash": "3a9925b169b54079e97caf23ab8d0d095ab4d942f31176f389c3708dbdcfede3",
-    "aggregate_output_hash": "bf22f63e7f794355f4b035d9b48e0fc9bd4777454b831ed288fdb5bd616a7910",
-    "deterministic_seed": "67dcbe6c565b7da7c68666e8f32406eeba3ac515c3c1f4a9f79d6cff4496c8f9",
+    "build_id": "modular-20260226_142414-2f3639c8",
+    "aggregate_ir_hash": "3ee8b2589f7cf2446c89c98e05311f1e1980ee342236a69f8a3ff81c6381ef6f",
+    "aggregate_output_hash": "8b99cc65c84f34d012d02cb878fde8ad023586fe30d1b8fcaf278c542158f273",
+    "deterministic_seed": "c441af276334fc00a5d582240b49ea113cb95383c813415432732326216e3032",
     "total_modules": 12,
-    "pipeline_version": "2786acffc"
+    "pipeline_version": "60bc51c51"
   },
   "artifacts_written": [
     "evidence_pack/build_provenance.json",

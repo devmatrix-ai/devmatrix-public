@@ -146,7 +146,6 @@ Included:
 | [SEALING.md](SEALING.md) | Platform provenance sealing protocol |
 | [GOLDEN_PACK_INDEX.md](GOLDEN_PACK_INDEX.md) | Verification in 10 minutes |
 | [PLATFORM_VERIFICATION.md](PLATFORM_VERIFICATION.md) | Platform-scale verification model |
-| [DD_READINESS_CHECKLIST.md](DD_READINESS_CHECKLIST.md) | 8 binary PASS/FAIL DD checks |
 | [PAPER.md](PAPER.md) | Technical paper (Spanish) |
 | [EVIDENCE.md](EVIDENCE.md) | Reproducibility evidence (Spanish) |
 
@@ -154,26 +153,15 @@ Included:
 
 ## Evidence Summary
 
-### Single-Module Evidence (January 2026)
-
-Compilations from 3 real-world specifications:
-
-| Spec | Entities | API Routes | Tests | Pass Rate | Grade |
-|------|----------|------------|-------|-----------|-------|
-| FLOWDESK (Workflow) | 29 | 29 | 513 | 89.8% | A (96.9%) |
-| CRM (Ghysels CRM) | 22 | 22 | 328 | 82.7% | B (94.3%) |
-| Healthcare (MediCloud) | 17 | 17 | 284 | 95.4% | A (98.6%) |
-| **TOTAL** | **68** | **68** | **1,125** | **88.4%** | **A** |
-
-Full details: [EVIDENCE_EN.md](EVIDENCE_EN.md)
-
 ### Platform-Scale Evidence (February 2026)
 
 | Platform | Modules | Tests | Pass Rate | Grade | Gates | Seal |
 |----------|---------|-------|-----------|-------|-------|------|
-| HIP (Healthcare) | 12 | 2,239 | 96.9% | A (96.7%) | 408/408 | G_SEAL PASS |
+| HIP (Healthcare) | 12 | 2,391 | 100.0% | A+ (100.0%) | 594/594 | G_SEAL PASS |
 
-12/12 modules Grade A. 0 gate failures. Per-module breakdown in [EVIDENCE_EN.md](EVIDENCE_EN.md).
+12/12 modules Grade A. 0 gate failures. 0 test failures. Per-module breakdown in [EVIDENCE_EN.md](EVIDENCE_EN.md).
+
+HIP is a real-world healthcare platform currently being deployed to production in Argentina for multiple clinical laboratory companies.
 
 Full details: [EVIDENCE_EN.md](EVIDENCE_EN.md) | [GOLDEN_PACK_INDEX.md](GOLDEN_PACK_INDEX.md)
 
@@ -185,12 +173,9 @@ validated without access to proprietary implementation.
 
 | Build ID | Date (UTC) | Scope | Tests (Pass/Fail/Blocked) | IR Nodes | IR Edges | Cross-Svc | HTTP Deps | Seal |
 |----------|------------|-------|---------------------------|----------|----------|-----------|-----------|------|
-| FLOWDESK | 2026-01-05 | Single-module (1) | 513 (458/55/0) | — | — | — | — | — |
-| CRM | 2026-01-05 | Single-module (1) | 328 (268/60/0) | — | — | — | — | — |
-| Healthcare | 2026-01-05 | Single-module (1) | 284 (269/15/0) | — | — | — | — | — |
-| HIP_ADR87 | 2026-02-09 | Platform (12 modules) | 2,239 (2,057/65/10) | ~4,924 | ~6,068 | 91 | 19 | G_SEAL PASS |
+| HIP | 2026-02-26 | Platform (12 modules) | 2,391 (2,248/0/12) | ~6,390 | ~7,622 | 91 | 19 | G_SEAL PASS |
 
-**Column definitions**: IR Nodes/Edges = structural graph size of the compiled IR. Cross-Svc = cross-service FK dependencies resolved at compile time. HTTP Deps = inter-service HTTP dependencies. Single-module builds (January) predate the platform IR graph and seal system.
+**Column definitions**: IR Nodes/Edges = structural graph size of the compiled IR. Cross-Svc = cross-service FK dependencies resolved at compile time. HTTP Deps = inter-service HTTP dependencies.
 
 Full details: [EVIDENCE_EN.md](EVIDENCE_EN.md) | [PLATFORM_VERIFICATION.md](PLATFORM_VERIFICATION.md)
 
@@ -199,10 +184,10 @@ Full details: [EVIDENCE_EN.md](EVIDENCE_EN.md) | [PLATFORM_VERIFICATION.md](PLAT
 ## Verify It Yourself
 
 ```bash
-# Quick verification
+# Quick verification — compare two independent compilations
 python verify_fingerprint.py \
-  -f fingerprints/20260110_crm_spec_complete_722342d9.json \
-  --compare fingerprints/20260110_argencool_crm_722342d9.json
+  -f fingerprints/20260226_modular_hip_test_20260221_103259_0fe80102.json \
+  --compare fingerprints/20260227_modular_hip_test_20260221_103259_0fe80102.json
 ```
 
 If DevMatrix is non-deterministic, one of these must occur:
@@ -240,17 +225,19 @@ See [HOW_TO_VERIFY.md](HOW_TO_VERIFY.md) for detailed instructions.
 ├── SEALING.md                         # Platform sealing protocol
 ├── GOLDEN_PACK_INDEX.md               # Quick verification table
 ├── PLATFORM_VERIFICATION.md           # Platform-scale verification model
-├── DD_READINESS_CHECKLIST.md          # DD readiness checks
 ├── verify_fingerprint.py              # Verification script (reference implementation)
 ├── LICENSE                            # CC-BY 4.0 (docs) + MIT (script)
 ├── CITATION.cff                       # Citation metadata
 ├── examples/
-│   ├── build_fingerprint_example.json # Single-module fingerprint
+│   ├── build_fingerprint_example.json   # Single-module fingerprint
 │   ├── platform_provenance_sealed.json  # 12-module platform example
 │   └── seal_manifest_example.json       # G_SEAL validation example
 └── fingerprints/
-    ├── 20260110_crm_spec_complete_722342d9.json
-    └── 20260110_argencool_crm_722342d9.json
+    ├── 20260221_modular_hip_test_..._a57210ff.json
+    ├── 20260226_modular_hip_test_..._0d1cc2ed.json
+    ├── 20260226_modular_hip_test_..._5ac138f8.json
+    ├── 20260226_modular_hip_test_..._0fe80102.json
+    └── 20260227_modular_hip_test_..._0fe80102.json
 ```
 
 ---
@@ -261,13 +248,13 @@ This repository contains evidence, not implementation. Proprietary components �
 IR schemas (~390 types), compilation passes (42), emitter source, gate logic, and
 LLM prompt architecture — are excluded by design.
 
-See [DD_READINESS_CHECKLIST.md](DD_READINESS_CHECKLIST.md) for the complete list.
+Details available under NDA.
 
 ---
 
 ## Public Evidence vs NDA-Only Artifacts
 
-This repository intentionally contains only verification artifacts and documentation required for pre-NDA technical due diligence.
+This repository intentionally contains only verification artifacts and documentation required for independent technical evaluation.
 
 ### Included (Public)
 - Sealed platform provenance examples
@@ -366,7 +353,7 @@ DevMatrix exists to eliminate that class of failure.
 
 *Evidence = cryptographic fingerprints + reproducible build hashing, not screenshots.*
 
-*Last updated: February 9, 2026*
+*Last updated: February 26, 2026*
 
 ---
 
