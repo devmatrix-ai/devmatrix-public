@@ -1,0 +1,356 @@
+{
+  "evidence_version": "1.0.0",
+  "fingerprint": {
+    "build_identity": {
+      "build_id": "modular-20260226_142414-2f3639c8",
+      "build_seq": 29,
+      "fingerprint": "60943b3fbbcc586a",
+      "learning_enabled": true,
+      "parent_build_seq": 28,
+      "platform_id": "23b36fde9ce5",
+      "platform_id_source": "repo_origin_hash",
+      "resolution_method": "neo4j_counter",
+      "resolved_at": "2026-02-26T17:26:31.893998+00:00"
+    },
+    "build_identity_fingerprint": "60943b3fbbcc586a",
+    "convergence": {
+      "builds_analyzed": 1,
+      "convergence_score": 0.0,
+      "convergence_trend": null,
+      "defect_rate": null,
+      "gates_skipped_count": 0,
+      "insufficient_builds": true,
+      "issue_density": null,
+      "regression_detected": false,
+      "total_gates_executed": 0,
+      "trend_confidence": null
+    },
+    "created_at": "2026-02-26T17:26:34.130735",
+    "fingerprint": "0fe801020d46e15fea036da0dbaf20b81ac6358af4e28614adf049ba51834fe5",
+    "gate_results_hash": "c6b91ece53b95c83f93650722db439e2cc7c4ca7d384bbb554ed59b918268d5c",
+    "git": {
+      "commit_date": "2026-02-26T14:21:06-03:00",
+      "commit_sha": "8d0b4b5c483b0138998cf6f644f75998d6145c27",
+      "dirty": true
+    },
+    "ir_hashes": {
+      "semantic_hash": "feffbdc9b4c8bba3b8ee197486c5abcded94ec10f335c1e5d5c6d585171751a4",
+      "spec_hash": "22ab4591608c37f188dbb0825481b26c09ea88aadeab83ce4848c515ced778cb",
+      "structural_hash": "fb0eb96841b302cb5cd944556b1fc1df86057296d8203c372b4e00da9f018ab4"
+    },
+    "merkle_root": "a87e6a4113d7ae8ba8678c7619b3eb8e318d68b9a81b0b8452c143c66663a7d0",
+    "pass_run_ledger": {
+      "blocked": 0,
+      "digest_hash": "8c2c6b31de9a6888b8c971a21502d72e0883f630d63dcaabd66929fe200a666a",
+      "executed": 59,
+      "execution_phases": {
+        "registry": {
+          "executed": 19,
+          "skipped_dedup": 0
+        },
+        "target": {
+          "executed": 40
+        }
+      },
+      "failed": 0,
+      "skipped": 0,
+      "skipped_dedup": 0,
+      "total": 59
+    },
+    "pipeline_version": "8d0b4b5c4-dirty",
+    "product_imports": {
+      "collision_count": 0,
+      "imported_count": 46,
+      "records": [
+        {
+          "product_key": "ir.domain_model",
+          "source_phase": "target_passes",
+          "source_producer": "PARSER",
+          "was_collision": false
+        },
+        {
+          "product_key": "ir.api_model",
+          "source_phase": "target_passes",
+          "source_producer": "PARSER",
+          "was_collision": false
+        },
+        {
+          "product_key": "ir.behavior_model",
+          "source_phase": "target_passes",
+          "source_producer": "PARSER",
+          "was_collision": false
+        },
+        {
+          "product_key": "ir.validation_model",
+          "source_phase": "target_passes",
+          "source_producer": "PARSER",
+          "was_collision": false
+        },
+        {
+          "product_key": "ir.security_model",
+          "source_phase": "target_passes",
+          "source_producer": "PARSER",
+          "was_collision": false
+        },
+        {
+          "product_key": "stub_scan_configs",
+          "source_phase": "target_passes",
+          "source_producer": "UNKNOWN",
+          "was_collision": false
+        },
+        {
+          "product_key": "service_registry",
+          "source_phase": "target_passes",
+          "source_producer": "UNKNOWN",
+          "was_collision": false
+        },
+        {
+          "product_key": "action_semantics",
+          "source_phase": "target_passes",
+          "source_producer": "UNKNOWN",
+          "was_collision": false
+        },
+        {
+          "product_key": "input_field_mappings",
+          "source_phase": "target_passes",
+          "source_producer": "UNKNOWN",
+          "was_collision": false
+        },
+        {
+          "product_key": "status_field_effects",
+          "source_phase": "target_passes",
+          "source_producer": "UNKNOWN",
+          "was_collision": false
+        },
+        {
+          "product_key": "operation_plans",
+          "source_phase": "target_passes",
+          "source_producer": "UNKNOWN",
+          "was_collision": false
+        },
+        {
+          "product_key": "semantic_aliases",
+          "source_phase": "target_passes",
+          "source_producer": "UNKNOWN",
+          "was_collision": false
+        },
+        {
+          "product_key": "security_config_validated",
+          "source_phase": "target_passes",
+          "source_producer": "UNKNOWN",
+          "was_collision": false
+        },
+        {
+          "product_key": "route_service_validated",
+          "source_phase": "target_passes",
+          "source_producer": "UNKNOWN",
+          "was_collision": false
+        },
+        {
+          "product_key": "route_flow_mapping",
+          "source_phase": "target_passes",
+          "source_producer": "UNKNOWN",
+          "was_collision": false
+        },
+        {
+          "product_key": "access_policies",
+          "source_phase": "target_passes",
+          "source_producer": "UNKNOWN",
+          "was_collision": false
+        },
+        {
+          "product_key": "intent_model",
+          "source_phase": "target_passes",
+          "source_producer": "UNKNOWN",
+          "was_collision": false
+        },
+        {
+          "product_key": "requirements_metadata",
+          "source_phase": "target_passes",
+          "source_producer": "UNKNOWN",
+          "was_collision": false
+        },
+        {
+          "product_key": "architecture_metadata",
+          "source_phase": "target_passes",
+          "source_producer": "UNKNOWN",
+          "was_collision": false
+        },
+        {
+          "product_key": "validation_metadata",
+          "source_phase": "target_passes",
+          "source_producer": "UNKNOWN",
+          "was_collision": false
+        },
+        {
+          "product_key": "seed_plan",
+          "source_phase": "target_passes",
+          "source_producer": "UNKNOWN",
+          "was_collision": false
+        },
+        {
+          "product_key": "workflows",
+          "source_phase": "target_passes",
+          "source_producer": "UNKNOWN",
+          "was_collision": false
+        },
+        {
+          "product_key": "entity_endpoint_map",
+          "source_phase": "target_passes",
+          "source_producer": "UNKNOWN",
+          "was_collision": false
+        },
+        {
+          "product_key": "frontend_pages",
+          "source_phase": "target_passes",
+          "source_producer": "UNKNOWN",
+          "was_collision": false
+        },
+        {
+          "product_key": "frontend_forms",
+          "source_phase": "target_passes",
+          "source_producer": "UNKNOWN",
+          "was_collision": false
+        },
+        {
+          "product_key": "form_mutations",
+          "source_phase": "target_passes",
+          "source_producer": "UNKNOWN",
+          "was_collision": false
+        },
+        {
+          "product_key": "form_mutation_map",
+          "source_phase": "target_passes",
+          "source_producer": "UNKNOWN",
+          "was_collision": false
+        },
+        {
+          "product_key": "form_mutation_evidence",
+          "source_phase": "target_passes",
+          "source_producer": "UNKNOWN",
+          "was_collision": false
+        },
+        {
+          "product_key": "data_sources",
+          "source_phase": "target_passes",
+          "source_producer": "UNKNOWN",
+          "was_collision": false
+        },
+        {
+          "product_key": "page_datasource_map",
+          "source_phase": "target_passes",
+          "source_producer": "UNKNOWN",
+          "was_collision": false
+        },
+        {
+          "product_key": "data_source_evidence",
+          "source_phase": "target_passes",
+          "source_producer": "UNKNOWN",
+          "was_collision": false
+        },
+        {
+          "product_key": "frontend_permissions",
+          "source_phase": "target_passes",
+          "source_producer": "UNKNOWN",
+          "was_collision": false
+        },
+        {
+          "product_key": "navigation_flows",
+          "source_phase": "target_passes",
+          "source_producer": "UNKNOWN",
+          "was_collision": false
+        },
+        {
+          "product_key": "ux_policies",
+          "source_phase": "target_passes",
+          "source_producer": "UNKNOWN",
+          "was_collision": false
+        },
+        {
+          "product_key": "layout_assignments",
+          "source_phase": "target_passes",
+          "source_producer": "UNKNOWN",
+          "was_collision": false
+        },
+        {
+          "product_key": "frontend_binding_validation",
+          "source_phase": "target_passes",
+          "source_producer": "UNKNOWN",
+          "was_collision": false
+        },
+        {
+          "product_key": "frontend_emitter_contract",
+          "source_phase": "target_passes",
+          "source_producer": "UNKNOWN",
+          "was_collision": false
+        },
+        {
+          "product_key": "policy_validation",
+          "source_phase": "target_passes",
+          "source_producer": "UNKNOWN",
+          "was_collision": false
+        },
+        {
+          "product_key": "system_endpoints",
+          "source_phase": "target_passes",
+          "source_producer": "UNKNOWN",
+          "was_collision": false
+        },
+        {
+          "product_key": "stub_reports",
+          "source_phase": "target_passes",
+          "source_producer": "UNKNOWN",
+          "was_collision": false
+        },
+        {
+          "product_key": "state_machines",
+          "source_phase": "target_passes",
+          "source_producer": "UNKNOWN",
+          "was_collision": false
+        },
+        {
+          "product_key": "sm_diagrams",
+          "source_phase": "target_passes",
+          "source_producer": "UNKNOWN",
+          "was_collision": false
+        },
+        {
+          "product_key": "trigger_synthesis_complete",
+          "source_phase": "target_passes",
+          "source_producer": "UNKNOWN",
+          "was_collision": false
+        },
+        {
+          "product_key": "security_contexts",
+          "source_phase": "target_passes",
+          "source_producer": "UNKNOWN",
+          "was_collision": false
+        },
+        {
+          "product_key": "operation_classifications",
+          "source_phase": "target_passes",
+          "source_producer": "UNKNOWN",
+          "was_collision": false
+        },
+        {
+          "product_key": "source_map",
+          "source_phase": "target_passes",
+          "source_producer": "UNKNOWN",
+          "was_collision": false
+        }
+      ]
+    },
+    "run_id": "modular-20260226_142414-2f3639c8",
+    "schema_version": "1.0.0",
+    "source_map_hash": "071353dba40c842a2e859d8ea4bfb56c0ff96add8d81b593972414287faaf85e"
+  },
+  "published_at": "2026-02-27T00:41:11.921570+00:00",
+  "signature": {
+    "algorithm": "Ed25519",
+    "key_id": "dm-dev-2026-02",
+    "public_key": "RebX75Rg9WWZUBKmiZm5auoJi+RxirNV7AcLDBrLjqE=",
+    "signature": "+KSB3qhE87KleTApx8v2u2qsBKx5+EQXoEFWBaKJzT7bgSGOSAFf9MOnNxq4oyYHak3kNm+nWWWSsx/z7xlaCQ==",
+    "signed_at": "2026-02-27T00:41:11.921550+00:00",
+    "signed_payload_hash": "sha256:d40b3dcb96960605dd37ef3bf9a3fcc7865a456fc563dfb9b2b08423d9d6e5aa"
+  }
+}
