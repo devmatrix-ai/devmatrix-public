@@ -1,0 +1,143 @@
+{
+  "evidence_version": "1.0.0",
+  "fingerprint": {
+    "build_id": "HIP_20260307_112813_534bb09f",
+    "build_identity": {
+      "build_id": "HIP_20260307_112813_534bb09f",
+      "build_seq": 497,
+      "fingerprint": "8c47271dc4d93873",
+      "learning_enabled": true,
+      "parent_build_seq": 496,
+      "platform_id": "23b36fde9ce5",
+      "platform_id_source": "repo_origin_hash",
+      "resolution_method": "neo4j_counter",
+      "resolved_at": "2026-03-07T14:33:58.436873+00:00"
+    },
+    "build_identity_fingerprint": "8c47271dc4d93873",
+    "convergence": {
+      "build_delta_summary": {
+        "anti_pattern_source": "neo4j",
+        "anti_patterns_current": 0,
+        "anti_patterns_previous": 0,
+        "circular_deps_current": 0,
+        "circular_deps_previous": 0,
+        "defect_rate_change": 0.0,
+        "gates_fixed_since_last_build": 0,
+        "hub_entities_current": 0,
+        "hub_entities_previous": 0,
+        "issue_density_change": 0.0,
+        "neo4j_error_code": null,
+        "neo4j_error_detail_hash": null,
+        "new_anti_patterns": 0,
+        "overall_trend": "stable",
+        "patterns_degraded": 0,
+        "patterns_improved": 0,
+        "resolved_anti_patterns": 0
+      },
+      "builds_analyzed": 20,
+      "convergence_score": 0.691667,
+      "convergence_score_components": {
+        "defect_rate_score": 1.0,
+        "defect_rate_weight": 0.35,
+        "grade_curve_score": 0.5,
+        "grade_curve_weight": 0.2,
+        "learning_reuse_score": 0.16666666666666666,
+        "learning_reuse_weight": 0.1,
+        "pattern_effectiveness_score": 0.5,
+        "pattern_effectiveness_weight": 0.25,
+        "regression_penalty_score": 1.0,
+        "regression_penalty_weight": 0.1
+      },
+      "convergence_trend": "stable",
+      "defect_rate": 0.0,
+      "gates_skipped_count": 0,
+      "insufficient_builds": false,
+      "issue_density": 0.0,
+      "regression_detected": false,
+      "total_gates_executed": 5,
+      "trend_confidence": 1.0
+    },
+    "created_at": "2026-03-07T14:34:07.657345",
+    "deterministic": true,
+    "evidence_completeness": {
+      "consolidated_artifacts_count": 40,
+      "emission_decisions_count": 155,
+      "emission_decisions_hash": "131edf57517c8098499f23a66fd4255cc788e1ceef4e0fc987c726ff36f00c1d",
+      "source_map_ir_owned_coverage_pct": 0.0,
+      "source_map_schema_version": "2.0.0",
+      "test_evidence_aggregate_grade": "A+",
+      "test_evidence_modules_complete": true,
+      "test_evidence_modules_expected": 12,
+      "test_evidence_modules_found": 12
+    },
+    "fingerprint": "aa4f830aa50e948203c298ad86b80c8717f781b3039e3fba857dfc1661d80f64",
+    "gate_results_hash": "cd05ff0450ec8dd45b40690c0e41928da635c3748d470f31e3693fe490bc956c",
+    "git": {
+      "commit_date": "2026-03-06T23:32:22-03:00",
+      "commit_sha": "f9cca36374f0a40476691643044c6d5a96e24df7",
+      "dirty": true
+    },
+    "ir_hashes": {
+      "post_normalization_spec_hash": "b0eb06ed8128c0ba4cec984b5eb5654b1dcd6a195b931ff11eb4d73554bc4342",
+      "semantic_hash": "e69cdefc5e621a4d1e2fa9d7852fae7dc15dba3c20b9a59aeb512fd4b737d294",
+      "spec_hash": "0faf4bc64119ddc6942dea4457b60e37cd3ddca6af1519ce85d2070df9b137ba",
+      "structural_hash": "d71be0c3c927a7503d57eb40afb3f5685fa58c8e0a98cd649ce73ffe763142e1"
+    },
+    "ir_optimization": {
+      "duration_ms": 85.15,
+      "post_hash": "4dca36ac768aa6b7",
+      "pre_hash": "ffd4edb520182a20",
+      "rules_applied": [
+        "R-003",
+        "R-004",
+        "R-006"
+      ],
+      "safety_cap_hit": true,
+      "tier_1_count": 3,
+      "tier_2_count": 0,
+      "total_changes": 27
+    },
+    "ir_quality": {
+      "complexity_class": "enterprise",
+      "dimensions": {
+        "endpoint_coverage": 1.0,
+        "entity_completeness": 1.0,
+        "invariant_compliance": 1.0,
+        "naming_convention": 0.793017,
+        "relationship_consistency": 1.0,
+        "sm_validity": 0.8,
+        "structural_complexity": 0.75
+      },
+      "endpoint_count": 140,
+      "entity_count": 20,
+      "ir_fingerprint_hash": "c1a829a965d2555a35199c83b943194de263b1a85c8e1087d74c363922dcbc95",
+      "ir_quality_score": 0.9243017,
+      "relationship_count": 49
+    },
+    "merkle_root": "41561d2e4dbbd91b2ba1401d640874062caa7fb1bfddcb13bb7d4734c979650f",
+    "pass_run_ledger": {
+      "blocked": 0,
+      "digest_hash": "0bebbac6432dffaaba32604e406b6371d8e409cc697ce5c7ffe17a5a5769fc72",
+      "executed": 122,
+      "failed": 0,
+      "skipped": 0,
+      "skipped_dedup": 0,
+      "total": 122
+    },
+    "pass_version": "1.1.0",
+    "pipeline_version": "f9cca3637-dirty",
+    "run_id": "HIP_20260307_112813_534bb09f",
+    "schema_version": "1.0.0",
+    "source_map_hash": "b809dc0609fafd206d17a8fab0bef55e32f3cd89dccd4d830673f574c9b85013",
+    "total_llm_calls": 0
+  },
+  "published_at": "2026-03-07T14:35:11.684842+00:00",
+  "signature": {
+    "algorithm": "Ed25519",
+    "key_id": "dm-dev-2026-02",
+    "public_key": "RebX75Rg9WWZUBKmiZm5auoJi+RxirNV7AcLDBrLjqE=",
+    "signature": "fIUuBcsFbb1njhRsa9jtTCiZEegyvvPgLsuz/bc7G8lCOryWjpc0n9R1L/YsgH0PSk+bsJj8f3v+7mU0B/j/DQ==",
+    "signed_at": "2026-03-07T14:35:11.684802+00:00",
+    "signed_payload_hash": "sha256:5418bdb6ce087df2140d305218b0f4b6027dc6c5fd3a6bb230bbd22969b6e2da"
+  }
+}
