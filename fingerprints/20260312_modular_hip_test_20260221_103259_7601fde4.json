@@ -1,0 +1,176 @@
+{
+  "evidence_version": "1.0.0",
+  "fingerprint": {
+    "baseline_comparison": {
+      "current_verified": true,
+      "gate_results_match": true,
+      "has_baseline": true,
+      "manifest_match": true,
+      "previous_seed": "d55599cc95a3d68e...",
+      "previous_verified": true,
+      "regression_detected": false,
+      "seed_match": false,
+      "spec_match": true
+    },
+    "build_id": "HIP_20260312_120941_a7c859b3",
+    "build_identity": {
+      "build_id": "HIP_20260312_120941_a7c859b3",
+      "build_seq": 845,
+      "fingerprint": "646c05afa3fded20",
+      "learning_enabled": true,
+      "parent_build_seq": 844,
+      "platform_id": "23b36fde9ce5",
+      "platform_id_source": "repo_origin_hash",
+      "resolution_method": "neo4j_counter",
+      "resolved_at": "2026-03-12T15:37:31.709042+00:00"
+    },
+    "build_identity_fingerprint": "646c05afa3fded20",
+    "convergence": {
+      "build_delta_summary": {
+        "anti_pattern_source": "neo4j",
+        "anti_patterns_current": 0,
+        "anti_patterns_previous": 0,
+        "circular_deps_current": 0,
+        "circular_deps_previous": 0,
+        "defect_rate_change": 0.0,
+        "gates_fixed_since_last_build": 0,
+        "hub_entities_current": 0,
+        "hub_entities_previous": 0,
+        "issue_density_change": 0.0,
+        "neo4j_error_code": null,
+        "neo4j_error_detail_hash": null,
+        "new_anti_patterns": 0,
+        "overall_trend": "stable",
+        "patterns_degraded": 0,
+        "patterns_improved": 0,
+        "resolved_anti_patterns": 0
+      },
+      "builds_analyzed": 20,
+      "convergence_score": 0.792063,
+      "convergence_score_components": {
+        "defect_rate_score": 1.0,
+        "defect_rate_weight": 0.35,
+        "grade_curve_score": 1.0,
+        "grade_curve_weight": 0.2,
+        "learning_reuse_score": 0.17063492063492064,
+        "learning_reuse_weight": 0.1,
+        "pattern_effectiveness_score": 0.5,
+        "pattern_effectiveness_weight": 0.25,
+        "regression_penalty_score": 1.0,
+        "regression_penalty_weight": 0.1
+      },
+      "convergence_trend": "improving",
+      "defect_rate": 0.0,
+      "gates_skipped_count": 0,
+      "insufficient_builds": false,
+      "issue_density": 0.0,
+      "regression_detected": false,
+      "total_gates_executed": 5,
+      "trend_confidence": 1.0
+    },
+    "created_at": "2026-03-12T15:37:41.367795",
+    "determinism": {
+      "deterministic_build_id": "HIP_TEST_e05864d3889b8149",
+      "deterministic_seed": "06e50ce654b44f8f08372ee5e51dda2996df0df797c81bc48d5d87fd7d668823",
+      "file_manifest_hash": "0d5885e47a3fc7a7aa16e0d7356d70e52d818afc4e13755ad380af0110c515de",
+      "file_manifest_stable": true,
+      "hash_reproducible": true,
+      "llm_free": true,
+      "spec_hash": "e05864d3889b8149c70186bf4127c986f375a66678bdc6ca70b9288287df539d",
+      "spec_hash_present": true,
+      "verified": true
+    },
+    "deterministic": true,
+    "deterministic_build_id": "HIP_TEST_e05864d3889b8149",
+    "evidence_completeness": {
+      "consolidated_artifacts_count": 60,
+      "emission_decisions_count": 879,
+      "emission_decisions_hash": "d9214bfe31c65fb335fff00c1221efabe9e6820064c7698f124ec21400e26f76",
+      "source_map_ir_owned_coverage_pct": 100.0,
+      "source_map_schema_version": "2.0.0",
+      "test_evidence_aggregate_grade": "A+",
+      "test_evidence_modules_complete": true,
+      "test_evidence_modules_expected": 12,
+      "test_evidence_modules_found": 12
+    },
+    "fingerprint": "7601fde4320548e6e24b61f07f8d4d0c9bc3a93b580f3a4dccd0e89b710aeeb3",
+    "gate_results_hash": "61f1f816a47db41375e455ccf5a1c83feb406da7f4fd4f87a5173f4d7958e629",
+    "git": {
+      "commit_date": "2026-03-12T10:08:03-03:00",
+      "commit_sha": "5cc8995ccfc1df5ae4818ff20c6eae7d3ee9b245",
+      "dirty": true
+    },
+    "ir_hashes": {
+      "learning_context_breakdown": {
+        "fields_present": []
+      },
+      "post_normalization_spec_hash": "e4ea7fa7bfb4858a241fedc476f3a66067d24c70e5e4327a79420192d99e4f1b",
+      "spec_hash": "e05864d3889b8149c70186bf4127c986f375a66678bdc6ca70b9288287df539d",
+      "structural_hash": "213e1fa87605c6889ec5be267cb1a1f16b10770c1d038766208ddf2b5113e5ca"
+    },
+    "ir_optimization": {
+      "duration_ms": 665.63,
+      "post_hash": "870506f799f0708e",
+      "pre_hash": "7be139061cdd6cae",
+      "rules_applied": [
+        "R-002",
+        "R-003",
+        "R-004",
+        "R-006"
+      ],
+      "safety_cap_hit": false,
+      "tier_1_count": 4,
+      "tier_2_count": 0,
+      "total_changes": 92
+    },
+    "ir_quality": {
+      "complexity_class": "enterprise",
+      "dimensions": {
+        "endpoint_coverage": 1.0,
+        "entity_completeness": 1.0,
+        "invariant_compliance": 1.0,
+        "naming_convention": 0.997484,
+        "relationship_consistency": 1.0,
+        "sm_validity": 1.0,
+        "structural_complexity": 0.95
+      },
+      "endpoint_count": 588,
+      "entity_count": 68,
+      "ir_fingerprint_hash": "d4c7226cc6891807c1ab253cf2ac7f4f6dce6f4f8c3b92a3da8356b50556dc92",
+      "ir_quality_score": 0.9947484000000001,
+      "relationship_count": 145
+    },
+    "merkle_root": "fa77a16f1b028ab1c95b3aa1843d588e2955f7470c0a688ed5861088bbd0912d",
+    "metadata": {
+      "created_at": "2026-03-12T15:37:41.367795",
+      "pass_version": "1.3.0",
+      "pipeline_version": "5cc8995cc-dirty",
+      "python_version": "3.11.4",
+      "schema_version": "3.0.0"
+    },
+    "pass_run_ledger": {
+      "blocked": 0,
+      "digest_hash": "a1dd88dfa22567798142e9637da8578a7c448018ba8a4afce34eb2d531ab8b30",
+      "executed": 752,
+      "failed": 0,
+      "skipped": 0,
+      "skipped_dedup": 0,
+      "total": 752
+    },
+    "pass_version": "1.3.0",
+    "pipeline_version": "5cc8995cc-dirty",
+    "run_id": "HIP_20260312_120941_a7c859b3",
+    "schema_version": "3.0.0",
+    "source_map_hash": "e6fd030c933258cec963f3f60c9735919199dbed004e1dcae0f10cc2372108d9",
+    "total_llm_calls": 0
+  },
+  "published_at": "2026-03-12T15:44:43.168103+00:00",
+  "signature": {
+    "algorithm": "Ed25519",
+    "key_id": "dm-dev-2026-02",
+    "public_key": "RebX75Rg9WWZUBKmiZm5auoJi+RxirNV7AcLDBrLjqE=",
+    "signature": "4tt1b1lGff7kt7bepgQv86B6IfHn2PqmjfSd/j2FtDL2BN2l+0iftHALaOElh5dRuOyiDV9zDsE92PH8brw5DQ==",
+    "signed_at": "2026-03-12T15:44:43.168058+00:00",
+    "signed_payload_hash": "sha256:d33d774d13deb9c01d60a263ded0e7deee85ecab7ab380fd61ef991479e23ba3"
+  }
+}
