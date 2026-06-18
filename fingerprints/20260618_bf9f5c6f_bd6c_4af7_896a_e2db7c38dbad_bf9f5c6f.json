@@ -1,0 +1,28 @@
+{
+  "evidence_version": "1.0.0",
+  "fingerprint": {
+    "build_id": "8d74bd6af8c337e3",
+    "build_timestamp": "2026-06-18T14:43:44.097951",
+    "code_bundle_hash": "7f9997b4dc7b177f72f178c92419c235e63e93f5de67fa5150cea32f183705d8",
+    "deterministic": true,
+    "deterministic_seed": "5b33227b8b1d44d80adc2ce7a5175d39932977b2f91bc04faef8bf787018923c",
+    "ir_hash_note": "deterministic_compiler_no_semantic_variance",
+    "ir_semantic_hash": "3e9f4d67487bbaa9aa01039dd598857c225b6560db7e5bb11e379b2042477927",
+    "ir_structural_hash": "3e9f4d67487bbaa9aa01039dd598857c225b6560db7e5bb11e379b2042477927",
+    "llm_calls": 0,
+    "merkle_root": "2e4ded1736e4a0fe839bad99cef95da9dc0a30f151c821e76aec23c585ddda6d",
+    "module_id": "ultralab_identity",
+    "pipeline_version": "dev-unknown",
+    "provenance_hash_method": "module_level",
+    "spec_hash": "f62fa292e46174d1e149d07e2ef4b4c940eb3560a5f4731524c0d17852ea298b"
+  },
+  "published_at": "2026-06-18T14:45:37.617856+00:00",
+  "signature": {
+    "algorithm": "Ed25519",
+    "key_id": "dm-local-2026",
+    "public_key": "HO++hDdXX45rgLdndNzdBzr6rFfpKZKspv2JEZ4cVfQ=",
+    "signature": "18T+dx2Tbc9MeYaTtc6haq5NlHGNVSE/1F8cJiZiAoc7+yCh2QGE0IeVOLDA8XJQxueoYXnfUxOUZDJc+vn+Bw==",
+    "signed_at": "2026-06-18T14:45:37.617829+00:00",
+    "signed_payload_hash": "sha256:a907906d24acd6f8b7714ac0497a427325a666c7b1104957ab5bf2adc67275c7"
+  }
+}
