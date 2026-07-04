@@ -1,0 +1,20 @@
+{
+  "evidence_version": "1.0.0",
+  "fingerprint": {
+    "build_id": "b1",
+    "code_bundle_hash": "ch",
+    "merkle_root": "f8b2980e5820",
+    "model_config_hash": "6c101f76a02bcfd8aa26f93f6da27b849f77f96437a5d0a5b14f36e00fc29f9d",
+    "spec_hash": "sh",
+    "spec_name": "hip_identity"
+  },
+  "published_at": "2026-07-04T22:25:59.961073+00:00",
+  "signature": {
+    "algorithm": "Ed25519",
+    "key_id": "dm-prod-2026-01",
+    "public_key": "d3K5w4q643StbRn9RCNJJOcVbez9iptg/SxffqBua5s=",
+    "signature": "irhIXagQtgUiZuFEiptiV+SvlsJf1M3GhxXvucgPNpD1KryLU9QUqogauZZ10Pzd0U6xUugzYBoutIQ9n0lyCg==",
+    "signed_at": "2026-07-04T22:25:59.961067+00:00",
+    "signed_payload_hash": "sha256:d1bf208d18a5c8f802f38105eeab0b5c0c198a10de4e68a266e614d1eb62fcbb"
+  }
+}
