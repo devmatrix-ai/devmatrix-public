@@ -1,0 +1,47 @@
+{
+  "evidence_version": "1.0.0",
+  "fingerprint": {
+    "build_id": "08fb442c0869abdc",
+    "build_timestamp": "2026-10-06T12:56:59.778589",
+    "code_bundle_hash": "e94b30ea389c9658a8aa123020a2ab0018fc0038f0073b0efbdeff8536b3af7c",
+    "compile_attempt_id": "121211756f4540feb1fadf26f0692e21",
+    "compiler_run_id": "5fc1882a-0d3e-4bf0-b6a5-c5ba69820e5f",
+    "compiler_version": "dmx-2026.4.24",
+    "determinism": {
+      "deterministic": false
+    },
+    "deterministic_seed": "fcc3d0be55e27daad2d7b2aa5f9cf107b948732d860c3bf3ef76531f09d442ef",
+    "dmx_build_identity": {
+      "artifact_family": "build_fingerprint.json",
+      "compile_attempt_id": "121211756f4540feb1fadf26f0692e21",
+      "compiler_run_id": "5fc1882a-0d3e-4bf0-b6a5-c5ba69820e5f",
+      "platform_build_id": "PLAT_03bd67c497bc",
+      "schema": "dmx_build_identity/v1",
+      "scope": {
+        "module_id": "garage_works",
+        "type": "module"
+      }
+    },
+    "ir_semantic_hash": "424ca4d471f83e7316eb18a74b8029af2aac2ea0cb942155b9ef68e0090b818f",
+    "ir_structural_hash": "72e156788567d29c9555adbe45f9d88486339032c25b63e3552dc16e8b0f8ad5",
+    "llm_calls": 0,
+    "module_id": "garage_works",
+    "pipeline_version": "9cbacfb4e16bce8a92c886062744992c2ae6466b",
+    "platform_build_id": "PLAT_03bd67c497bc",
+    "provenance_attestable": true,
+    "provenance_complete": true,
+    "provenance_hash_method": "module_level",
+    "security_arc_hash": "c96b180f254ee0830f042abdfaa02e18ae8f1c6b810a90a43633f4d1193e13e2",
+    "service_name": "garage_works",
+    "spec_hash": "374326333b0f219532ccdbf2aa1225460d08038363967a98a7cab54794db0134"
+  },
+  "published_at": "2026-10-06T13:03:14.317259+00:00",
+  "signature": {
+    "algorithm": "Ed25519",
+    "key_id": "dm-prod-2026-01",
+    "public_key": "iKkDkgi17R08NKuIcoC2Oow3MEfHhvbyvP7h9GTx66Y=",
+    "signature": "j5GAIQKDts9xlnHlmjzkKR2WrEf3Lr1urceORxdNyDa/nuQytjFseDG20i8wAuBceLrsnh33SNdVTR8UIjcYAA==",
+    "signed_at": "2026-10-06T13:03:14.317248+00:00",
+    "signed_payload_hash": "sha256:bf46b0f08a70b1ff4d3c1ba7838579a14a9993372ff04c7d3a276aa5d03a5ed6"
+  }
+}
