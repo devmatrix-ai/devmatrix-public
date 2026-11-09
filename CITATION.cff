@@ -1,0 +1,45 @@
+cff-version: 1.2.0
+message: "If you cite this work, please cite it as below."
+title: "DevMatrix: A Specification-to-System Compiler - Technical Paper and Evidence"
+type: article
+authors:
+  - family-names: "Ghysels"
+    given-names: "Ariel Eduardo"
+    orcid: ""
+version: "1.0.0"
+date-released: "2026-02-26"
+url: "https://devmatrix.dev/"
+repository-code: "https://github.com/devmatrix-ai/devmatrix-public"
+license: "CC-BY-4.0"
+keywords:
+  - specification-to-system compiler
+  - deterministic code generation
+  - software engineering
+  - AI coding
+  - reproducible builds
+  - full-stack generation
+abstract: >-
+  This repository contains the technical paper and reproducibility evidence
+  for DevMatrix, a specification-to-system compiler. The paper documents
+  the problem, approach, guarantees, and empirical evidence. The verification
+  script (MIT licensed) enables independent hash verification.
+
+  NOTE: This repository contains documentation and verification tools only.
+  The DevMatrix compiler itself is proprietary and not included.
+
+  Evidence is provided from the HIP Healthcare Platform, a 12-module
+  platform-scale compilation with 2,391 tests.
+
+preferred-citation:
+  type: article
+  authors:
+    - family-names: "Ghysels"
+      given-names: "Ariel Eduardo"
+  title: "DevMatrix: A Specification-to-System Compiler"
+  year: 2026
+  month: 1
+  url: "https://devmatrix.dev/"
+  notes: >-
+    This citation refers to the public verification package (paper, evidence,
+    verification script). The DevMatrix compiler core is proprietary and
+    requires separate licensing arrangements for access.

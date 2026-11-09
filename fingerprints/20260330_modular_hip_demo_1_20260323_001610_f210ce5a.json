@@ -1,0 +1,54 @@
+{
+  "evidence_version": "1.0.0",
+  "fingerprint": {
+    "build_id": "HIP_DEMO_20260330_101457_257cf85f",
+    "build_identity": {
+      "build_id": "HIP_DEMO_20260330_101457_257cf85f",
+      "build_seq": 114,
+      "fingerprint": "c0fdb8ac35004734",
+      "learning_enabled": true,
+      "parent_build_seq": 113,
+      "platform_id": "hip_demo",
+      "platform_id_source": "manifest_name",
+      "resolution_method": "neo4j_counter",
+      "resolved_at": "2026-03-30T08:20:09.591219+00:00"
+    },
+    "build_identity_fingerprint": "c0fdb8ac35004734",
+    "created_at": "2026-03-30T08:20:12.244164",
+    "determinism": {
+      "deterministic": true
+    },
+    "deterministic": true,
+    "deterministic_build_id": "HIP_DEMO_1_56af4c250c27a355",
+    "fingerprint": "f210ce5a95f00dc3bafca034e0237c7db7d6e466861c36c5fdc67c37b8a11503",
+    "git": {
+      "commit_date": "2026-03-30T01:43:30+02:00",
+      "commit_sha": "4e674cf74891ea019e3bebbd913240e6fb2b3aa0",
+      "dirty": true
+    },
+    "logging_policy": {
+      "format_provider": "structlog",
+      "log_crud_success": true,
+      "propagate_actor_id": true,
+      "propagate_correlation_id": true,
+      "redact_sensitive_fields": true,
+      "sanitize_db_errors": true,
+      "sensitive_patterns_count": 0,
+      "structured": true
+    },
+    "merkle_root": "553b0bb5269adaf9eddfb22dc6636d01f34a158fff2fa6cb5dc25a40d38a779f",
+    "pipeline_version": "4e674cf74-dirty",
+    "run_id": "HIP_DEMO_20260330_101457_257cf85f",
+    "schema_version": "3.0.0",
+    "total_llm_calls": 0
+  },
+  "published_at": "2026-03-30T08:27:43.889870+00:00",
+  "signature": {
+    "algorithm": "Ed25519",
+    "key_id": "dm-prod-2026-01",
+    "public_key": "d3K5w4q643StbRn9RCNJJOcVbez9iptg/SxffqBua5s=",
+    "signature": "NsBJw0+511ycBLLictur7xLhahAcJU9O8c4vx5YM1/RKazUTamEKIfWPG/QKKGY+HnbUr5QT9yzQCttrLhwIAw==",
+    "signed_at": "2026-03-30T08:27:43.889864+00:00",
+    "signed_payload_hash": "sha256:30c8f030c2183274fd8079219635f6bb00565ac07d2da15a3bec93e7bdd2c049"
+  }
+}

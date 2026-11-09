@@ -1,0 +1,44 @@
+{
+  "evidence_version": "1.0.0",
+  "fingerprint": {
+    "build_id": "c47f544b9af769b9",
+    "build_timestamp": "2026-09-16T10:58:01.880002",
+    "code_bundle_hash": "2b7f364870f4b375b218de4089a21283bfeb2cd1a1d6d2f32f82b4840d5f4600",
+    "compile_attempt_id": "810454b162c148bfa21c56b076e6995f",
+    "compiler_run_id": "2db8e0ba-7642-44b7-8e66-d5aaacdba1cf",
+    "compiler_version": "dmx-2026.4.24",
+    "deterministic": true,
+    "deterministic_seed": "7f5c37bb1c141ecc928f1a27713b5996d9e319de0b2da0ce9bf63c30c596918b",
+    "dmx_build_identity": {
+      "artifact_family": "build_fingerprint.json",
+      "compile_attempt_id": "810454b162c148bfa21c56b076e6995f",
+      "compiler_run_id": "2db8e0ba-7642-44b7-8e66-d5aaacdba1cf",
+      "platform_build_id": "PLAT_7e13bf6e4b8e",
+      "schema": "dmx_build_identity/v1",
+      "scope": {
+        "module_id": "total_logistics",
+        "type": "module"
+      }
+    },
+    "ir_semantic_hash": "e756c087d166545e7724c61cb665dcb560a318c6aa0f1daad90d2819cf80642f",
+    "ir_structural_hash": "90693e75287c83309dfd5911fa46eeaa071cf1086b808b6c291b8b16c66e31e0",
+    "llm_calls": 0,
+    "module_id": "total_logistics",
+    "pipeline_version": "b5f91ebd61c2dd9195a0762852ec93f53ac49afb",
+    "platform_build_id": "PLAT_7e13bf6e4b8e",
+    "provenance_complete": true,
+    "provenance_hash_method": "module_level",
+    "security_arc_hash": "f93805cad69fafea4a45f9c54b785142bc84461d4b0a002ee89f593f95eb9946",
+    "service_name": "total_logistics",
+    "spec_hash": "ca2c0e4349f71d0653f6b2a9a8bd7f1294ed61509749d658e3c3d3912c1b2607"
+  },
+  "published_at": "2026-09-16T11:01:14.147686+00:00",
+  "signature": {
+    "algorithm": "Ed25519",
+    "key_id": "dm-prod-2026-01",
+    "public_key": "iKkDkgi17R08NKuIcoC2Oow3MEfHhvbyvP7h9GTx66Y=",
+    "signature": "JmmK4GNfao7d7yMFczG8U7UyNsam+bnHQC1L0QsICb9ArGdof7+dZjCM/wXYOYP/fehJDEc9nK4Jeo/2kh+mDw==",
+    "signed_at": "2026-09-16T11:01:14.147675+00:00",
+    "signed_payload_hash": "sha256:95b01249c82d53140199c685d566d105382352d00ddeeae33b40aaf7476671e7"
+  }
+}

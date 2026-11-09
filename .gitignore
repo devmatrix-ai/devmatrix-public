@@ -1,0 +1,22 @@
+# Internal / drafts
+temp/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.mypy_cache/
+.pytest_cache/
+*.egg-info/
+venv/
+.venv/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE / tooling
+.*/
+!.github/
+*.swp
+*.swo

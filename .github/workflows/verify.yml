@@ -1,0 +1,33 @@
+name: Verify evidence
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.12"
+      - name: Install the verifier's dependency
+        run: python -m pip install "cryptography==46.0.3"
+      - name: Run the tests
+        run: python -m unittest discover -s tests -v
+      - name: Verify every production evidence file
+        run: |
+          set -euo pipefail
+          count=0
+          while IFS= read -r -d '' file; do
+            python verify_fingerprint.py -f "$file"
+            count=$((count + 1))
+          done < <(find fingerprints -name '*.json' -print0 | sort -z)
+          echo "verified: $count"
+          test "$count" -gt 0
