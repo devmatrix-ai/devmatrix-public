@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "description": "Public Ed25519 keys that sign DevMatrix evidence. A signature is accepted only when its key_id and its inline public_key are one entry here and its signed_at falls inside that entry's window. Only class \"production\" keys sign DevMatrix attestations; development and local keys are listed so their evidence can be identified, never accepted as an attestation by default.",
+  "keys": [
+    {
+      "key_id": "dm-prod-2026-01",
+      "algorithm": "Ed25519",
+      "public_key": "d3K5w4q643StbRn9RCNJJOcVbez9iptg/SxffqBua5s=",
+      "class": "production",
+      "valid_from": "2026-02-21T15:12:37.090851+00:00",
+      "valid_until": "2026-07-04T22:25:59.961067+00:00",
+      "window": "first and last signature of this key in this repository; the key was replaced",
+      "anchor": "documented: published with the design of the DevMatrix evidence system"
+    },
+    {
+      "key_id": "dm-prod-2026-01",
+      "algorithm": "Ed25519",
+      "public_key": "iKkDkgi17R08NKuIcoC2Oow3MEfHhvbyvP7h9GTx66Y=",
+      "class": "production",
+      "valid_from": "2026-09-16T11:01:14.147675+00:00",
+      "valid_until": null,
+      "window": "from the first signature of this key in this repository; current key",
+      "anchor": "pending: not yet published by an independent channel"
+    },
+    {
+      "key_id": "dm-dev-2026-02",
+      "algorithm": "Ed25519",
+      "public_key": "RebX75Rg9WWZUBKmiZm5auoJi+RxirNV7AcLDBrLjqE=",
+      "class": "development",
+      "valid_from": "2026-02-26T14:19:19.565833+00:00",
+      "valid_until": null,
+      "window": "from the first signature of this key in this repository",
+      "anchor": "self-declared by the evidence it signed"
+    },
+    {
+      "key_id": "dm-local-2026",
+      "algorithm": "Ed25519",
+      "public_key": "HO++hDdXX45rgLdndNzdBzr6rFfpKZKspv2JEZ4cVfQ=",
+      "class": "local",
+      "valid_from": "2026-06-16T08:50:07.941981+00:00",
+      "valid_until": null,
+      "window": "from the first signature of this key in this repository",
+      "anchor": "self-declared by the evidence it signed"
+    }
+  ]
+}

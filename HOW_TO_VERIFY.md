@@ -12,13 +12,13 @@ This document explains how to independently verify DevMatrix compilation evidenc
 > Shell commands below are illustrative only. For guaranteed correctness, always use the Python script.
 
 ```bash
-# Verify spec and output against fingerprint
+# Verify spec and output against the fingerprint of a local (unsigned) build
 python verify_fingerprint.py \
-  --fingerprint build_fingerprint.json \
+  --fingerprint build_fingerprint.json --allow-unsigned \
   --spec original_spec.md \
   --output generated/
 
-# Compare two fingerprints (from different runs)
+# Compare two published evidence files (signatures checked too)
 python verify_fingerprint.py \
   --fingerprint fingerprint1.json \
   --compare fingerprint2.json
@@ -40,6 +40,50 @@ Get-FileHash -Algorithm SHA256 original_spec.md
 The output must match `spec_hash` in the fingerprint.
 
 **Note**: Manual verification of `code_bundle_hash` requires the script due to the canonical stream format. See [REPRODUCIBILITY_SPEC.md](REPRODUCIBILITY_SPEC.md) for the exact algorithm.
+
+---
+
+## Verifying the Signature
+
+Every evidence file in `fingerprints/` carries a `signature` beside its `fingerprint`:
+
+```json
+"signature": {
+  "algorithm": "Ed25519",
+  "key_id": "dm-prod-2026-01",
+  "public_key": "<base64, 32 bytes>",
+  "signature": "<base64, 64 bytes>",
+  "signed_at": "2026-10-06T13:03:14.317248+00:00",
+  "signed_payload_hash": "sha256:<hex>"
+}
+```
+
+What is signed is the `fingerprint` object serialized as JSON with sorted keys, no whitespace, UTF-8 (`json.dumps(fingerprint, sort_keys=True, separators=(",", ":"), ensure_ascii=False)`). `signed_payload_hash` is the SHA-256 of those same bytes.
+
+A public key inside the file proves nothing by itself: anyone can sign with their own key and paste it there. The keys DevMatrix signs with are published in [`keys.json`](keys.json), each with its `key_id`, `class` and validity window. `verify_fingerprint.py` runs the signature check on every file it reads, and passes only when all of these hold:
+
+1. `signed_payload_hash` is the SHA-256 of the canonical fingerprint;
+2. `key_id` and the inline `public_key` are one entry of `keys.json`;
+3. `signed_at` falls inside that entry's window;
+4. the Ed25519 signature verifies over the canonical fingerprint with that key;
+5. the key's class is `production`.
+
+```bash
+python verify_fingerprint.py -f fingerprints/<evidence>.json --compare fingerprints/<evidence>.json
+```
+
+```
+[OK] signature: Ed25519, key 'dm-prod-2026-01' (production), signed 2026-10-06T13:03:14.317248+00:00
+```
+
+Any failure prints a `[FAIL] signature: ...` line and the script exits non-zero.
+
+Notes:
+
+- **Development and local keys.** `keys.json` also lists the `development` and `local` keys that signed some early evidence in this repository. Such evidence is not a DevMatrix attestation: by default it fails with `NOT a production key`. `--allow-non-production` accepts it and prints a warning.
+- **Anchors.** Each key's `anchor` says how it was published. A key marked `pending` prints a `[NOTE]` until DevMatrix publishes it through a channel independent of this repository.
+- **Unsigned fingerprints.** A flat `build_fingerprint.json` from a local build carries no signature, and fails unless you pass `--allow-unsigned`; then only its hashes are checked.
+- **Tests.** `python -m unittest discover -s tests` runs the checks on every evidence file in this repository, plus the tampering cases: a changed signature, payload, key, key id or time.
 
 ---
 
@@ -106,7 +150,7 @@ The verification script (`verify_fingerprint.py`) works on:
 - macOS
 - Windows
 
-Requirements: Python 3.9+ with standard library only (no external dependencies).
+Requirements: Python 3.9+. The hash checks use the standard library only; the signature check needs the `cryptography` package (`pip install cryptography`).
 
 **Recommendation**: The Python verifier is cross-platform and recommended on all operating systems, including Windows where shell-based hash verification differs from Unix systems.
 
@@ -139,7 +183,11 @@ If DevMatrix is **non-deterministic**, one of these must occur:
 
 ### Installation
 
-No installation required. The script uses Python standard library only.
+The hash checks need nothing beyond Python. The signature check needs `cryptography`; without it the script fails with `signature NOT verified`, it never skips the check.
+
+```bash
+pip install cryptography
+```
 
 ```bash
 # Clone the repository
@@ -150,13 +198,13 @@ git clone https://github.com/devmatrix-ai/devmatrix-public.git
 
 ```bash
 # Full verification against files
-python verify_fingerprint.py -f build_fingerprint.json -s spec.md -o generated/
+python verify_fingerprint.py -f build_fingerprint.json --allow-unsigned -s spec.md -o generated/
 
 # Spec hash only
-python verify_fingerprint.py -f build_fingerprint.json -s spec.md
+python verify_fingerprint.py -f build_fingerprint.json --allow-unsigned -s spec.md
 
 # Code bundle hash only
-python verify_fingerprint.py -f build_fingerprint.json -o generated/
+python verify_fingerprint.py -f build_fingerprint.json --allow-unsigned -o generated/
 
 # Compare two fingerprints (determinism test)
 python verify_fingerprint.py -f fingerprint1.json --compare fingerprint2.json
@@ -173,12 +221,13 @@ Fingerprint: build_fingerprint.json
 Build ID: modular-20260226_142414-2f3639c8
 Timestamp: 2026-02-26T17:26:34.130735+00:00
 
+[WARN] UNSIGNED: signature not verified (--allow-unsigned); hashes only
 [OK] spec_hash matches: 22ab4591608c37f1...
 [OK] code_bundle_hash matches: 0fe801020d46e15f...
 
 ============================================================
 VERIFICATION PASSED
-All hashes match. This build is reproducible.
+Every check above passed.
 ```
 
 ---
