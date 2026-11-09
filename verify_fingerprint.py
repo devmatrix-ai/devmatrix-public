@@ -23,7 +23,9 @@ import base64
 import binascii
 import hashlib
 import json
+import re
 import sys
+from collections.abc import Callable, Mapping
 from datetime import datetime
 from pathlib import Path
 
@@ -309,6 +311,198 @@ def check_signature(
     return passed
 
 
+# ---------------------------------------------------------------------------
+# Published attestations: the closed schema of the document DevMatrix publishes
+# for a delivered build (digests, counts, module identifiers and closed-set
+# statuses only). The same rules DevMatrix applies before publishing one.
+# ---------------------------------------------------------------------------
+
+ATTESTATION_SCHEMA_V1 = "published-attestation/1"
+ATTESTATION_SCHEMA_V2 = "published-attestation/2"
+ATTESTATION_SCHEMA_PREFIX = "published-attestation/"
+
+_SHA256 = re.compile(r"(sha256:)?[0-9a-f]{64}")
+_MODULE_ID = re.compile(r"[a-z0-9][a-z0-9_-]{0,127}")
+_JOB_ID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+_MAX_COUNT = 10**9
+_MAX_ITEMS = 100_000
+
+#: The name of a digest in the identity and the Merkle sub-roots, and of a
+#: NOT_VERIFIED cause: a bounded lower-case identifier.
+_NAME = re.compile(r"[a-z][a-z0-9_]{0,63}")
+_MAX_NAMED_DIGESTS = 64
+#: Whether a module's emission was shown deterministic: the public claim.
+DETERMINISM_NOT_VERIFIED = "NOT_VERIFIED"
+DETERMINISM_STATUSES = ("VERIFIED", DETERMINISM_NOT_VERIFIED, "DRIFT")
+#: Who ran the build's tests, and the seal class that goes with each:
+#: DevMatrix ran them and sealed the build, or the client ran them on its own
+#: machine and the build is self-attested. Every other pairing is refused.
+RUN_BY_VALUES = ("devmatrix", "client")
+SEAL_CLASSES = ("sealed", "self_attested")
+SEAL_CLASS_OF_RUN_BY = {"devmatrix": "sealed", "client": "self_attested"}
+
+
+class AttestationRefused(ValueError):
+    """The document is not exactly the published attestation schema it names."""
+
+
+Check = Callable[[object, str], None]
+
+
+def _digest(value: object, where: str) -> None:
+    if not isinstance(value, str) or _SHA256.fullmatch(value) is None:
+        raise AttestationRefused(f"{where}: is not a sha256 digest")
+
+
+def _pattern(pattern: "re.Pattern[str]") -> Check:
+    def check(value: object, where: str) -> None:
+        if not isinstance(value, str) or pattern.fullmatch(value) is None:
+            raise AttestationRefused(f"{where}: is not an identifier of the declared form")
+    return check
+
+
+def _one_of(allowed: tuple) -> Check:
+    def check(value: object, where: str) -> None:
+        if not isinstance(value, str) or value not in allowed:
+            raise AttestationRefused(f"{where}: is not one of its declared values")
+    return check
+
+
+def _count(value: object, where: str) -> None:
+    if type(value) is not int or not 0 <= value <= _MAX_COUNT:
+        raise AttestationRefused(f"{where}: is not a count")
+
+
+def _object(fields: Mapping[str, Check], optional: frozenset = frozenset()) -> Check:
+    def check(value: object, where: str) -> None:
+        if not isinstance(value, dict):
+            raise AttestationRefused(f"{where}: is not an object")
+        undeclared = sorted(set(value) - set(fields))
+        if undeclared:
+            raise AttestationRefused(f"{where}: carries undeclared keys {undeclared}")
+        missing = sorted(set(fields) - set(value) - optional)
+        if missing:
+            raise AttestationRefused(f"{where}: lacks {missing}")
+        for key, item in value.items():
+            fields[key](item, f"{where}.{key}")
+    return check
+
+
+def _list(item: Check) -> Check:
+    def check(value: object, where: str) -> None:
+        if not isinstance(value, list) or len(value) > _MAX_ITEMS:
+            raise AttestationRefused(f"{where}: is not a bounded list")
+        for index, element in enumerate(value):
+            item(element, f"{where}[{index}]")
+    return check
+
+
+def _named_digests(value: object, where: str) -> None:
+    """A non-empty, bounded object of digests, each under a bounded name."""
+    if not isinstance(value, dict) or not 0 < len(value) <= _MAX_NAMED_DIGESTS:
+        raise AttestationRefused(f"{where}: is not a bounded object of digests")
+    for name, digest in value.items():
+        if _NAME.fullmatch(name) is None:
+            raise AttestationRefused(f"{where}: {name!r} is not a digest name of the declared form")
+        _digest(digest, f"{where}.{name}")
+
+
+_MODULE = _pattern(_MODULE_ID)
+
+_V1_FIELDS: dict = {
+    "schema": _one_of((ATTESTATION_SCHEMA_V1,)),
+    "job_id": _pattern(_JOB_ID),
+    "attestation_sha256": _digest,
+    "reproducible_sha256": _digest,
+    "identity": _named_digests,
+    "merkle": _object({
+        "nested_root": _digest,
+        "sub_roots": _named_digests,
+        "emit_root": _digest,
+        "emit_leaf_sha256": _list(_digest),
+    }),
+    "modules": _list(_object({"module": _MODULE, "emission_sha256": _digest})),
+    "determinism": _list(_object(
+        {
+            "module": _MODULE,
+            "status": _one_of(DETERMINISM_STATUSES),
+            "cause": _pattern(_NAME),
+        },
+        optional=frozenset({"cause"}),
+    )),
+    "terminal_gate_verdict_hash": _digest,
+    "not_tested_count": _count,
+    "coverage": _object({"delivered_files": _count, "covered": _count}),
+    "certificate_fingerprint": _digest,
+}
+#: ``/2`` is ``/1`` plus who ran the tests and the seal class. A ``/1`` document
+#: states neither, and none is read into it.
+_V2_FIELDS: dict = dict(
+    _V1_FIELDS,
+    schema=_one_of((ATTESTATION_SCHEMA_V2,)),
+    run_by=_one_of(RUN_BY_VALUES),
+    seal_class=_one_of(SEAL_CLASSES),
+)
+ATTESTATION_SCHEMAS: Mapping[str, Check] = {
+    ATTESTATION_SCHEMA_V1: _object(_V1_FIELDS),
+    ATTESTATION_SCHEMA_V2: _object(_V2_FIELDS),
+}
+
+
+def is_published_attestation(payload: dict) -> bool:
+    """Whether a signed payload names itself a published attestation."""
+    schema = payload.get("schema")
+    return isinstance(schema, str) and schema.startswith(ATTESTATION_SCHEMA_PREFIX)
+
+
+def check_published_attestation(payload: dict) -> list[str]:
+    """Validate a published attestation against the closed schema it names.
+
+    Returns the lines to report; raises :class:`AttestationRefused` when the
+    schema is unknown or the document is not exactly that schema: an
+    undeclared or missing key at any level, a value not of its declared form,
+    a determinism cause on a status other than NOT_VERIFIED (or none on it),
+    or, in ``/2``, a seal class that does not go with who ran the tests.
+    """
+    schema = payload.get("schema")
+    check = ATTESTATION_SCHEMAS.get(schema) if isinstance(schema, str) else None
+    if check is None:
+        raise AttestationRefused(f"unknown attestation schema {schema!r}")
+    check(payload, "attestation")
+    for index, row in enumerate(payload["determinism"]):
+        if (row["status"] == DETERMINISM_NOT_VERIFIED) != ("cause" in row):
+            raise AttestationRefused(
+                f"attestation.determinism[{index}]: a cause goes with NOT_VERIFIED and only with it"
+            )
+    if schema == ATTESTATION_SCHEMA_V1:
+        return [f"[OK] attestation: {schema}; who ran the tests is not stated in this schema"]
+    if SEAL_CLASS_OF_RUN_BY[payload["run_by"]] != payload["seal_class"]:
+        raise AttestationRefused(
+            f"attestation.seal_class: {payload['seal_class']!r} does not go with tests run by "
+            f"{payload['run_by']!r}"
+        )
+    return [
+        f"[OK] attestation: {schema}; tests run by {payload['run_by']}, seal {payload['seal_class']}"
+    ]
+
+
+def check_attestation(label: str, evidence: dict) -> bool:
+    """Print the attestation verdict of ``evidence`` when its signed payload is
+    a published attestation; other documents have nothing to check here."""
+    payload = signed_payload(evidence)
+    if not is_published_attestation(payload):
+        return True
+    suffix = f"  ({label})" if label else ""
+    try:
+        lines = check_published_attestation(payload)
+    except AttestationRefused as refusal:
+        print(f"[FAIL] {refusal}{suffix}")
+        return False
+    for line in lines:
+        print(f"{line}{suffix}")
+    return True
+
+
 def signed_payload(evidence: dict) -> dict:
     """The fingerprint a file carries: the signed ``fingerprint`` object of an
     evidence pack, or the whole of a flat ``build_fingerprint.json``."""
@@ -441,6 +635,8 @@ Examples:
     all_passed = check_signature(
         "", evidence, keys, args.allow_non_production, args.allow_unsigned
     )
+    if not check_attestation("", evidence):
+        all_passed = False
 
     # Mode 1: Compare two fingerprints
     if args.compare:
@@ -455,6 +651,8 @@ Examples:
         if not check_signature(
             str(args.compare), evidence2, keys, args.allow_non_production, args.allow_unsigned
         ):
+            all_passed = False
+        if not check_attestation(str(args.compare), evidence2):
             all_passed = False
         print()
 

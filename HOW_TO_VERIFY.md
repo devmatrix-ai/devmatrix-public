@@ -90,6 +90,32 @@ Notes:
 
 ---
 
+## Verifying a Published Attestation
+
+A build's attestation is published under `attestations/` as a signed evidence file whose `fingerprint` is a **published attestation**: digests, counts, module identifiers and closed-set statuses only. `verify_fingerprint.py` checks its signature as above, and then checks the document against the closed schema it names in `schema`:
+
+| Schema | Who ran the tests |
+|--------|-------------------|
+| `published-attestation/2` | `run_by` is `devmatrix` or `client`, and `seal_class` is `sealed` or `self_attested`. The only valid pairs are `devmatrix` with `sealed` (DevMatrix ran the tests) and `client` with `self_attested` (the client ran them on its own machine). |
+| `published-attestation/1` | Not stated. A `/1` document carries neither key, and the verifier reports none. |
+
+The check fails when:
+
+- the schema is not one of these;
+- a key is missing or undeclared, at any level;
+- a value is not of its declared form: a sha256 digest, a module identifier, a bounded count, or one of a closed set;
+- a module's determinism status is not `VERIFIED`, `NOT_VERIFIED` or `DRIFT`, or a cause appears with any status other than `NOT_VERIFIED`, or is missing on it;
+- in `/2`, the seal class does not go with who ran the tests.
+
+```
+[OK] signature: Ed25519, key 'dm-prod-2026-01' (production), signed ...
+[OK] attestation: published-attestation/2; tests run by client, seal self_attested
+```
+
+A valid signature over a document that fails these checks still fails verification: the signature proves who published the document, and the schema check proves the document says only what this schema allows.
+
+---
+
 ## Understanding the Fingerprint
 
 Each DevMatrix compilation produces a `build_fingerprint.json`:
