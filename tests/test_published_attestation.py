@@ -3,7 +3,7 @@
 ``published-attestation/2`` states who ran the build's tests and the seal
 class, and only the pairs devmatrix/sealed and client/self_attested are
 valid. ``published-attestation/1`` states neither, and none is read into it.
-Any other schema, and any document that is not exactly its schema, fails.
+Every other schema fails, and so does a document that is not exactly its schema.
 
 The documents here are built in the test and signed with a key made for the
 test, so keys.json is not touched.
