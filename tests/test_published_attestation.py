@@ -179,17 +179,23 @@ class ARefusedAttestation(unittest.TestCase):
 
 
 class TheCommandLine(unittest.TestCase):
-    def _run(self, payload: dict) -> subprocess.CompletedProcess[str]:
+    def _run(
+        self, payload: dict, compare: bool = True, compare_with: dict | None = None,
+    ) -> subprocess.CompletedProcess[str]:
         with tempfile.TemporaryDirectory() as tmp:
             keys = Path(tmp) / "keys.json"
             keys.write_text(json.dumps({"keys": _KEYS}), encoding="utf-8")
             evidence = Path(tmp) / "attestation.json"
             evidence.write_text(json.dumps(_signed(payload)), encoding="utf-8")
-            return subprocess.run(
-                [sys.executable, str(ROOT / "verify_fingerprint.py"), "-f", str(evidence),
-                 "--compare", str(evidence), "--keys", str(keys)],
-                capture_output=True, text=True, check=False,
-            )
+            command = [sys.executable, str(ROOT / "verify_fingerprint.py"), "-f", str(evidence),
+                       "--keys", str(keys)]
+            if compare_with is not None:
+                other = Path(tmp) / "other.json"
+                other.write_text(json.dumps(_signed(compare_with)), encoding="utf-8")
+                command += ["--compare", str(other)]
+            elif compare:
+                command += ["--compare", str(evidence)]
+            return subprocess.run(command, capture_output=True, text=True, check=False)
 
     def test_a_signed_v2_passes_and_says_who_ran_the_tests(self) -> None:
         result = self._run(_attestation_v2("client", "self_attested"))
@@ -201,6 +207,33 @@ class TheCommandLine(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0, result.stdout)
         self.assertIn("[OK] signature", result.stdout)
         self.assertIn("[FAIL] attestation.seal_class", result.stdout)
+
+    def test_the_checked_file_alone_is_checked(self) -> None:
+        refused = self._run(_attestation_v2("client", "sealed"), compare=False)
+        self.assertNotEqual(refused.returncode, 0, refused.stdout)
+        self.assertIn("[FAIL] attestation.seal_class", refused.stdout)
+        valid = self._run(_attestation_v2("client", "self_attested"), compare=False)
+        self.assertEqual(valid.returncode, 0, valid.stdout)
+        self.assertIn("tests run by client", valid.stdout)
+
+    def test_the_compared_file_is_checked_too(self) -> None:
+        result = self._run(
+            _attestation_v2("client", "self_attested"), compare_with=_attestation_v2("client", "sealed")
+        )
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertIn("tests run by client, seal self_attested", result.stdout)
+        self.assertIn("[FAIL] attestation.seal_class", result.stdout)
+
+    def test_a_misspelled_or_missing_schema_is_checked_not_skipped(self) -> None:
+        for payload in (
+            dict(_attestation_v2(), schema="Published-Attestation/2"),
+            {k: v for k, v in _attestation_v2().items() if k != "schema"},
+            dict(_attestation_v2(), schema=2),
+        ):
+            with self.subTest(schema=payload.get("schema")):
+                result = self._run(payload)
+                self.assertNotEqual(result.returncode, 0, result.stdout)
+                self.assertIn("unknown attestation schema", result.stdout)
 
     def test_a_signed_unknown_schema_fails(self) -> None:
         result = self._run(dict(_attestation_v2(), schema="published-attestation/9"))

@@ -92,7 +92,7 @@ Notes:
 
 ## Verifying a Published Attestation
 
-A build's attestation is published under `attestations/` as a signed evidence file whose `fingerprint` is a **published attestation**: digests, counts, module identifiers and closed-set statuses only. `verify_fingerprint.py` checks its signature as above, and then checks the document against the closed schema it names in `schema`:
+A build's attestation is published to this repository's `attestations/` directory as a signed evidence file whose `fingerprint` is a **published attestation**: digests, counts, module identifiers and closed-set statuses only. `verify_fingerprint.py` checks its signature as above, and then checks the document against the closed schema it names in `schema`:
 
 | Schema | Who ran the tests |
 |--------|-------------------|
@@ -101,10 +101,10 @@ A build's attestation is published under `attestations/` as a signed evidence fi
 
 The check fails when:
 
-- the schema is not one of these;
-- a key is missing or undeclared, at any level;
-- a value is not of its declared form: a sha256 digest, a module identifier, a bounded count, or one of a closed set;
-- a module's determinism status is not `VERIFIED`, `NOT_VERIFIED` or `DRIFT`, or a cause appears with any status other than `NOT_VERIFIED`, or is missing on it;
+- the schema is not one of these, is misspelled, or is missing from a document that states who ran the tests or a seal class;
+- a key is missing or undeclared, at any level, except inside `identity` and `merkle.sub_roots`: those two are checked for form only, as non-empty bounded objects of sha256 digests under bounded lower-case names, not against a fixed list of names;
+- a value is not of its declared form: a sha256 digest, a module identifier, a job identifier (a UUID), a bounded count or list, or one of a closed set;
+- a module's determinism status is not `VERIFIED`, `NOT_VERIFIED` or `DRIFT`, or a cause appears with any status other than `NOT_VERIFIED`, or is missing on it (the cause is checked as a bounded lower-case name, not against a fixed list);
 - in `/2`, the seal class does not go with who ran the tests.
 
 ```

@@ -450,9 +450,12 @@ ATTESTATION_SCHEMAS: Mapping[str, Check] = {
 
 
 def is_published_attestation(payload: dict) -> bool:
-    """Whether a signed payload names itself a published attestation."""
-    schema = payload.get("schema")
-    return isinstance(schema, str) and schema.startswith(ATTESTATION_SCHEMA_PREFIX)
+    """Whether a signed payload is, or claims to be, a published attestation:
+    it carries a ``schema`` key (no other evidence this verifier reads does),
+    or states who ran the tests or a seal class. Each of these is checked
+    against the schema it names, so a malformed or misspelled schema fails
+    rather than going unchecked."""
+    return any(key in payload for key in ("schema", "run_by", "seal_class"))
 
 
 def check_published_attestation(payload: dict) -> list[str]:
