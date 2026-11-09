@@ -76,7 +76,7 @@ python verify_fingerprint.py -f fingerprints/<evidence>.json --compare fingerpri
 [OK] signature: Ed25519, key 'dm-prod-2026-01' (production), signed 2026-10-06T13:03:14.317248+00:00
 ```
 
-Any failure prints a `[FAIL] signature: ...` line and the script exits non-zero.
+A failed check prints a `[FAIL] signature: ...` line and the script exits non-zero.
 
 Notes:
 
