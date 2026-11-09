@@ -206,12 +206,68 @@ class TheKeysFile(unittest.TestCase):
                 self.assertTrue(any("published only in keys.json" in line for line in lines), lines)
 
 
+PRODUCTION_PAIR = (
+    "fingerprints/5fc1882a-0d3e-4bf0-b6a5-c5ba69820e5f/5fc1882a-0d3e-4bf0-b6a5-c5ba69820e5f.json",
+    "fingerprints/ae86be9a-cb25-4178-9bb1-39bc0aacd0d3/ae86be9a-cb25-4178-9bb1-39bc0aacd0d3.json",
+)
+
+#: Evidence files whose fingerprint records no hash at all.
+RECORDS_NO_HASH = {"fingerprints/20260330_modular_hip_demo_1_20260323_001610_f210ce5a.json"}
+
+
+def _payload(name: str) -> dict:
+    return vf.signed_payload(_evidence(name))
+
+
+class TheComparison(unittest.TestCase):
+    def test_two_runs_of_one_specification_compare_every_hash_identical(self) -> None:
+        results = vf.compare_fingerprints(*(_payload(n) for n in PRODUCTION_PAIR))
+        self.assertEqual(
+            [path for path, _, _ in results],
+            ["code_bundle_hash", "ir_semantic_hash", "ir_structural_hash", "security_arc_hash", "spec_hash"],
+        )
+        self.assertTrue(all(passed for _, passed, _ in results), results)
+
+    def test_nested_hashes_are_compared_by_their_path(self) -> None:
+        name = "fingerprints/20260226_modular_hip_test_20260221_103259_0fe80102.json"
+        results = vf.compare_fingerprints(_payload(name), _payload(name))
+        self.assertIn("ir_hashes.spec_hash", [path for path, _, _ in results])
+
+    def test_a_changed_hash_fails(self) -> None:
+        first, second = (_payload(n) for n in PRODUCTION_PAIR)
+        second = dict(second, code_bundle_hash="0" * 64)
+        results = dict((path, passed) for path, passed, _ in vf.compare_fingerprints(first, second))
+        self.assertFalse(results["code_bundle_hash"])
+
+    def test_a_hash_recorded_by_one_fingerprint_only_fails(self) -> None:
+        first, second = (_payload(n) for n in PRODUCTION_PAIR)
+        second = {k: v for k, v in second.items() if k != "spec_hash"}
+        results = {path: (passed, message) for path, passed, message in vf.compare_fingerprints(first, second)}
+        self.assertFalse(results["spec_hash"][0])
+        self.assertIn("only in the first", results["spec_hash"][1])
+
+    def test_two_fingerprints_with_no_hash_fail(self) -> None:
+        (name,) = RECORDS_NO_HASH
+        results = vf.compare_fingerprints(_payload(name), _payload(name))
+        self.assertEqual(len(results), 1)
+        self.assertFalse(results[0][1])
+        self.assertIn("nothing compared", results[0][2])
+
+    def test_the_signature_is_not_compared_as_a_hash(self) -> None:
+        paths = vf.hash_fields(_payload(PRODUCTION_PAIR[0]))
+        self.assertNotIn("signed_payload_hash", " ".join(paths))
+
+    def test_which_evidence_records_hashes(self) -> None:
+        empty = {name for name in EXPECTED if not vf.hash_fields(_payload(name))}
+        self.assertEqual(empty, RECORDS_NO_HASH)
+
+
 class TheCommandLine(unittest.TestCase):
-    def test_a_production_fingerprint_passes(self) -> None:
-        name = next(n for n, c in EXPECTED.items() if c == "production")
-        result = _run("-f", name, "--compare", name)
+    def test_the_documented_quick_check_passes(self) -> None:
+        result = _run("-f", PRODUCTION_PAIR[0], "--compare", PRODUCTION_PAIR[1])
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertIn("[OK] signature", result.stdout)
+        self.assertIn("Hashes compared by path: 5, identical: 5", result.stdout)
 
     def test_a_development_fingerprint_fails_unless_allowed(self) -> None:
         name = next(n for n, c in EXPECTED.items() if c == "development")

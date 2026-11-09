@@ -66,29 +66,28 @@ See [EVIDENCE_EN.md](EVIDENCE_EN.md) for complete platform-scale evidence.
 
 ```bash
 python verify_fingerprint.py \
-  -f fingerprints/20260226_modular_hip_test_20260221_103259_0fe80102.json \
-  --compare fingerprints/20260227_modular_hip_test_20260221_103259_0fe80102.json \
-  --allow-non-production
+  -f fingerprints/5fc1882a-0d3e-4bf0-b6a5-c5ba69820e5f/5fc1882a-0d3e-4bf0-b6a5-c5ba69820e5f.json \
+  --compare fingerprints/ae86be9a-cb25-4178-9bb1-39bc0aacd0d3/ae86be9a-cb25-4178-9bb1-39bc0aacd0d3.json
 ```
 
-These two runs were signed with a development key, so the script prints a
-`[WARN] ... NOT a production key` line for each and needs
-`--allow-non-production` to accept them; evidence signed with a production key
-passes without it (see [HOW_TO_VERIFY.md](HOW_TO_VERIFY.md#verifying-the-signature)).
+Two separate compiler runs of the same specification (different
+`compiler_run_id` and `compile_attempt_id`), each signed with the production
+key: both signatures verify and the five hashes both runs record are identical
+(see [HOW_TO_VERIFY.md](HOW_TO_VERIFY.md#verifying-the-signature)).
 
-**Expected result**: both signatures verify (with the development-key warning) and all compared hashes are `IDENTICAL`.
+**Expected result**: both signatures verify and every compared hash is `IDENTICAL` (`Hashes compared by path: 5, identical: 5`).
 
 ### What the script compares
 
-The script compares:
+The script compares every hash the two fingerprints record, by its path in the
+fingerprint: each field whose name ends in `_hash`, at any depth (for example
+`spec_hash`, `code_bundle_hash`, `ir_semantic_hash`, `ir_structural_hash`,
+`ir_hashes.spec_hash` or `modules.<module>.code_bundle_hash`, depending on the
+fingerprint's schema version).
 
-- `spec_hash`
-- `code_bundle_hash`
-- `ir_canonical_hash`
-- `ir_semantic_hash`
-- `ir_structural_hash`
-
-If any mismatch is found, determinism is broken.
+If any compared hash differs, determinism is broken. A hash recorded by only
+one of the two fingerprints fails too, and so do two fingerprints that record
+no hash at all: an absent hash is never reported as identical.
 
 ---
 

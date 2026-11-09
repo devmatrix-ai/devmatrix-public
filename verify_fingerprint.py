@@ -309,27 +309,52 @@ def check_signature(
     return passed
 
 
+def signed_payload(evidence: dict) -> dict:
+    """The fingerprint a file carries: the signed ``fingerprint`` object of an
+    evidence pack, or the whole of a flat ``build_fingerprint.json``."""
+    payload = evidence.get("fingerprint")
+    return payload if isinstance(payload, dict) else evidence
+
+
+def hash_fields(fingerprint: dict, prefix: str = "") -> dict[str, str]:
+    """Every hash a fingerprint records, by its path (``ir_hashes.spec_hash``,
+    ``modules.<name>.code_bundle_hash``, ``code_bundle_hash``): each non-empty
+    string field whose name ends in ``_hash``, at any depth. Fingerprint
+    schemas changed over time; comparing by path compares what both files
+    record under the same name and never renames one schema's field into
+    another's."""
+    fields: dict[str, str] = {}
+    for key, value in fingerprint.items():
+        path = f"{prefix}.{key}" if prefix else key
+        if isinstance(value, dict):
+            fields.update(hash_fields(value, path))
+        elif isinstance(value, str) and key.endswith("_hash") and value:
+            fields[path] = value
+    return fields
+
+
 def compare_fingerprints(fp1: dict, fp2: dict) -> list[tuple[str, bool, str]]:
-    """Compare two fingerprints and report differences."""
+    """Compare every hash the two fingerprints record, by path.
+
+    A hash recorded by only one of them fails (the two fingerprints do not
+    record the same things), and two fingerprints that record no hash at all
+    fail: nothing was compared, so nothing was shown identical.
+    """
+    first, second = hash_fields(fp1), hash_fields(fp2)
+    paths = sorted(set(first) | set(second))
+    if not paths:
+        return [("hashes", False, "no hash recorded in either fingerprint: nothing compared")]
+
     results = []
-
-    keys_to_compare = [
-        "spec_hash",
-        "code_bundle_hash",
-        "ir_canonical_hash",
-        "ir_semantic_hash",
-        "ir_structural_hash",
-    ]
-
-    for key in keys_to_compare:
-        v1 = fp1.get(key, "")
-        v2 = fp2.get(key, "")
-
-        if v1 == v2:
-            results.append((key, True, f"{key}: IDENTICAL ({v1[:16]}...)"))
+    for path in paths:
+        v1, v2 = first.get(path), second.get(path)
+        if v1 is None or v2 is None:
+            where = "first" if v2 is None else "second"
+            results.append((path, False, f"{path}: recorded only in the {where} fingerprint"))
+        elif v1 == v2:
+            results.append((path, True, f"{path}: IDENTICAL ({v1[:16]}...)"))
         else:
-            results.append((key, False, f"{key}: DIFFERENT ({v1[:16]}... vs {v2[:16]}...)"))
-
+            results.append((path, False, f"{path}: DIFFERENT ({v1[:16]}... vs {v2[:16]}...)"))
     return results
 
 
@@ -433,7 +458,9 @@ Examples:
             all_passed = False
         print()
 
-        results = compare_fingerprints(fingerprint, fp2)
+        results = compare_fingerprints(signed_payload(evidence), signed_payload(evidence2))
+        compared = sum(1 for _, passed, _ in results if passed)
+        print(f"Hashes compared by path: {len(results)}, identical: {compared}")
 
         for key, passed, message in results:
             status = "[OK]" if passed else "[FAIL]"

@@ -18,8 +18,9 @@ python verify_fingerprint.py \
   --spec original_spec.md \
   --output generated/
 
-# Compare two published evidence files (their signatures are checked too;
-# evidence signed by a development key needs --allow-non-production)
+# Compare two published evidence files: every hash both record, by path
+# (their signatures are checked too; evidence signed by a development key
+# needs --allow-non-production)
 python verify_fingerprint.py \
   --fingerprint fingerprint1.json \
   --compare fingerprint2.json
