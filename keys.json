@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "description": "Public Ed25519 keys that sign DevMatrix evidence. A signature is accepted only when its key_id and its inline public_key are one entry here and its signed_at falls inside that entry's window. Only class \"production\" keys sign DevMatrix attestations; development and local keys are listed so their evidence can be identified, never accepted as an attestation by default.",
+  "description": "Public Ed25519 keys that sign DevMatrix evidence. A signature is accepted only when its key_id and its inline public_key are one entry here and its signed_at falls inside that entry's window. Only class \"production\" keys sign DevMatrix attestations; development and local keys are listed so their evidence can be identified, never accepted as an attestation by default. signed_at is claimed by the signer, not covered by the signature: a window bounds the time a signature may claim, it does not protect against a retired private key that leaked. anchor says whether the key was also published independently of this repository.",
   "keys": [
     {
       "key_id": "dm-prod-2026-01",
@@ -10,7 +10,7 @@
       "valid_from": "2026-02-21T15:12:37.090851+00:00",
       "valid_until": "2026-07-04T22:25:59.961067+00:00",
       "window": "first and last signature of this key in this repository; the key was replaced",
-      "anchor": "documented: published with the design of the DevMatrix evidence system"
+      "anchor": "self-declared by the evidence it signed; retired"
     },
     {
       "key_id": "dm-prod-2026-01",
@@ -20,7 +20,7 @@
       "valid_from": "2026-09-16T11:01:14.147675+00:00",
       "valid_until": null,
       "window": "from the first signature of this key in this repository; current key",
-      "anchor": "pending: not yet published by an independent channel"
+      "anchor": "pending: to be published by DevMatrix independently of this repository"
     },
     {
       "key_id": "dm-dev-2026-02",

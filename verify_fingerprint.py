@@ -179,7 +179,10 @@ def load_keys(path: Path) -> list[dict]:
     keys = read_json(path).get("keys")
     if not isinstance(keys, list) or not keys:
         raise ValueError(f"{path} lists no keys")
-    return [k for k in keys if isinstance(k, dict)]
+    malformed = [i for i, k in enumerate(keys) if not isinstance(k, dict)]
+    if malformed:
+        raise ValueError(f"{path}: key entries {malformed} are not objects")
+    return keys
 
 
 def _instant(value: object, what: str) -> datetime:
@@ -210,7 +213,9 @@ def verify_signature(
     2. the algorithm is Ed25519;
     3. ``signed_payload_hash`` is the SHA-256 of the canonical fingerprint;
     4. ``key_id`` and the inline ``public_key`` are one entry of keys.json;
-    5. ``signed_at`` falls inside that entry's window;
+    5. ``signed_at`` falls inside that entry's window (``signed_at`` is claimed
+       by the signer, not signed: the window bounds the claim, it does not
+       protect against a retired private key that leaked);
     6. the signature verifies over the canonical fingerprint with that key;
     7. the key is a production key, unless ``allow_non_production``.
 
@@ -237,6 +242,8 @@ def verify_signature(
         return False, [
             f"[FAIL] signature: the public key in the file is not the one published for {key_id!r}"
         ]
+    if entry.get("algorithm") != "Ed25519":
+        return False, [f"[FAIL] signature: the published key {key_id!r} is not an Ed25519 key"]
 
     try:
         signed_at = _instant(signature.get("signed_at"), "signed_at")
@@ -269,8 +276,8 @@ def verify_signature(
 
     lines = [f"[OK] signature: Ed25519, key {key_id!r} ({entry.get('class')}), signed {signature.get('signed_at')}"]
     anchor = entry.get("anchor")
-    if isinstance(anchor, str) and anchor.startswith("pending"):
-        lines.append(f"[NOTE] key {key_id!r}: anchor {anchor}")
+    if not (isinstance(anchor, str) and anchor.startswith("independent")):
+        lines.append(f"[NOTE] key {key_id!r} is published only in keys.json: {anchor}")
     if entry.get("class") != PRODUCTION:
         if not allow_non_production:
             return False, lines + [

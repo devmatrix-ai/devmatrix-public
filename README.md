@@ -187,8 +187,14 @@ Full details: [EVIDENCE_EN.md](EVIDENCE_EN.md) | [PLATFORM_VERIFICATION.md](PLAT
 # Quick verification — compare two independent compilations
 python verify_fingerprint.py \
   -f fingerprints/20260226_modular_hip_test_20260221_103259_0fe80102.json \
-  --compare fingerprints/20260227_modular_hip_test_20260221_103259_0fe80102.json
+  --compare fingerprints/20260227_modular_hip_test_20260221_103259_0fe80102.json \
+  --allow-non-production
 ```
+
+These two runs were signed with a development key, so the script prints a
+`[WARN] ... NOT a production key` line for each and needs
+`--allow-non-production` to accept them; evidence signed with a production key
+passes without it (see [HOW_TO_VERIFY.md](HOW_TO_VERIFY.md#verifying-the-signature)).
 
 If DevMatrix is non-deterministic, one of these must occur:
 - Same spec → different `spec_hash`

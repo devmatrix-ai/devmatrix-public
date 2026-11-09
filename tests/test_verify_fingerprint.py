@@ -138,6 +138,37 @@ class ATamperedSignatureFails(unittest.TestCase):
         self.assertFalse(passed, lines)
         self.assertIn("outside the window", lines[-1])
 
+    def test_another_algorithm(self) -> None:
+        evidence = _production_sample()
+        evidence["signature"]["algorithm"] = "RSA"
+        self._fails(evidence, "unsupported algorithm")
+
+    def test_a_signature_that_is_not_base64(self) -> None:
+        evidence = _production_sample()
+        evidence["signature"]["signature"] = "not base64!"
+        self._fails(evidence, "signature is not base64")
+
+    def test_a_signing_time_with_no_zone(self) -> None:
+        evidence = _production_sample()
+        evidence["signature"]["signed_at"] = "2026-10-06T13:03:14"
+        self._fails(evidence, "names no time zone")
+
+    def test_a_published_key_of_the_wrong_length(self) -> None:
+        evidence = _production_sample()
+        short = base64.b64encode(b"\x01" * 31).decode()
+        evidence["signature"]["public_key"] = short
+        keys = [dict(k, public_key=short) for k in KEYS if k["key_id"] == evidence["signature"]["key_id"]]
+        passed, lines = vf.verify_signature(evidence, keys, allow_non_production=True)
+        self.assertFalse(passed, lines)
+        self.assertIn("INVALID", lines[-1])
+
+    def test_a_published_key_of_another_algorithm(self) -> None:
+        evidence = _production_sample()
+        keys = [dict(k, algorithm="RSA") for k in KEYS]
+        passed, lines = vf.verify_signature(evidence, keys, allow_non_production=True)
+        self.assertFalse(passed, lines)
+        self.assertIn("not an Ed25519 key", lines[-1])
+
     def test_a_file_with_no_signature(self) -> None:
         evidence = _production_sample()
         del evidence["signature"]
@@ -156,6 +187,23 @@ def _run(*args: str, block_cryptography: bool = False) -> subprocess.CompletedPr
     return subprocess.run(
         [sys.executable, "-c", code], cwd=ROOT, capture_output=True, text=True, check=False
     )
+
+
+class TheKeysFile(unittest.TestCase):
+    def test_a_malformed_entry_is_an_error(self) -> None:
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "keys.json"
+            path.write_text(json.dumps({"keys": [KEYS[0], "not an object"]}), encoding="utf-8")
+            with self.assertRaises(ValueError):
+                vf.load_keys(path)
+
+    def test_a_key_not_published_independently_says_so(self) -> None:
+        for name in EXPECTED:
+            with self.subTest(name=name):
+                passed, lines = vf.verify_signature(_evidence(name), KEYS, allow_non_production=True)
+                self.assertTrue(passed, lines)
+                self.assertTrue(any("published only in keys.json" in line for line in lines), lines)
 
 
 class TheCommandLine(unittest.TestCase):

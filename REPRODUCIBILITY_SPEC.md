@@ -131,10 +131,12 @@ def code_bundle_hash(directory: Path) -> str:
 
 ```bash
 python verify_fingerprint.py \
-  --fingerprint build_fingerprint.json \
+  --fingerprint build_fingerprint.json --allow-unsigned \
   --spec original_spec.md \
   --output generated/
 ```
+
+`build_fingerprint.json` from a local build carries no signature, so `--allow-unsigned` is needed and only the hashes are checked. Published evidence files are signed; see [HOW_TO_VERIFY.md](HOW_TO_VERIFY.md#verifying-the-signature).
 
 ### Manual verification (cross-platform)
 

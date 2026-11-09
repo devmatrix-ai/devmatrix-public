@@ -13,7 +13,7 @@
 | 3 | **Idempotence** | Run seal twice, compare `build_id` + `deterministic_seed` | <10s | Identical values both runs |
 | 4 | **Release governance** | `devmatrix seal ... --release` on dirty git | <5s | `❌ Seal FAILED: Cannot seal in release mode with dirty git` |
 | 5 | **Gate enforcement** | Manually fail a gate in `gate_results.json`, re-seal | <5s | `❌ Seal FAILED: Gate failures: ['hip_xxx']` |
-| 6 | **Fingerprint verification** | `python verify_fingerprint.py -f build_fingerprint.json` | <3s | `VERIFIED: All hashes match` |
+| 6 | **Fingerprint verification** | `python verify_fingerprint.py -f build_fingerprint.json --allow-unsigned -s spec.md -o generated/` | <3s | `VERIFICATION PASSED` |
 | 7 | **Deterministic compilation** | Compile same spec twice, compare `code_bundle_hash` | <30s | Identical hashes (byte-for-byte) |
 | 8 | **Module-level provenance** | Inspect any `hip_*/build_fingerprint.json` | <3s | 5 cryptographic hashes present: spec, ir_canonical, ir_semantic, ir_structural, code_bundle |
 

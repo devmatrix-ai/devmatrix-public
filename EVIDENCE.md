@@ -67,10 +67,16 @@ See [EVIDENCE_EN.md](EVIDENCE_EN.md) for complete platform-scale evidence.
 ```bash
 python verify_fingerprint.py \
   -f fingerprints/20260226_modular_hip_test_20260221_103259_0fe80102.json \
-  --compare fingerprints/20260227_modular_hip_test_20260221_103259_0fe80102.json
+  --compare fingerprints/20260227_modular_hip_test_20260221_103259_0fe80102.json \
+  --allow-non-production
 ```
 
-**Expected result**: all compared hashes are `IDENTICAL`.
+These two runs were signed with a development key, so the script prints a
+`[WARN] ... NOT a production key` line for each and needs
+`--allow-non-production` to accept them; evidence signed with a production key
+passes without it (see [HOW_TO_VERIFY.md](HOW_TO_VERIFY.md#verifying-the-signature)).
+
+**Expected result**: both signatures verify (with the development-key warning) and all compared hashes are `IDENTICAL`.
 
 ### What the script compares
 

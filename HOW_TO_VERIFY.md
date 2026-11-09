@@ -18,7 +18,8 @@ python verify_fingerprint.py \
   --spec original_spec.md \
   --output generated/
 
-# Compare two published evidence files (signatures checked too)
+# Compare two published evidence files (their signatures are checked too;
+# evidence signed by a development key needs --allow-non-production)
 python verify_fingerprint.py \
   --fingerprint fingerprint1.json \
   --compare fingerprint2.json
@@ -80,8 +81,9 @@ A failed check prints a `[FAIL] signature: ...` line and the script exits non-ze
 
 Notes:
 
+- **`signed_at` is claimed, not signed.** It sits beside the signature, outside the signed fingerprint. The window check catches evidence that names a time its key was not in use, but it cannot stop someone who holds a retired private key from signing new evidence and claiming a time inside that key's window. A retired key that leaked would have to be withdrawn from `keys.json`.
+- **Where the keys come from.** `keys.json` lives in this repository with the evidence. Its `anchor` field says whether a key was also published somewhere independent of it; a key whose anchor is not independent prints a `[NOTE]`.
 - **Development and local keys.** `keys.json` also lists the `development` and `local` keys that signed some early evidence in this repository. Such evidence is not a DevMatrix attestation: by default it fails with `NOT a production key`. `--allow-non-production` accepts it and prints a warning.
-- **Anchors.** Each key's `anchor` says how it was published. A key marked `pending` prints a `[NOTE]` until DevMatrix publishes it through a channel independent of this repository.
 - **Unsigned fingerprints.** A flat `build_fingerprint.json` from a local build carries no signature, and fails unless you pass `--allow-unsigned`; then only its hashes are checked.
 - **Tests.** `python -m unittest discover -s tests` runs the checks on every evidence file in this repository, plus the tampering cases: a changed signature, payload, key, key id or time.
 
@@ -208,6 +210,7 @@ python verify_fingerprint.py -f build_fingerprint.json --allow-unsigned -o gener
 
 # Compare two fingerprints (determinism test)
 python verify_fingerprint.py -f fingerprint1.json --compare fingerprint2.json
+# (flat, unsigned build_fingerprint.json files: add --allow-unsigned)
 ```
 
 ### Expected output
