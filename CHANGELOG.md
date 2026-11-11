@@ -14,6 +14,14 @@
 
 ## Verifier
 
+- **The published attestation is the delivered file's, and its runner the
+  seal's.** With `--published`, the published attestation must be exactly what
+  the delivered file is published as: every field is recomputed and each one
+  that differs is named. Who ran the tests, read from the file, must be who the
+  seal says measured the build; a `seal-statement/2` states no measurer and is
+  refused with what to do (re-seal). Every check runs and the output says what
+  was and was not verified; a published `/1` or `/2` is refused with what to do
+  (republish), and the file is still bound to the seal.
 - **One build, three documents.** `--seal <bundle> --attestation <service>=<file>
   [--published <file>]` binds a download's fingerprint attestation to the
   platform seal and the published attestation: the file's SHA-256 is the one

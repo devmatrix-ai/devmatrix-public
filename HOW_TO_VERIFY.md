@@ -133,7 +133,11 @@ It passes only when all of these hold:
 2. the published attestation's signature verifies as above, and it is a `published-attestation/3` document (`/1` and `/2` state the digest of another serialization, so they cannot be bound to the file);
 3. the SHA-256 of the delivered file is the `document_sha256` the seal signed for the service, and the published `attestation_sha256`;
 4. the file's `reproducible_sha256` is the digest of its reproducible block, and the seal and the published attestation state the same one;
-5. the file's platform spec hash and its hash for the service are the seal's `platform.spec_hash` and the service's `spec_hash`, and its identity is the published `identity`.
+5. the file's platform spec hash and its hash for the service are the seal's `platform.spec_hash` and the service's `spec_hash`;
+6. who ran the tests, read from the file's platform verdict, is who the seal says measured the build: `devmatrix` with a seal measured by `devmatrix`, `client` with a `self_attested` one. A `seal-statement/2` does not state who measured the build, so it is refused, with what to do: re-seal the platform (a new seal is `seal-statement/3` or later) and verify the new seal;
+7. the published attestation is exactly what the file is published as: every field is recomputed from the file (its digest, identity, Merkle commitment, modules, determinism, gate verdict, counts, coverage, certificate, who ran the tests and the seal class that goes with them) and compared, and every field that differs is named.
+
+Every check that can run does: the `[OK]` lines say what was verified and the `[FAIL]` lines what was not. A published `published-attestation/1` or `/2` is refused with what to do (republish the build's attestation, which is published as `/3`), and the file is still bound to the seal.
 
 `--published` is optional: without it, the file is bound to the seal alone. Name several `--attestation` options to bind every service of a seal; a published attestation is one build's, so it goes with exactly one.
 

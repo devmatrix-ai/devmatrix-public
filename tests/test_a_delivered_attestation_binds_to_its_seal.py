@@ -82,15 +82,37 @@ def _delivered() -> dict:
             "deterministic_seed": "sha256:" + _hex("7"),
             "build_fingerprint": "sha256:" + _hex("8"),
         },
-        "merkle": {"nested_root": "sha256:" + _hex("9")},
-        "modules": [{"module": _SERVICE, "emission_sha256": "sha256:" + _hex("a")}],
+        "merkle": {
+            "nested_root": "sha256:" + _hex("9"),
+            "sub_roots": {name: "sha256:" + _hex("d") for name in vf.SUB_ROOT_NAMES},
+            "emit_root": "sha256:" + _hex("e"),
+            "emit_leaves": [{"path": "services/orders/app.py", "leaf_sha256": "sha256:" + _hex("f")}],
+        },
+        "modules": [{"module": _SERVICE, "emission_sha256": "sha256:" + _hex("a"), "file_count": 3}],
     }
     return {
         "schema": vf.DELIVERED_ATTESTATION_SCHEMA,
         "job_id": _JOB,
         "reproducible": reproducible,
         "reproducible_sha256": vf.reproducible_sha256(reproducible),
-        "attested": {"terminal_gate_verdict_hash": "sha256:" + _hex("b")},
+        "attested": {
+            "platform_verdict": {"uts_disposition": "PASSED"},
+            "modules": [
+                {"module": _SERVICE, "status": "VERIFIED"},
+                {"module": "billing", "status": "NOT_VERIFIED", "cause": "no_baseline"},
+            ],
+            "terminal_gate_verdict_hash": "sha256:" + _hex("b"),
+            "not_tested_count": 0,
+        },
+        "coverage": {"delivered_files": 10, "covered": 10, "uncovered": []},
+        "certificate_fingerprint": "sha256:" + _hex("0"),
+    }
+
+
+def _run_by_client(document: dict) -> None:
+    """The build's tests were run by the client, on its own machine."""
+    document["attested"]["platform_verdict"] = {
+        "uts_disposition": "NOT_RUN", "uts_not_run_reason": "runtime_phase_run_by_client",
     }
 
 
@@ -114,6 +136,7 @@ def _statement(document: dict) -> dict:
         "services": [{
             "name": _SERVICE,
             "spec_hash": _hex("1"),
+            "verification": "devmatrix",
             "fingerprint_attestation": {
                 "document_sha256": _digest(_bytes(document)),
                 "reproducible_sha256": document["reproducible_sha256"],
@@ -176,6 +199,8 @@ class OneBuild:
         self.data: bytes | None = None
         self.statement = _statement(self.document)
         self.published: dict | None = _published(self.document)
+        #: A published evidence file to pass as it is, instead of ``published``.
+        self.published_file: Path | None = None
         self.keys = _keys()
         self.bundle_key = _SEAL_KEY
         self.signing_key = _SEAL_KEY
@@ -197,7 +222,9 @@ class OneBuild:
         keys.write_text(json.dumps({"schema_id": vf.KEYS_SCHEMA_ID, "keys": self.keys}), encoding="utf-8")
         command = [sys.executable, str(ROOT / "verify_fingerprint.py"), "--keys", str(keys),
                    "--seal", str(bundle), "--attestation", f"{_SERVICE}={delivered}", *extra]
-        if self.published is not None:
+        if self.published_file is not None:
+            command += ["--published", str(self.published_file)]
+        elif self.published is not None:
             published = tmp / "published.json"
             published.write_text(json.dumps(_signed(self.published)), encoding="utf-8")
             command += ["--published", str(published)]
@@ -220,10 +247,11 @@ class TheCommand(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         for line in (
             "[OK] seal: seal-statement/4, key 'seal-test' (production)",
-            "[OK] orders: the delivered attestation is the sealed and the published one",
+            "[OK] orders: the delivered attestation is the sealed one",
             "[OK] orders: reproducible ",
             "[OK] orders: the attestation names the specs the seal names",
-            "[OK] orders: the published identity is the delivered one",
+            "[OK] orders: tests run by devmatrix, as the seal states (measured by devmatrix)",
+            "[OK] orders: the published attestation is exactly what the delivered file publishes as",
             "VERIFICATION PASSED",
         ):
             self.assertIn(line, result.stdout)
@@ -244,7 +272,7 @@ class TheCommand(unittest.TestCase):
         build = OneBuild()
         compact = json.dumps(build.document, sort_keys=True, separators=(",", ":")).encode("utf-8")
         build.published = _published(build.document, compact)
-        self._fails(build, "the delivered attestation is not the published one")
+        self._fails(build, "it differs in ['attestation_sha256']")
 
     def test_a_reproducible_digest_the_seal_does_not_state(self) -> None:
         build = OneBuild()
@@ -272,7 +300,7 @@ class TheCommand(unittest.TestCase):
         build = OneBuild()
         assert build.published is not None
         build.published["identity"]["ir_semantic_hash"] = "sha256:" + _hex("0")
-        self._fails(build, "the published identity is not the delivered one")
+        self._fails(build, "it differs in ['identity']")
 
     def test_a_seal_key_keys_json_does_not_publish(self) -> None:
         build = OneBuild()
@@ -308,6 +336,94 @@ class TheCommand(unittest.TestCase):
         build = OneBuild()
         build.statement["services"][0]["name"] = "billing"
         self._fails(build, "orders: no such service in this seal")
+
+    def test_every_published_field_is_the_delivered_files(self) -> None:
+        changes = {
+            "job_id": lambda p: p.update(job_id="1c2f6c55-7f9e-4c1a-9a63-1f0a7e2c4d11"),
+            "merkle": lambda p: p["merkle"].update(emit_root="sha256:" + _hex("1")),
+            "modules": lambda p: p["modules"][0].update(emission_sha256="sha256:" + _hex("1")),
+            "determinism": lambda p: p["determinism"][0].update(status="DRIFT"),
+            "terminal_gate_verdict_hash": lambda p: p.update(terminal_gate_verdict_hash="sha256:" + _hex("1")),
+            "not_tested_count": lambda p: p.update(not_tested_count=1),
+            "coverage": lambda p: p["coverage"].update(covered=9),
+            "certificate_fingerprint": lambda p: p.update(certificate_fingerprint="sha256:" + _hex("1")),
+        }
+        for field, change in changes.items():
+            with self.subTest(field=field):
+                build = OneBuild()
+                assert build.published is not None
+                change(build.published)
+                self._fails(build, f"it differs in ['{field}']")
+
+    def test_a_published_runner_the_file_does_not_state(self) -> None:
+        build = OneBuild()
+        assert build.published is not None
+        build.published.update(run_by="client", seal_class="self_attested")
+        self._fails(build, "it differs in ['run_by', 'seal_class']")
+
+    def test_a_seal_measurer_the_file_does_not_state(self) -> None:
+        build = OneBuild()
+        build.published = None
+        build.statement["services"][0]["verification"] = "self_attested"
+        self._fails(build, "the seal says the build was measured by self_attested, but its attestation says "
+                           "the tests were run by devmatrix")
+
+    def test_a_build_the_client_ran_binds_to_its_self_attested_seal(self) -> None:
+        build = OneBuild()
+        _run_by_client(build.document)
+        build.statement = _statement(build.document)
+        build.statement["services"][0]["verification"] = "self_attested"
+        build.published = dict(_published(build.document), run_by="client", seal_class="self_attested")
+        result = self._run(build)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("tests run by client, as the seal states (measured by self_attested)", result.stdout)
+        self.assertIn("tests run by client, seal self_attested)", result.stdout)
+
+    def test_a_verdict_that_names_no_runner(self) -> None:
+        build = OneBuild()
+        build.document["attested"]["platform_verdict"] = {"uts_disposition": "NOT_RUN"}
+        build.statement = _statement(build.document)
+        build.published = None
+        self._fails(build, "the delivered attestation's platform verdict does not state who ran the tests")
+
+    def test_a_seal_that_states_no_measurer_is_refused_and_the_rest_still_runs(self) -> None:
+        build = OneBuild()
+        build.published = None
+        build.statement["schema_id"] = "seal-statement/2"
+        del build.statement["services"][0]["verification"]
+        result = self._run(build)
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertIn("[FAIL] orders: the seal is a seal-statement/2, which does not state who measured the build", result.stdout)
+        self.assertIn("re-seal the platform (a new seal is seal-statement/3 or later)", result.stdout)
+        self.assertIn("[OK] orders: the delivered attestation is the sealed one", result.stdout)
+        self.assertIn("[OK] orders: the attestation names the specs the seal names", result.stdout)
+
+    def test_a_real_published_2_is_refused_with_what_to_do_and_the_seal_still_binds(self) -> None:
+        real = sorted((ROOT / "attestations" / "attestation").glob("*.json"))
+        self.assertTrue(real, "no published attestation in the repository to read")
+        for path in real:
+            with self.subTest(published=path.name):
+                payload = vf.signed_payload(vf.read_json(path))
+                self.assertEqual(payload["schema"], vf.ATTESTATION_SCHEMA_V2)
+                build = OneBuild()
+                build.published_file = path
+                build.keys = _keys() + vf.load_keys(vf.KEYS_FILE)
+                result = self._run(build)
+                self.assertNotEqual(result.returncode, 0, result.stdout)
+                self.assertIn("[OK] signature: Ed25519, key 'dm-prod-2026-01' (production)", result.stdout)
+                self.assertIn(
+                    "[FAIL] published attestation: published-attestation/2 names the attestation by the digest "
+                    "of a compact re-serialization, not of the delivered file, so it cannot be bound to the "
+                    "delivered file; republish the build's attestation (it is published as "
+                    "published-attestation/3) and verify again",
+                    result.stdout,
+                )
+                for line in (
+                    "[OK] orders: the delivered attestation is the sealed one",
+                    "[OK] orders: the attestation names the specs the seal names",
+                    "[OK] orders: tests run by devmatrix, as the seal states (measured by devmatrix)",
+                ):
+                    self.assertIn(line, result.stdout)
 
     def test_seal_takes_attestations_and_no_fingerprint(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

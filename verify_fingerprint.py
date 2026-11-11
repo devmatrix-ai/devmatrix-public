@@ -833,44 +833,128 @@ def _delivered(path: Path) -> tuple[bytes, dict]:
     return data, document
 
 
+#: Who measured a sealed build, as the seal statement states it from
+#: seal-statement/3 on (``verification``), and who ran its tests then.
+RUN_BY_OF_MEASURER = {"devmatrix": "devmatrix", "self_attested": "client"}
+#: The seal statement that states no measurer.
+SEAL_STATEMENT_WITHOUT_MEASURER = "seal-statement/2"
+#: The test dispositions of a delivered platform verdict that DevMatrix ran;
+#: tests not run because the client runs them carry ``RUN_BY_CLIENT_CAUSE``.
+RAN_BY_DEVMATRIX = frozenset({"PASSED", "FAILED", "PARTIAL", "INCOMPLETE"})
+TESTS_NOT_RUN = "NOT_RUN"
+RUN_BY_CLIENT_CAUSE = "runtime_phase_run_by_client"
+
+
+def _field(value: object, key: str) -> object:
+    return value.get(key) if isinstance(value, dict) else None
+
+
+def delivered_run_by(document: dict) -> str:
+    """Who ran the build's tests, read from the delivered attestation's
+    platform verdict: DevMatrix when it ran them, the client when they were
+    not run because the client runs them. Anything else is refused: tests run
+    by nobody are never said to be tested."""
+    verdict = _field(_field(document, "attested"), "platform_verdict")
+    disposition = _field(verdict, "uts_disposition")
+    if disposition == TESTS_NOT_RUN and _field(verdict, "uts_not_run_reason") == RUN_BY_CLIENT_CAUSE:
+        return "client"
+    if isinstance(disposition, str) and disposition in RAN_BY_DEVMATRIX:
+        return "devmatrix"
+    raise BindingRefused("the delivered attestation's platform verdict does not state who ran the tests")
+
+
+def project_published(document: dict) -> dict:
+    """The published attestation DevMatrix publishes for ``document``, a
+    delivered fingerprint attestation: the same fields from the same places,
+    with the seal class that goes with who ran the tests. A field the file
+    does not carry is projected as ``None``, so it can never equal a stated
+    one."""
+    reproducible = _field(document, "reproducible")
+    attested = _field(document, "attested")
+    merkle = _field(reproducible, "merkle")
+    coverage = _field(document, "coverage")
+    leaves = _field(merkle, "emit_leaves")
+    modules = _field(reproducible, "modules")
+    determinism = _field(attested, "modules")
+    run_by = delivered_run_by(document)
+    return {
+        "schema": ATTESTATION_SCHEMA_V3,
+        "job_id": _field(document, "job_id"),
+        "attestation_sha256": _sha256_prefixed(attestation_document_bytes(document)),
+        "reproducible_sha256": _field(document, "reproducible_sha256"),
+        "identity": _field(reproducible, "identity"),
+        "merkle": {
+            "nested_root": _field(merkle, "nested_root"),
+            "sub_roots": _field(merkle, "sub_roots"),
+            "emit_root": _field(merkle, "emit_root"),
+            "emit_leaf_sha256": [_field(row, "leaf_sha256") for row in leaves] if isinstance(leaves, list) else None,
+        },
+        "modules": [
+            {"module": _field(row, "module"), "emission_sha256": _field(row, "emission_sha256")}
+            for row in modules
+        ] if isinstance(modules, list) else None,
+        "determinism": determinism if isinstance(determinism, list) else None,
+        "terminal_gate_verdict_hash": _field(attested, "terminal_gate_verdict_hash"),
+        "not_tested_count": _field(attested, "not_tested_count"),
+        "coverage": {
+            "delivered_files": _field(coverage, "delivered_files"),
+            "covered": _field(coverage, "covered"),
+        },
+        "certificate_fingerprint": _field(document, "certificate_fingerprint"),
+        "run_by": run_by,
+        "seal_class": SEAL_CLASS_OF_RUN_BY[run_by],
+    }
+
+
+def attestation_document_bytes(document: dict) -> bytes:
+    """The exact bytes a fingerprint attestation is delivered as: sorted keys,
+    two-space indent, one trailing newline."""
+    return (json.dumps(document, sort_keys=True, indent=2, allow_nan=False) + "\n").encode("utf-8")
+
+
 def bind_attestation(
     service: str, path: Path, statement: dict, published: dict | None, lines: list[str],
-) -> None:
+) -> list[str]:
     """Bind one service's delivered attestation to the seal and, when given,
-    to the published attestation, appending the lines to report to ``lines``;
-    :class:`BindingRefused` at the first check that does not hold:
+    to the published attestation. Every check runs; the lines of those that
+    hold are appended to ``lines`` and the ones that do not are returned:
 
     1. the file's SHA-256 is the ``document_sha256`` the seal signed for the
-       service, and the published ``attestation_sha256``;
-    2. ``reproducible_sha256`` is one value in the file, the seal and the
-       published attestation;
-    3. the file names the specs the seal names (its platform spec hash and its
-       hash for the service), and its identity is the published identity.
+       service, and ``reproducible_sha256`` is the seal's;
+    2. the file names the specs the seal names (its platform spec hash and its
+       hash for the service);
+    3. who ran the tests, read from the file, is who the seal says measured
+       the build (a seal-statement/2 states no measurer, and is refused);
+    4. the published attestation is exactly what the file publishes as: every
+       field, its digest, identity, runner and seal class included.
     """
     by_name = {s.get("name"): s for s in statement.get("services", []) if isinstance(s, dict)}
     sealed = by_name.get(service)
     if sealed is None:
-        raise BindingRefused(f"{service}: no such service in this seal")
+        return [f"{service}: no such service in this seal"]
     sealed_attestation = sealed.get("fingerprint_attestation")
     if not isinstance(sealed_attestation, dict):
-        raise BindingRefused(f"{service}: the seal states no fingerprint attestation for it")
-    data, document = _delivered(path)
+        return [f"{service}: the seal states no fingerprint attestation for it"]
+    try:
+        data, document = _delivered(path)
+    except BindingRefused as refused:
+        return [f"{service}: {refused}"]
+    failures: list[str] = []
     digest = _sha256_prefixed(data)
     lines.append(f"      {service}: delivered attestation {digest}")
-    pairs = [("sealed", sealed_attestation.get("document_sha256"))]
-    if published is not None:
-        pairs.append(("published", published.get("attestation_sha256")))
-    for where, stated in pairs:
-        if stated != digest:
-            raise BindingRefused(f"{service}: the delivered attestation is not the {where} one ({stated})")
-    lines.append(f"[OK] {service}: the delivered attestation is the " + " and the ".join(w for w, _ in pairs) + " one")
-    reproducible = [("delivered", document["reproducible_sha256"]),
-                    ("sealed", sealed_attestation.get("reproducible_sha256"))]
-    if published is not None:
-        reproducible.append(("published", published.get("reproducible_sha256")))
-    if len({value for _, value in reproducible}) != 1:
-        raise BindingRefused(f"{service}: reproducible_sha256 differs: " + ", ".join(f"{w} {v}" for w, v in reproducible))
-    lines.append(f"[OK] {service}: reproducible {document['reproducible_sha256']}")
+    if sealed_attestation.get("document_sha256") != digest:
+        failures.append(
+            f"{service}: the delivered attestation is not the sealed one ({sealed_attestation.get('document_sha256')})"
+        )
+    else:
+        lines.append(f"[OK] {service}: the delivered attestation is the sealed one")
+    if sealed_attestation.get("reproducible_sha256") != document["reproducible_sha256"]:
+        failures.append(
+            f"{service}: reproducible_sha256 differs: delivered {document['reproducible_sha256']}, "
+            f"sealed {sealed_attestation.get('reproducible_sha256')}"
+        )
+    else:
+        lines.append(f"[OK] {service}: reproducible {document['reproducible_sha256']}")
     identity = document["reproducible"]["identity"]
     platform = statement.get("platform")
     spec_pairs = (
@@ -878,59 +962,120 @@ def bind_attestation(
          platform.get("spec_hash") if isinstance(platform, dict) else None),
         ("service spec", identity[SERVICE_SPEC_HASHES].get(service), sealed.get("spec_hash")),
     )
-    for what, attested, sealed_hash in spec_pairs:
-        if attested is None or attested != sealed_hash:
-            raise BindingRefused(f"{service}: the attestation's {what} hash {attested} is not the sealed {sealed_hash}")
-    lines.append(f"[OK] {service}: the attestation names the specs the seal names")
+    spec_failures = [
+        f"{service}: the attestation's {what} hash {attested} is not the sealed {sealed_hash}"
+        for what, attested, sealed_hash in spec_pairs
+        if attested is None or attested != sealed_hash
+    ]
+    failures += spec_failures
+    if not spec_failures:
+        lines.append(f"[OK] {service}: the attestation names the specs the seal names")
+    failures += _measurer_failures(service, statement, sealed, document, lines)
     if published is not None:
-        if published.get("identity") != identity:
-            raise BindingRefused(f"{service}: the published identity is not the delivered one")
-        lines.append(f"[OK] {service}: the published identity is the delivered one")
+        failures += _published_failures(service, document, published, lines)
+    return failures
 
 
-def _published_for_binding(path: Path, keys: list[dict]) -> tuple[dict, list[str]]:
-    evidence = read_json(path)
+def _measurer_failures(
+    service: str, statement: dict, sealed: dict, document: dict, lines: list[str],
+) -> list[str]:
+    if statement.get("schema_id") == SEAL_STATEMENT_WITHOUT_MEASURER:
+        return [
+            f"{service}: the seal is a {SEAL_STATEMENT_WITHOUT_MEASURER}, which does not state who measured "
+            "the build, so who ran its tests cannot be checked against it; re-seal the platform (a new seal "
+            "is seal-statement/3 or later) and verify the new seal"
+        ]
+    measurer = sealed.get("verification")
+    if measurer not in RUN_BY_OF_MEASURER:
+        return [f"{service}: the seal does not state who measured the build"]
+    try:
+        run_by = delivered_run_by(document)
+    except BindingRefused as refused:
+        return [f"{service}: {refused}"]
+    if RUN_BY_OF_MEASURER[measurer] != run_by:
+        return [
+            f"{service}: the seal says the build was measured by {measurer}, "
+            f"but its attestation says the tests were run by {run_by}"
+        ]
+    lines.append(f"[OK] {service}: tests run by {run_by}, as the seal states (measured by {measurer})")
+    return []
+
+
+def _published_failures(service: str, document: dict, published: dict, lines: list[str]) -> list[str]:
+    try:
+        expected = project_published(document)
+    except BindingRefused as refused:
+        return [f"{service}: {refused}"]
+    differing = sorted(key for key in set(expected) | set(published) if expected.get(key) != published.get(key))
+    if differing:
+        return [
+            f"{service}: the published attestation is not what the delivered file publishes as; "
+            f"it differs in {differing}"
+        ]
+    lines.append(
+        f"[OK] {service}: the published attestation is exactly what the delivered file publishes as "
+        f"(its digest, identity, tests run by {published['run_by']}, seal {published['seal_class']})"
+    )
+    return []
+
+
+def _published_for_binding(path: Path, keys: list[dict]) -> tuple[dict | None, list[str], list[str]]:
+    """The published attestation to bind, the lines to report and the
+    failures; ``None`` when it cannot be bound, so the rest still runs."""
+    try:
+        evidence = read_json(path)
+    except (OSError, ValueError) as exc:
+        return None, [], [f"published attestation: cannot read {path}: {exc}"]
     passed, lines = verify_signature(evidence, keys)
     if not passed:
-        raise BindingRefused("published attestation: " + "; ".join(lines))
+        return None, [], ["published attestation: " + "; ".join(lines)]
     payload = signed_payload(evidence)
     try:
         lines += check_published_attestation(payload)
     except AttestationRefused as refusal:
-        raise BindingRefused(str(refusal)) from refusal
+        return None, lines, [str(refusal)]
     if payload.get("schema") != ATTESTATION_SCHEMA_V3:
-        raise BindingRefused(
-            f"published attestation: {payload.get('schema')} states the digest of another serialization "
-            "of the attestation; it cannot be bound to the delivered file"
-        )
-    return payload, lines
+        return None, lines, [
+            f"published attestation: {payload.get('schema')} names the attestation by the digest of a compact "
+            "re-serialization, not of the delivered file, so it cannot be bound to the delivered file; "
+            f"republish the build's attestation (it is published as {ATTESTATION_SCHEMA_V3}) and verify again"
+        ]
+    return payload, lines, []
 
 
 def verify_binding(
     bundle: Path, attestations: list[tuple[str, Path]], published_path: Path | None, keys: list[dict],
 ) -> bool:
     """Print the verdict of binding each delivered attestation to the seal
-    (and the published attestation, when given); whether all of it held."""
+    (and the published attestation, when given); whether all of it held.
+    Every check that can run does: the [OK] lines say what was verified and
+    the [FAIL] lines what was not."""
     lines: list[str] = []
     try:
         statement, seal_lines = read_seal(bundle, keys)
-        lines += seal_lines
-        published = None
-        if published_path is not None:
-            published, published_lines = _published_for_binding(published_path, keys)
-            lines += published_lines
-        if published is not None and len(attestations) != 1:
-            raise BindingRefused("a published attestation is one build's: name exactly one --attestation with it")
-        for service, path in attestations:
-            bind_attestation(service, path, statement, published, lines)
     except (BindingRefused, OSError, ValueError) as refusal:
-        for line in lines:
-            print(line)
         print(f"[FAIL] {refusal}")
         return False
+    lines += seal_lines
+    failures: list[str] = []
+    published = None
+    if published_path is not None:
+        published, published_lines, published_failures = _published_for_binding(published_path, keys)
+        lines += published_lines
+        failures += published_failures
+    if published is not None and len(attestations) != 1:
+        failures.append("a published attestation is one build's: name exactly one --attestation with it")
+        published = None
+    for service, path in attestations:
+        try:
+            failures += bind_attestation(service, path, statement, published, lines)
+        except (OSError, ValueError) as exc:
+            failures.append(f"{service}: cannot read {path}: {exc}")
     for line in lines:
         print(line)
-    return True
+    for failure in failures:
+        print(f"[FAIL] {failure}")
+    return not failures
 
 
 def _attestation_argument(value: str) -> tuple[str, Path]:
