@@ -355,6 +355,18 @@ class TheCommand(unittest.TestCase):
                 change(build.published)
                 self._fails(build, f"it differs in ['{field}']")
 
+    def test_a_published_digest_of_the_rewritten_file_not_the_delivered_bytes(self) -> None:
+        build = OneBuild()
+        build.data = json.dumps(build.document, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        build.statement["services"][0]["fingerprint_attestation"]["document_sha256"] = _digest(build.data)
+        self._fails(build, "it differs in ['attestation_sha256']")
+
+    def test_a_seal_service_that_names_no_measurer(self) -> None:
+        build = OneBuild()
+        build.published = None
+        del build.statement["services"][0]["verification"]
+        self._fails(build, "orders: the seal does not state who measured the build")
+
     def test_a_published_runner_the_file_does_not_state(self) -> None:
         build = OneBuild()
         assert build.published is not None

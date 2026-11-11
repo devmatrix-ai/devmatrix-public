@@ -863,12 +863,13 @@ def delivered_run_by(document: dict) -> str:
     raise BindingRefused("the delivered attestation's platform verdict does not state who ran the tests")
 
 
-def project_published(document: dict) -> dict:
+def project_published(document: dict, data: bytes) -> dict:
     """The published attestation DevMatrix publishes for ``document``, a
-    delivered fingerprint attestation: the same fields from the same places,
-    with the seal class that goes with who ran the tests. A field the file
-    does not carry is projected as ``None``, so it can never equal a stated
-    one."""
+    delivered fingerprint attestation read from the bytes ``data``: the same
+    fields from the same places, with the seal class that goes with who ran
+    the tests, and the digest of the delivered bytes themselves. A field the
+    file does not carry is projected as ``None``, so it can never equal a
+    stated one."""
     reproducible = _field(document, "reproducible")
     attested = _field(document, "attested")
     merkle = _field(reproducible, "merkle")
@@ -880,7 +881,7 @@ def project_published(document: dict) -> dict:
     return {
         "schema": ATTESTATION_SCHEMA_V3,
         "job_id": _field(document, "job_id"),
-        "attestation_sha256": _sha256_prefixed(attestation_document_bytes(document)),
+        "attestation_sha256": _sha256_prefixed(data),
         "reproducible_sha256": _field(document, "reproducible_sha256"),
         "identity": _field(reproducible, "identity"),
         "merkle": {
@@ -904,12 +905,6 @@ def project_published(document: dict) -> dict:
         "run_by": run_by,
         "seal_class": SEAL_CLASS_OF_RUN_BY[run_by],
     }
-
-
-def attestation_document_bytes(document: dict) -> bytes:
-    """The exact bytes a fingerprint attestation is delivered as: sorted keys,
-    two-space indent, one trailing newline."""
-    return (json.dumps(document, sort_keys=True, indent=2, allow_nan=False) + "\n").encode("utf-8")
 
 
 def bind_attestation(
@@ -972,7 +967,7 @@ def bind_attestation(
         lines.append(f"[OK] {service}: the attestation names the specs the seal names")
     failures += _measurer_failures(service, statement, sealed, document, lines)
     if published is not None:
-        failures += _published_failures(service, document, published, lines)
+        failures += _published_failures(service, data, document, published, lines)
     return failures
 
 
@@ -1001,9 +996,11 @@ def _measurer_failures(
     return []
 
 
-def _published_failures(service: str, document: dict, published: dict, lines: list[str]) -> list[str]:
+def _published_failures(
+    service: str, data: bytes, document: dict, published: dict, lines: list[str],
+) -> list[str]:
     try:
-        expected = project_published(document)
+        expected = project_published(document, data)
     except BindingRefused as refused:
         return [f"{service}: {refused}"]
     differing = sorted(key for key in set(expected) | set(published) if expected.get(key) != published.get(key))
