@@ -14,6 +14,12 @@
 
 ## Verifier
 
+- **A published fingerprint is checked against its one schema.**
+  `published-fingerprint/2` is verified against its closed set of keys and
+  carries no `code_bundle_hash` (the delivered code is sealed per module in the
+  export manifest). `published-fingerprint/1` was never published and is
+  refused by name; any other fingerprint schema is refused as unknown. Before,
+  a published fingerprint was refused as an unknown attestation schema.
 - **The published attestation is the delivered file's, and its runner the
   seal's.** With `--published`, the published attestation must be exactly what
   the delivered file is published as: every field is recomputed and each one

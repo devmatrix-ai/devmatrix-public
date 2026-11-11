@@ -123,6 +123,24 @@ def code_bundle_hash(directory: Path) -> str:
 
 **Note**: `build_timestamp` is for auditing only and is NOT part of any hash calculation. Same inputs at different times produce identical hashes.
 
+
+### Published fingerprint: `published-fingerprint/2`
+
+The public projection of a build's fingerprint record. It is the only
+published-fingerprint schema ever published, and its top-level keys are a
+closed set:
+
+- always present: `schema`, `source_record_digest` (64 hex chars);
+- when the build recorded them: `build_id`, `job_id`, `spec_hash`,
+  `verdict_binding`, `compile_status`, `release_ref`, `merkle_root`,
+  `determinism`, `passed`, `terminal_success`, `seal`, `customer_checks`,
+  `complexity_measurement`.
+
+It carries no `code_bundle_hash`: the delivered code never reproduced that
+digest, and each module's delivered code is sealed in the export manifest
+instead. The verifier refuses a `published-fingerprint/2` that carries it, any
+other undeclared key, and `published-fingerprint/1`, which was never published.
+
 ---
 
 ## 6. Verification Process

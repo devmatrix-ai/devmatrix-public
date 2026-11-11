@@ -572,6 +572,65 @@ ATTESTATION_SCHEMAS: Mapping[str, Check] = {
 }
 
 
+#: The published fingerprint: the public projection of a build's fingerprint
+#: record. ``/2`` is the only one ever published; it carries no
+#: ``code_bundle_hash``, which the delivered code never reproduced (each
+#: module's delivered code is sealed in the export manifest instead).
+PUBLISHED_FINGERPRINT_PREFIX = "published-fingerprint/"
+PUBLISHED_FINGERPRINT_SCHEMA_V2 = "published-fingerprint/2"
+#: Schemas that were defined but never published: refused by name, never read.
+PUBLISHED_FINGERPRINT_NEVER_PUBLISHED = ("published-fingerprint/1",)
+#: The top-level keys a published fingerprint may carry; only the first two
+#: are always present.
+PUBLISHED_FINGERPRINT_REQUIRED = ("schema", "source_record_digest")
+PUBLISHED_FINGERPRINT_KEYS = PUBLISHED_FINGERPRINT_REQUIRED + (
+    "build_id", "job_id", "spec_hash", "verdict_binding", "compile_status", "release_ref",
+    "merkle_root", "determinism", "passed", "terminal_success", "seal",
+    "customer_checks", "complexity_measurement",
+)
+_SOURCE_RECORD_DIGEST = re.compile(r"[0-9a-f]{64}")
+
+
+def is_published_fingerprint(payload: dict) -> bool:
+    """Whether a signed payload names a published-fingerprint schema."""
+    schema = payload.get("schema")
+    return isinstance(schema, str) and schema.startswith(PUBLISHED_FINGERPRINT_PREFIX)
+
+
+def check_published_fingerprint(payload: dict) -> list[str]:
+    """Validate a published fingerprint against the one schema ever published.
+
+    Raises :class:`AttestationRefused` for a schema that was never published
+    (named as such), an unknown one, a ``code_bundle_hash`` (named), any other
+    undeclared top-level key, a missing required key, or a source record
+    digest that is not a sha256 hex digest. The values under the other keys
+    are reported by the signature and hash checks, not validated here.
+    """
+    schema = payload.get("schema")
+    if schema in PUBLISHED_FINGERPRINT_NEVER_PUBLISHED:
+        raise AttestationRefused(
+            f"fingerprint schema {schema!r} was never published; "
+            f"a published fingerprint is {PUBLISHED_FINGERPRINT_SCHEMA_V2}"
+        )
+    if schema != PUBLISHED_FINGERPRINT_SCHEMA_V2:
+        raise AttestationRefused(f"unknown fingerprint schema {schema!r}")
+    if "code_bundle_hash" in payload:
+        raise AttestationRefused(
+            f"fingerprint: {schema} carries no code_bundle_hash; the delivered code is "
+            "sealed per module in the export manifest"
+        )
+    undeclared = sorted(set(payload) - set(PUBLISHED_FINGERPRINT_KEYS))
+    if undeclared:
+        raise AttestationRefused(f"fingerprint: carries undeclared keys {undeclared}")
+    missing = sorted(set(PUBLISHED_FINGERPRINT_REQUIRED) - set(payload))
+    if missing:
+        raise AttestationRefused(f"fingerprint: lacks {missing}")
+    digest = payload["source_record_digest"]
+    if not isinstance(digest, str) or _SOURCE_RECORD_DIGEST.fullmatch(digest) is None:
+        raise AttestationRefused("fingerprint.source_record_digest: is not a sha256 digest")
+    return [f"[OK] fingerprint: {schema}"]
+
+
 def is_published_attestation(payload: dict) -> bool:
     """Whether a signed payload is, or claims to be, a published attestation:
     it carries a ``schema`` key (no other evidence this verifier reads does),
@@ -625,14 +684,16 @@ def check_published_attestation(payload: dict) -> list[str]:
 
 
 def check_attestation(label: str, evidence: dict) -> bool:
-    """Print the attestation verdict of ``evidence`` when its signed payload is
-    a published attestation; other documents have nothing to check here."""
+    """Print the schema verdict of ``evidence`` when its signed payload is a
+    published fingerprint or a published attestation; other documents have
+    nothing to check here."""
     payload = signed_payload(evidence)
-    if not is_published_attestation(payload):
+    fingerprint = is_published_fingerprint(payload)
+    if not fingerprint and not is_published_attestation(payload):
         return True
     suffix = f"  ({label})" if label else ""
     try:
-        lines = check_published_attestation(payload)
+        lines = (check_published_fingerprint if fingerprint else check_published_attestation)(payload)
     except AttestationRefused as refusal:
         print(f"[FAIL] {refusal}{suffix}")
         return False
