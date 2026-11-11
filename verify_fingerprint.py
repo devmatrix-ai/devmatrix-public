@@ -503,6 +503,58 @@ def check_attestation(label: str, evidence: dict) -> bool:
     return True
 
 
+#: The field each kind of published document names itself by: a build
+#: fingerprint its build, a published attestation its job, the earliest
+#: fingerprints their run. A document that names none is refused, never
+#: shown as ``N/A``.
+IDENTITY_FIELDS = (("build_id", "Build ID"), ("job_id", "Job ID"), ("run_id", "Run ID"))
+#: When the signed document says it was made, in the field its kind uses.
+TIME_FIELDS = (("build_timestamp", "Timestamp"), ("created_at", "Created at"))
+
+
+class IdentityMissing(ValueError):
+    """The document names no build, job or run, so no output can say which
+    one was verified."""
+
+
+def identity_lines(evidence: dict) -> list[str]:
+    """The lines that say which document is being verified: the identity and
+    the time its signed payload declares, and when it was published (which
+    the signature does not cover). Refuses a document that names none."""
+    payload = signed_payload(evidence)
+    names = [
+        f"{label}: {payload[field]}"
+        for field, label in IDENTITY_FIELDS
+        if isinstance(payload.get(field), str) and payload[field]
+    ]
+    if not names:
+        raise IdentityMissing(
+            "the document names no "
+            + ", ".join(field for field, _label in IDENTITY_FIELDS)
+            + "; there is nothing to say which build was verified"
+        )
+    lines = names + [
+        f"{label}: {payload[field]}"
+        for field, label in TIME_FIELDS
+        if isinstance(payload.get(field), str) and payload[field]
+    ]
+    published = evidence.get("published_at")
+    if isinstance(published, str) and published:
+        lines.append(f"Published at: {published} (not covered by the signature)")
+    return lines
+
+
+def print_identity(evidence: dict) -> None:
+    """Print :func:`identity_lines`, or refuse with exit 1."""
+    try:
+        lines = identity_lines(evidence)
+    except IdentityMissing as missing:
+        print(f"ERROR: {missing}")
+        sys.exit(1)
+    for line in lines:
+        print(line)
+
+
 def signed_payload(evidence: dict) -> dict:
     """The fingerprint a file carries: the signed ``fingerprint`` object of an
     evidence pack, or the whole of a flat ``build_fingerprint.json``."""
@@ -622,8 +674,7 @@ Examples:
     print("DevMatrix Build Fingerprint Verification")
     print("=" * 60)
     print(f"\nFingerprint: {args.fingerprint}")
-    print(f"Build ID: {fingerprint.get('build_id', 'N/A')}")
-    print(f"Timestamp: {fingerprint.get('build_timestamp', 'N/A')}")
+    print_identity(evidence)
     print()
 
     all_passed = check_signature(
@@ -639,9 +690,8 @@ Examples:
             sys.exit(1)
 
         evidence2 = read_json(args.compare)
-        fp2 = flatten_fingerprint(evidence2)
         print(f"Comparing with: {args.compare}")
-        print(f"Build ID: {fp2.get('build_id', 'N/A')}")
+        print_identity(evidence2)
         if not check_signature(
             str(args.compare), evidence2, keys, args.allow_unsigned
         ):
