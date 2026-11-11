@@ -291,7 +291,7 @@ class TheCommand(unittest.TestCase):
 
     def test_a_seal_key_that_is_not_a_production_key(self) -> None:
         build = OneBuild()
-        build.keys[0]["class"] = "development"
+        build.keys[0]["class"] = "staging"
         self._fails(build, "is NOT a production key; this is not a DevMatrix seal")
 
     def test_a_published_attestation_of_an_earlier_schema_cannot_be_bound(self) -> None:
