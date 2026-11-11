@@ -151,7 +151,7 @@ class ATamperedSignatureFails(unittest.TestCase):
         evidence = _production_sample()
         short = base64.b64encode(b"\x01" * 31).decode()
         evidence["signature"]["public_key"] = short
-        keys = [dict(k, public_key=short) for k in KEYS if k["key_id"] == evidence["signature"]["key_id"]]
+        keys = [dict(next(k for k in KEYS if k["key_id"] == evidence["signature"]["key_id"]), public_key=short)]
         passed, lines = vf.verify_signature(evidence, keys)
         self.assertFalse(passed, lines)
         self.assertIn("INVALID", lines[-1])
@@ -193,6 +193,8 @@ class TheKeysFile(unittest.TestCase):
                 "the old form": {"keys": KEYS},
                 "an entry with an undeclared field": {"schema_id": vf.KEYS_SCHEMA_ID, "keys": [dict(KEYS[0], anchor="x")]},
                 "a kid that is not its key's": {"schema_id": vf.KEYS_SCHEMA_ID, "keys": [dict(KEYS[0], kid="sha256:" + "0" * 64)]},
+                "one key listed twice": {"schema_id": vf.KEYS_SCHEMA_ID, "keys": [KEYS[0], dict(KEYS[0], status="revoked")]},
+                "an unknown status": {"schema_id": vf.KEYS_SCHEMA_ID, "keys": [dict(KEYS[0], status="compromised")]},
             }
             for case, document in cases.items():
                 with self.subTest(case=case):
@@ -204,7 +206,22 @@ class TheKeysFile(unittest.TestCase):
         name = next(iter(EXPECTED))
         passed, lines = vf.verify_signature(_evidence(name), [dict(k, status="revoked") for k in KEYS])
         self.assertFalse(passed, lines)
-        self.assertIn("REVOKED", lines[-1])
+        self.assertIn("REVOKED, not active or retired", lines[-1])
+
+    def test_only_an_active_or_retired_key_verifies(self) -> None:
+        name = next(iter(EXPECTED))
+        for status in ("Revoked", "suspended", ""):
+            with self.subTest(status=status):
+                passed, lines = vf.verify_signature(_evidence(name), [dict(k, status=status) for k in KEYS])
+                self.assertFalse(passed, lines)
+                self.assertIn("not active or retired", lines[-1])
+
+    def test_a_key_listed_twice_never_verifies_whatever_the_order(self) -> None:
+        name = next(iter(EXPECTED))
+        for keys in (KEYS + [dict(k, status="revoked") for k in KEYS], [dict(k, status="revoked") for k in KEYS] + KEYS):
+            passed, lines = vf.verify_signature(_evidence(name), keys)
+            self.assertFalse(passed, lines)
+            self.assertIn("more than once", lines[-1])
 
     def test_a_key_that_signs_no_evidence_never_verifies(self) -> None:
         name = next(iter(EXPECTED))

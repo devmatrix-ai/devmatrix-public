@@ -38,6 +38,9 @@ PRODUCTION = "production"
 #: with there, without sign-in, in the same devmatrix-keys/1 document.
 KEYS_URL = "https://devmatrix.dev/.well-known/devmatrix-keys.json"
 KEYS_SCHEMA_ID = "devmatrix-keys/1"
+#: The statuses a published key can have; only the first two verify.
+KEY_STATUSES = frozenset({"active", "retired", "revoked"})
+VERIFYING_STATUSES = frozenset({"active", "retired"})
 KEY_FIELDS = frozenset({
     "kid", "key_id", "purpose", "class", "algorithm", "public_key",
     "status", "status_since", "created_at", "expires_at",
@@ -200,10 +203,16 @@ def load_keys(path: Path) -> list[dict]:
     malformed = [i for i, k in enumerate(keys) if not isinstance(k, dict) or set(k) != KEY_FIELDS]
     if malformed:
         raise ValueError(f"{path}: key entries {malformed} are not {KEYS_SCHEMA_ID} keys")
+    kids = set()
     for i, key in enumerate(keys):
         raw = _b64(key["public_key"], f"key {i} public_key")
         if key["kid"] != "sha256:" + hashlib.sha256(raw).hexdigest():
             raise ValueError(f"{path}: key {i} kid is not the SHA-256 of its public key")
+        if key["kid"] in kids:
+            raise ValueError(f"{path}: key {i} lists public key {key['kid']} a second time")
+        kids.add(key["kid"])
+        if key["status"] not in KEY_STATUSES:
+            raise ValueError(f"{path}: key {i} status {key['status']!r} is not one of {sorted(KEY_STATUSES)}")
     return keys
 
 
@@ -262,17 +271,20 @@ def verify_signature(
     published = [k for k in keys if k.get("key_id") == key_id]
     if not published:
         return False, [f"[FAIL] signature: key_id {key_id!r} is not a published DevMatrix key"]
-    entry = next((k for k in published if k.get("public_key") == signature.get("public_key")), None)
-    if entry is None:
+    matching = [k for k in published if k.get("public_key") == signature.get("public_key")]
+    if not matching:
         return False, [
             f"[FAIL] signature: the public key in the file is not the one published for {key_id!r}"
         ]
+    if len(matching) != 1:
+        return False, [f"[FAIL] signature: keys.json lists the key of {key_id!r} more than once"]
+    entry = matching[0]
     if entry.get("algorithm") != "Ed25519":
         return False, [f"[FAIL] signature: the published key {key_id!r} is not an Ed25519 key"]
     if entry.get("purpose") != "evidence-signing":
         return False, [f"[FAIL] signature: the published key {key_id!r} does not sign evidence"]
-    if entry.get("status") == "revoked":
-        return False, [f"[FAIL] signature: the published key {key_id!r} is REVOKED"]
+    if entry.get("status") not in VERIFYING_STATUSES:
+        return False, [f"[FAIL] signature: the published key {key_id!r} is {str(entry.get('status')).upper()}, not active or retired"]
 
     try:
         signed_at = _instant(signature.get("signed_at"), "signed_at")
