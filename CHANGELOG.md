@@ -25,6 +25,12 @@
   hex digest, a closed set is closed, and the nested objects (Merkle
   commitment, determinism, seal, customer checks, complexity) carry exactly
   their declared keys, each of its declared form.
+- **`keys.json` is refreshed from the published keys by one command.**
+  `refresh_keys.py` reads the `devmatrix-keys/1` document DevMatrix publishes
+  (https, certificate verified, no redirect), checks it with the verifier's own
+  reader, and writes it unchanged only when it can replace `keys.json`: every
+  key production Ed25519, one active key per purpose, and no key dropped,
+  rewritten or moved back in status. `--check` reports drift without writing.
 - **The published attestation is the delivered file's, and its runner the
   seal's.** With `--published`, the published attestation must be exactly what
   the delivered file is published as: every field is recomputed and each one

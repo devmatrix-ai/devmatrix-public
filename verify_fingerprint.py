@@ -195,8 +195,18 @@ def load_keys(path: Path) -> list[dict]:
     ``key_id`` once named two keys, so a key is found by its label and its
     public key together.
     """
-    document = read_json(path)
-    if set(document) != {"schema_id", "keys"} or document["schema_id"] != KEYS_SCHEMA_ID:
+    return keys_of(read_json(path), str(path))
+
+
+def keys_of(document: object, path: str) -> list[dict]:
+    """The keys of a devmatrix-keys/1 ``document`` read from ``path``: the
+    exact fields, each ``kid`` recomputed from its public key, no public key
+    twice and a known status, or ``ValueError`` naming what is wrong."""
+    if (
+        not isinstance(document, dict)
+        or set(document) != {"schema_id", "keys"}
+        or document["schema_id"] != KEYS_SCHEMA_ID
+    ):
         raise ValueError(f"{path} is not a {KEYS_SCHEMA_ID} document")
     keys = document["keys"]
     if not isinstance(keys, list) or not keys:
