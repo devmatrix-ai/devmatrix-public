@@ -208,6 +208,12 @@ class TheKeysFile(unittest.TestCase):
         self.assertFalse(passed, lines)
         self.assertIn("REVOKED, not active or retired", lines[-1])
 
+    def test_a_key_with_no_window_start_never_verifies(self) -> None:
+        name = next(iter(EXPECTED))
+        passed, lines = vf.verify_signature(_evidence(name), [dict(k, created_at=None) for k in KEYS])
+        self.assertFalse(passed, lines)
+        self.assertIn("names no window start", lines[-1])
+
     def test_only_an_active_or_retired_key_verifies(self) -> None:
         name = next(iter(EXPECTED))
         for status in ("Revoked", "suspended", ""):

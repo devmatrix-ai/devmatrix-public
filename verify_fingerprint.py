@@ -286,6 +286,8 @@ def verify_signature(
     if entry.get("status") not in VERIFYING_STATUSES:
         return False, [f"[FAIL] signature: the published key {key_id!r} is {str(entry.get('status')).upper()}, not active or retired"]
 
+    if entry.get("created_at") is None:
+        return False, [f"[FAIL] signature: the published key {key_id!r} names no window start (created_at)"]
     try:
         signed_at = _instant(signature.get("signed_at"), "signed_at")
         valid_from = _instant(entry.get("created_at"), "created_at")
