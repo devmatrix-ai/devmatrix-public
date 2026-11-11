@@ -312,7 +312,11 @@ class TheCommandLine(unittest.TestCase):
         self.assertEqual(
             options,
             {"-h", "--help", "-f", "--fingerprint", "-s", "--spec", "-o", "--output",
-             "--compare", "--keys", "--allow-unsigned"},
+             "--compare", "--keys", "--allow-unsigned",
+             # 2026-11-11: the seal binding names its inputs; none of them
+             # accepts a key that is not a production key (the seal test
+             # ``test_a_seal_key_that_is_not_a_production_key``).
+             "--seal", "--attestation", "--published"},
         )
 
     def test_without_cryptography_the_signature_fails_never_skips(self) -> None:

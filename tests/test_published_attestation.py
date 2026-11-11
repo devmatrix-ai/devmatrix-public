@@ -141,7 +141,7 @@ class ARefusedAttestation(unittest.TestCase):
         self._refused(_attestation_v2("devmatrix", "gold"), "attestation.seal_class")
 
     def test_an_unknown_schema(self) -> None:
-        self._refused(dict(_attestation_v2(), schema="published-attestation/3"), "unknown attestation schema")
+        self._refused(dict(_attestation_v2(), schema="published-attestation/9"), "unknown attestation schema")
 
     def test_an_undeclared_key_at_any_level(self) -> None:
         self._refused(dict(_attestation_v2(), source_code="x"), "undeclared keys ['source_code']")

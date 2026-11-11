@@ -14,6 +14,16 @@
 
 ## Verifier
 
+- **One build, three documents.** `--seal <bundle> --attestation <service>=<file>
+  [--published <file>]` binds a download's fingerprint attestation to the
+  platform seal and the published attestation: the file's SHA-256 is the one
+  the seal signed and the published `attestation_sha256`, the reproducible
+  digest is one value in all three, and the file names the specs the seal
+  names. The seal key must be a production `seal-signing` key in `keys.json`.
+- **`published-attestation/3`.** States the platform's and each module's spec
+  hash, with the module map's digest recomputed; named Merkle sub-roots and
+  NOT_VERIFIED causes are closed sets. Its `attestation_sha256` is the digest
+  of the delivered file's bytes. `/1` and `/2` still verify.
 - **Published attestations.** A signed document that names an attestation
   schema is checked against that closed schema. `published-attestation/2`
   states who ran the build's tests (`run_by`) and the seal class

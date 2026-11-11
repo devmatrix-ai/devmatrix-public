@@ -12,6 +12,7 @@ The hashes use the Python standard library only. The signature needs the
 fails, it is never skipped.
 
 Usage:
+    python verify_fingerprint.py --seal <seal bundle dir> --attestation <service>=fingerprint_attestation.json [--published attestations/<job>.json]
     python verify_fingerprint.py --fingerprint build_fingerprint.json --spec spec.md --output generated/
     python verify_fingerprint.py --fingerprint build_fingerprint.json --compare other_fingerprint.json
     python verify_fingerprint.py --fingerprint fingerprints/run_a.json --compare fingerprints/run_b.json
@@ -234,6 +235,44 @@ def _b64(value: object, what: str) -> bytes:
         raise ValueError(f"{what} is not base64") from exc
 
 
+class KeyRefused(ValueError):
+    """The key a document names is not one keys.json publishes for it."""
+
+
+def published_key(
+    keys: list[dict], key_id: object, public_key: object, purpose: str, signs: str,
+    at: object, verb: str,
+) -> dict:
+    """The one entry of keys.json for ``key_id`` and the inline ``public_key``,
+    or :class:`KeyRefused`: an Ed25519 key of ``purpose`` (it signs ``signs``)
+    that is not revoked and whose window holds ``at``, the instant the signer
+    claims (``verb`` names it: signed, sealed). The window bounds the claim; it
+    does not protect against a retired private key that leaked."""
+    published = [k for k in keys if k.get("key_id") == key_id]
+    if not published:
+        raise KeyRefused(f"key_id {key_id!r} is not a published DevMatrix key")
+    matching = [k for k in published if k.get("public_key") == public_key]
+    if not matching:
+        raise KeyRefused(f"the public key in the file is not the one published for {key_id!r}")
+    if len(matching) != 1:
+        raise KeyRefused(f"keys.json lists the key of {key_id!r} more than once")
+    entry = matching[0]
+    if entry.get("algorithm") != "Ed25519":
+        raise KeyRefused(f"the published key {key_id!r} is not an Ed25519 key")
+    if entry.get("purpose") != purpose:
+        raise KeyRefused(f"the published key {key_id!r} does not sign {signs}")
+    if entry.get("status") not in VERIFYING_STATUSES:
+        raise KeyRefused(f"the published key {key_id!r} is {str(entry.get('status')).upper()}, not active or retired")
+    if entry.get("created_at") is None:
+        raise KeyRefused(f"the published key {key_id!r} names no window start (created_at)")
+    instant = _instant(at, f"{verb}_at")
+    valid_from = _instant(entry.get("created_at"), "created_at")
+    valid_until = None if entry.get("expires_at") is None else _instant(entry.get("expires_at"), "expires_at")
+    if instant < valid_from or (valid_until is not None and instant > valid_until):
+        raise KeyRefused(f"{verb} at {at}, outside the window of {key_id!r}")
+    return entry
+
+
 def verify_signature(
     evidence: dict, keys: list[dict]
 ) -> tuple[bool, list[str]]:
@@ -268,41 +307,17 @@ def verify_signature(
         return False, ["[FAIL] signature: signed_payload_hash does not match the fingerprint"]
 
     key_id = signature.get("key_id")
-    published = [k for k in keys if k.get("key_id") == key_id]
-    if not published:
-        return False, [f"[FAIL] signature: key_id {key_id!r} is not a published DevMatrix key"]
-    matching = [k for k in published if k.get("public_key") == signature.get("public_key")]
-    if not matching:
-        return False, [
-            f"[FAIL] signature: the public key in the file is not the one published for {key_id!r}"
-        ]
-    if len(matching) != 1:
-        return False, [f"[FAIL] signature: keys.json lists the key of {key_id!r} more than once"]
-    entry = matching[0]
-    if entry.get("algorithm") != "Ed25519":
-        return False, [f"[FAIL] signature: the published key {key_id!r} is not an Ed25519 key"]
-    if entry.get("purpose") != "evidence-signing":
-        return False, [f"[FAIL] signature: the published key {key_id!r} does not sign evidence"]
-    if entry.get("status") not in VERIFYING_STATUSES:
-        return False, [f"[FAIL] signature: the published key {key_id!r} is {str(entry.get('status')).upper()}, not active or retired"]
-
-    if entry.get("created_at") is None:
-        return False, [f"[FAIL] signature: the published key {key_id!r} names no window start (created_at)"]
     try:
-        signed_at = _instant(signature.get("signed_at"), "signed_at")
-        valid_from = _instant(entry.get("created_at"), "created_at")
-        valid_until = (
-            None if entry.get("expires_at") is None
-            else _instant(entry.get("expires_at"), "expires_at")
+        entry = published_key(
+            keys, key_id, signature.get("public_key"), "evidence-signing", "evidence",
+            signature.get("signed_at"), "signed",
         )
         public_key = _b64(entry.get("public_key"), "public_key")
         signature_bytes = _b64(signature.get("signature"), "signature")
+    except KeyRefused as refused:
+        return False, [f"[FAIL] signature: {refused}"]
     except ValueError as exc:
         return False, [f"[FAIL] signature: {exc}"]
-    if signed_at < valid_from or (valid_until is not None and signed_at > valid_until):
-        return False, [
-            f"[FAIL] signature: signed at {signature.get('signed_at')}, outside the window of {key_id!r}"
-        ]
 
     try:
         from cryptography.exceptions import InvalidSignature
@@ -478,9 +493,82 @@ _V2_FIELDS: dict = dict(
     run_by=_one_of(RUN_BY_VALUES),
     seal_class=_one_of(SEAL_CLASSES),
 )
+ATTESTATION_SCHEMA_V3 = "published-attestation/3"
+#: The digests ``/3`` states for the build's identity: the platform source's
+#: hash, the digest of the module map that travels beside them, and the links
+#: of the build. ``/1`` and ``/2`` stated one aggregate ``spec_hash`` instead,
+#: a different subject that is never compared with ``platform_spec_hash``.
+IDENTITY_LINKS_V3 = (
+    "platform_spec_hash",
+    "service_spec_hashes_sha256",
+    "ir_structural_hash",
+    "ir_semantic_hash",
+    "compiler_toolchain_hash",
+    "deterministic_seed",
+    "build_fingerprint",
+)
+#: The identity key that maps each module to the SHA-256 of its source.
+SERVICE_SPEC_HASHES = "service_spec_hashes"
+#: The Merkle sub-roots ``/3`` names, a closed set.
+SUB_ROOT_NAMES = ("artifact_root", "dependency_root", "model_root", "specification_root")
+#: Why a module's determinism is NOT_VERIFIED in ``/3``, a closed set.
+NOT_VERIFIED_CAUSES = (
+    "not_measured_yet",
+    "gate_did_not_run",
+    "no_baseline",
+    "in_build_unmeasured",
+    "gate_row_absent_from_ledger",
+)
+
+
+def _module_map(value: object, where: str) -> None:
+    if not isinstance(value, dict) or len(value) > _MAX_ITEMS:
+        raise AttestationRefused(f"{where}: is not a bounded module map")
+    for module, digest in value.items():
+        _MODULE(module, f"{where} key")
+        _digest(digest, f"{where}.{module}")
+
+
+def service_spec_hashes_sha256(service_spec_hashes: Mapping[str, str]) -> str:
+    """The digest ``/3`` links for the module map: SHA-256 of the map as JSON
+    with sorted keys and no whitespace, UTF-8, as bare hex."""
+    canonical = json.dumps(
+        dict(sorted(service_spec_hashes.items())), sort_keys=True, separators=(",", ":")
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+#: ``/3`` is ``/2`` with the spec identity of the platform and its modules,
+#: named Merkle sub-roots and a closed set of NOT_VERIFIED causes. Its
+#: ``attestation_sha256`` is the SHA-256 of the delivered attestation file's
+#: bytes, the digest a seal signs; ``/1`` and ``/2`` stated the digest of
+#: another serialization.
+_V3_FIELDS: dict = dict(
+    _V2_FIELDS,
+    schema=_one_of((ATTESTATION_SCHEMA_V3,)),
+    identity=_object({
+        **{name: _digest for name in IDENTITY_LINKS_V3},
+        SERVICE_SPEC_HASHES: _module_map,
+    }),
+    merkle=_object({
+        "nested_root": _digest,
+        "sub_roots": _object({name: _digest for name in SUB_ROOT_NAMES}),
+        "emit_root": _digest,
+        "emit_leaf_sha256": _list(_digest),
+    }),
+    determinism=_list(_object(
+        {
+            "module": _MODULE,
+            "status": _one_of(DETERMINISM_STATUSES),
+            "cause": _one_of(NOT_VERIFIED_CAUSES),
+        },
+        optional=frozenset({"cause"}),
+    )),
+)
 ATTESTATION_SCHEMAS: Mapping[str, Check] = {
     ATTESTATION_SCHEMA_V1: _object(_V1_FIELDS),
     ATTESTATION_SCHEMA_V2: _object(_V2_FIELDS),
+    ATTESTATION_SCHEMA_V3: _object(_V3_FIELDS),
 }
 
 
@@ -519,9 +607,21 @@ def check_published_attestation(payload: dict) -> list[str]:
             f"attestation.seal_class: {payload['seal_class']!r} does not go with tests run by "
             f"{payload['run_by']!r}"
         )
-    return [
+    lines = [
         f"[OK] attestation: {schema}; tests run by {payload['run_by']}, seal {payload['seal_class']}"
     ]
+    if schema == ATTESTATION_SCHEMA_V3:
+        identity = payload["identity"]
+        link = identity["service_spec_hashes_sha256"].removeprefix("sha256:")
+        if service_spec_hashes_sha256(identity[SERVICE_SPEC_HASHES]) != link:
+            raise AttestationRefused(
+                "attestation.identity: the module map is not the one its digest service_spec_hashes_sha256 names"
+            )
+        lines.append(
+            f"[OK] attestation: platform spec {identity['platform_spec_hash']}, "
+            f"{len(identity[SERVICE_SPEC_HASHES])} module spec hashes"
+        )
+    return lines
 
 
 def check_attestation(label: str, evidence: dict) -> bool:
@@ -642,6 +742,204 @@ def compare_fingerprints(fp1: dict, fp2: dict) -> list[tuple[str, bool, str]]:
     return results
 
 
+# ---------------------------------------------------------------------------
+# One build bound end to end: the fingerprint attestation delivered in the
+# build's download, the platform seal that signs its digest, and the published
+# attestation. All three name the attestation by the SHA-256 of the delivered
+# file's bytes.
+# ---------------------------------------------------------------------------
+
+#: The fingerprint attestation a build's download carries.
+DELIVERED_ATTESTATION_SCHEMA = "fingerprint-attestation/2"
+#: The seal statements whose services state their fingerprint attestation.
+SEAL_STATEMENT_SCHEMAS = ("seal-statement/2", "seal-statement/3", "seal-statement/4")
+SEAL_FILES = ("seal-statement.json", "seal-statement.sig.b64", "seal-public-key.pem")
+
+
+class BindingRefused(ValueError):
+    """The delivered attestation, the seal and the published attestation do
+    not name one build."""
+
+
+def _bare(digest: object) -> object:
+    return digest.removeprefix("sha256:") if isinstance(digest, str) else digest
+
+
+def _sha256_prefixed(data: bytes) -> str:
+    return "sha256:" + hashlib.sha256(data).hexdigest()
+
+
+def reproducible_sha256(block: object) -> str:
+    """The digest of an attestation's reproducible block: its JSON with sorted
+    keys and no whitespace, UTF-8."""
+    canonical = json.dumps(block, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
+    return _sha256_prefixed(canonical.encode("utf-8"))
+
+
+def read_seal(bundle: Path, keys: list[dict]) -> tuple[dict, list[str]]:
+    """The seal statement of a seal verification bundle, once its signature
+    verifies with a published seal-signing key of keys.json, and the lines
+    to report. The key inside the bundle proves nothing by itself: it has to
+    be the one keys.json publishes for the statement's ``key_id``."""
+    missing = [name for name in SEAL_FILES if not (bundle / name).is_file()]
+    if missing:
+        raise BindingRefused(f"the seal bundle {bundle} lacks {missing}")
+    statement_bytes = (bundle / "seal-statement.json").read_bytes()
+    statement = json.loads(statement_bytes)
+    if not isinstance(statement, dict) or statement.get("schema_id") not in SEAL_STATEMENT_SCHEMAS:
+        raise BindingRefused("the seal statement is not one that states its builds' attestations")
+    try:
+        from cryptography.exceptions import InvalidSignature
+        from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+    except ImportError as exc:
+        raise BindingRefused("the 'cryptography' package is required (pip install cryptography)") from exc
+    pem_key = serialization.load_pem_public_key((bundle / "seal-public-key.pem").read_bytes())
+    if not isinstance(pem_key, Ed25519PublicKey):
+        raise BindingRefused("seal-public-key.pem is not an Ed25519 key")
+    raw = pem_key.public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+    key_id = statement.get("key_id")
+    try:
+        entry = published_key(
+            keys, key_id, base64.b64encode(raw).decode("ascii"), "seal-signing", "seals",
+            statement.get("sealed_at"), "sealed",
+        )
+        signature = _b64((bundle / "seal-statement.sig.b64").read_text(encoding="ascii").strip(), "seal signature")
+    except ValueError as exc:
+        raise BindingRefused(f"seal: {exc}") from exc
+    try:
+        pem_key.verify(signature, statement_bytes)
+    except InvalidSignature as exc:
+        raise BindingRefused(f"seal: the statement's signature is INVALID for key {key_id!r}") from exc
+    if entry.get("class") != PRODUCTION:
+        raise BindingRefused(f"seal: {key_id!r} is NOT a production key; this is not a DevMatrix seal")
+    return statement, [
+        f"[OK] seal: {statement['schema_id']}, key {key_id!r} ({entry.get('class')}), "
+        f"sealed {statement.get('sealed_at')}"
+    ]
+
+
+def _delivered(path: Path) -> tuple[bytes, dict]:
+    data = path.read_bytes()
+    document = json.loads(data)
+    if not isinstance(document, dict) or document.get("schema") != DELIVERED_ATTESTATION_SCHEMA:
+        raise BindingRefused(f"{path} is not a {DELIVERED_ATTESTATION_SCHEMA} document")
+    reproducible = document.get("reproducible")
+    identity = reproducible.get("identity") if isinstance(reproducible, dict) else None
+    if not isinstance(identity, dict) or not isinstance(identity.get(SERVICE_SPEC_HASHES), dict):
+        raise BindingRefused(f"{path} states no spec identity")
+    if reproducible_sha256(reproducible) != document.get("reproducible_sha256"):
+        raise BindingRefused(f"{path}: reproducible_sha256 is not the digest of its reproducible block")
+    return data, document
+
+
+def bind_attestation(
+    service: str, path: Path, statement: dict, published: dict | None, lines: list[str],
+) -> None:
+    """Bind one service's delivered attestation to the seal and, when given,
+    to the published attestation, appending the lines to report to ``lines``;
+    :class:`BindingRefused` at the first check that does not hold:
+
+    1. the file's SHA-256 is the ``document_sha256`` the seal signed for the
+       service, and the published ``attestation_sha256``;
+    2. ``reproducible_sha256`` is one value in the file, the seal and the
+       published attestation;
+    3. the file names the specs the seal names (its platform spec hash and its
+       hash for the service), and its identity is the published identity.
+    """
+    by_name = {s.get("name"): s for s in statement.get("services", []) if isinstance(s, dict)}
+    sealed = by_name.get(service)
+    if sealed is None:
+        raise BindingRefused(f"{service}: no such service in this seal")
+    sealed_attestation = sealed.get("fingerprint_attestation")
+    if not isinstance(sealed_attestation, dict):
+        raise BindingRefused(f"{service}: the seal states no fingerprint attestation for it")
+    data, document = _delivered(path)
+    digest = _sha256_prefixed(data)
+    lines.append(f"      {service}: delivered attestation {digest}")
+    pairs = [("sealed", sealed_attestation.get("document_sha256"))]
+    if published is not None:
+        pairs.append(("published", published.get("attestation_sha256")))
+    for where, stated in pairs:
+        if stated != digest:
+            raise BindingRefused(f"{service}: the delivered attestation is not the {where} one ({stated})")
+    lines.append(f"[OK] {service}: the delivered attestation is the " + " and the ".join(w for w, _ in pairs) + " one")
+    reproducible = [("delivered", document["reproducible_sha256"]),
+                    ("sealed", sealed_attestation.get("reproducible_sha256"))]
+    if published is not None:
+        reproducible.append(("published", published.get("reproducible_sha256")))
+    if len({value for _, value in reproducible}) != 1:
+        raise BindingRefused(f"{service}: reproducible_sha256 differs: " + ", ".join(f"{w} {v}" for w, v in reproducible))
+    lines.append(f"[OK] {service}: reproducible {document['reproducible_sha256']}")
+    identity = document["reproducible"]["identity"]
+    platform = statement.get("platform")
+    spec_pairs = (
+        ("platform spec", _bare(identity.get("platform_spec_hash")),
+         platform.get("spec_hash") if isinstance(platform, dict) else None),
+        ("service spec", identity[SERVICE_SPEC_HASHES].get(service), sealed.get("spec_hash")),
+    )
+    for what, attested, sealed_hash in spec_pairs:
+        if attested is None or attested != sealed_hash:
+            raise BindingRefused(f"{service}: the attestation's {what} hash {attested} is not the sealed {sealed_hash}")
+    lines.append(f"[OK] {service}: the attestation names the specs the seal names")
+    if published is not None:
+        if published.get("identity") != identity:
+            raise BindingRefused(f"{service}: the published identity is not the delivered one")
+        lines.append(f"[OK] {service}: the published identity is the delivered one")
+
+
+def _published_for_binding(path: Path, keys: list[dict]) -> tuple[dict, list[str]]:
+    evidence = read_json(path)
+    passed, lines = verify_signature(evidence, keys)
+    if not passed:
+        raise BindingRefused("published attestation: " + "; ".join(lines))
+    payload = signed_payload(evidence)
+    try:
+        lines += check_published_attestation(payload)
+    except AttestationRefused as refusal:
+        raise BindingRefused(str(refusal)) from refusal
+    if payload.get("schema") != ATTESTATION_SCHEMA_V3:
+        raise BindingRefused(
+            f"published attestation: {payload.get('schema')} states the digest of another serialization "
+            "of the attestation; it cannot be bound to the delivered file"
+        )
+    return payload, lines
+
+
+def verify_binding(
+    bundle: Path, attestations: list[tuple[str, Path]], published_path: Path | None, keys: list[dict],
+) -> bool:
+    """Print the verdict of binding each delivered attestation to the seal
+    (and the published attestation, when given); whether all of it held."""
+    lines: list[str] = []
+    try:
+        statement, seal_lines = read_seal(bundle, keys)
+        lines += seal_lines
+        published = None
+        if published_path is not None:
+            published, published_lines = _published_for_binding(published_path, keys)
+            lines += published_lines
+        if published is not None and len(attestations) != 1:
+            raise BindingRefused("a published attestation is one build's: name exactly one --attestation with it")
+        for service, path in attestations:
+            bind_attestation(service, path, statement, published, lines)
+    except (BindingRefused, OSError, ValueError) as refusal:
+        for line in lines:
+            print(line)
+        print(f"[FAIL] {refusal}")
+        return False
+    for line in lines:
+        print(line)
+    return True
+
+
+def _attestation_argument(value: str) -> tuple[str, Path]:
+    service, separator, path = value.partition("=")
+    if not separator or not service or not path:
+        raise argparse.ArgumentTypeError("name the service: <service>=<fingerprint_attestation.json>")
+    return service, Path(path)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Verify DevMatrix build fingerprints",
@@ -659,7 +957,6 @@ Examples:
     parser.add_argument(
         "-f", "--fingerprint",
         type=Path,
-        required=True,
         help="Path to a fingerprint JSON (build output or evidence pack)"
     )
 
@@ -694,7 +991,45 @@ Examples:
         help="Accept a flat build_fingerprint.json that carries no signature (hashes only)"
     )
 
+    parser.add_argument(
+        "--seal",
+        type=Path,
+        help="A platform seal's verification bundle (unzipped directory): bind each --attestation to it"
+    )
+
+    parser.add_argument(
+        "--attestation",
+        type=_attestation_argument,
+        action="append",
+        default=[],
+        metavar="SERVICE=FILE",
+        help="A build's delivered verification/<run>/fingerprint_attestation.json, named by its service"
+    )
+
+    parser.add_argument(
+        "--published",
+        type=Path,
+        help="The published attestation of the same build (attestations/<job>.json)"
+    )
+
     args = parser.parse_args()
+
+    if args.seal is not None or args.attestation or args.published is not None:
+        if args.seal is None or not args.attestation or args.fingerprint is not None:
+            parser.error("--seal takes one or more --attestation SERVICE=FILE (and optionally --published), without --fingerprint")
+        if not args.keys.exists():
+            print(f"ERROR: Keys file not found: {args.keys}")
+            sys.exit(1)
+        print("=" * 60)
+        print("DevMatrix Seal and Attestation Verification")
+        print("=" * 60)
+        passed = verify_binding(args.seal, args.attestation, args.published, load_keys(args.keys))
+        print()
+        print("=" * 60)
+        print("VERIFICATION PASSED" if passed else "VERIFICATION FAILED")
+        sys.exit(0 if passed else 1)
+    if args.fingerprint is None:
+        parser.error("name a --fingerprint, or a --seal with its --attestation files")
 
     # Load primary fingerprint
     if not args.fingerprint.exists():

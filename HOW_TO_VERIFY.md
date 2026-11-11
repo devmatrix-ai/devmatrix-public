@@ -95,16 +95,18 @@ A build's attestation is published to this repository's `attestations/` director
 
 | Schema | Who ran the tests |
 |--------|-------------------|
+| `published-attestation/3` | As in `/2`. `/3` also states the build's spec identity: `identity.platform_spec_hash` (the SHA-256 of the platform source), `identity.service_spec_hashes` (each module's source hash) and `identity.service_spec_hashes_sha256`, the digest of that map, which the verifier recomputes. Its `attestation_sha256` is the SHA-256 of the delivered attestation file's bytes, the digest a seal signs. |
 | `published-attestation/2` | `run_by` is `devmatrix` or `client`, and `seal_class` is `sealed` or `self_attested`. The only valid pairs are `devmatrix` with `sealed` (DevMatrix ran the tests) and `client` with `self_attested` (the client ran them on its own machine). |
 | `published-attestation/1` | Not stated. A `/1` document carries neither key, and the verifier reports none. |
 
 The check fails when:
 
 - the schema is not one of these, is misspelled, or is missing from a document that states who ran the tests or a seal class;
-- a key is missing or undeclared, at any level, except inside `identity` and `merkle.sub_roots`: those two are checked for form only, as non-empty bounded objects of sha256 digests under bounded lower-case names, not against a fixed list of names;
+- a key is missing or undeclared, at any level. In `/1` and `/2`, `identity` and `merkle.sub_roots` are checked for form only, as non-empty bounded objects of sha256 digests under bounded lower-case names; in `/3` both are closed sets of names;
 - a value is not of its declared form: a sha256 digest, a module identifier, a job identifier (a UUID), a bounded count or list, or one of a closed set;
-- a module's determinism status is not `VERIFIED`, `NOT_VERIFIED` or `DRIFT`, or a cause appears with any status other than `NOT_VERIFIED`, or is missing on it (the cause is checked as a bounded lower-case name, not against a fixed list);
-- in `/2`, the seal class does not go with who ran the tests.
+- a module's determinism status is not `VERIFIED`, `NOT_VERIFIED` or `DRIFT`, or a cause appears with any status other than `NOT_VERIFIED`, or is missing on it (in `/1` and `/2` the cause is checked as a bounded lower-case name; in `/3` it is one of `not_measured_yet`, `gate_did_not_run`, `no_baseline`, `in_build_unmeasured`, `gate_row_absent_from_ledger`);
+- in `/2` and `/3`, the seal class does not go with who ran the tests;
+- in `/3`, the module map is not the one `service_spec_hashes_sha256` names.
 
 ```
 [OK] signature: Ed25519, key 'dm-prod-2026-01' (production), signed ...
@@ -112,6 +114,28 @@ The check fails when:
 ```
 
 A valid signature over a document that fails these checks still fails verification: the signature proves who published the document, and the schema check proves the document says only what this schema allows.
+
+---
+
+## Binding Your Download to the Seal and the Published Attestation
+
+A build's download carries its fingerprint attestation, `verification/<run>/fingerprint_attestation.json`. A platform seal signs that file's SHA-256 for each service, and the published attestation states the same SHA-256 as `attestation_sha256`. One command checks that the three name one build:
+
+```
+python verify_fingerprint.py --seal <unzipped seal bundle> \
+  --attestation <service>=<download>/verification/<run>/fingerprint_attestation.json \
+  --published attestations/<job>.json
+```
+
+It passes only when all of these hold:
+
+1. the seal statement's signature verifies with the key `keys.json` publishes for the statement's `key_id` as a production `seal-signing` key whose window holds `sealed_at`; the key inside the bundle proves nothing by itself;
+2. the published attestation's signature verifies as above, and it is a `published-attestation/3` document (`/1` and `/2` state the digest of another serialization, so they cannot be bound to the file);
+3. the SHA-256 of the delivered file is the `document_sha256` the seal signed for the service, and the published `attestation_sha256`;
+4. the file's `reproducible_sha256` is the digest of its reproducible block, and the seal and the published attestation state the same one;
+5. the file's platform spec hash and its hash for the service are the seal's `platform.spec_hash` and the service's `spec_hash`, and its identity is the published `identity`.
+
+`--published` is optional: without it, the file is bound to the seal alone. Name several `--attestation` options to bind every service of a seal; a published attestation is one build's, so it goes with exactly one.
 
 ---
 
