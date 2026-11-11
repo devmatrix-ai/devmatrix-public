@@ -209,14 +209,24 @@ def changes(published: list[dict], served: list[dict]) -> list[str]:
                     f"{name} status_since changed from {old['status_since']!r} to {new['status_since']!r} "
                     f"while its status stayed {old['status']}"
                 )
-            elif new["status_since"] is None or (
-                old["status_since"] is not None
-                and vf._instant(new["status_since"], f"{name} status_since")
-                < vf._instant(old["status_since"], f"{name} status_since")
-            ):
-                refusals.append(
-                    f"{name} status_since moved back from {old['status_since']!r} to {new['status_since']!r}"
-                )
+            elif new["status_since"] is None:
+                refusals.append(f"{name} status_since moved back from {old['status_since']!r} to None")
+            else:
+                try:
+                    since = vf._instant(new["status_since"], f"{name} status_since")
+                    before = None if old["status_since"] is None else vf._instant(
+                        old["status_since"], f"{name} status_since in keys.json"
+                    )
+                except ValueError as exc:
+                    refusals.append(
+                        f"{name} status_since {new['status_since']!r} is not an ISO 8601 instant "
+                        f"with a time zone ({exc})"
+                    )
+                else:
+                    if before is not None and since < before:
+                        refusals.append(
+                            f"{name} status_since moved back from {old['status_since']!r} to {new['status_since']!r}"
+                        )
         if new["status"] != old["status"]:
             if not moved:
                 refusals.append(f"{name} status went back from {old['status']} to {new['status']}")

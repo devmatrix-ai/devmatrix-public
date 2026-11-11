@@ -229,6 +229,18 @@ class TheRefusals(unittest.TestCase):
                 self._refused(_document(dict(_RETIRED, status_since=since), _EVIDENCE, _SEAL),
                               "status_since changed", "while its status stayed retired")
 
+    def test_a_status_date_that_is_not_an_instant(self) -> None:
+        for since in (17, "yesterday", "2026-12-01T00:00:00"):
+            with self.subTest(status_since=since):
+                revoked = dict(_RETIRED, status="revoked", status_since=since)
+                self._refused(_document(revoked, _EVIDENCE, _SEAL),
+                              "REFUSED:", "status_since", "is not an ISO 8601 instant with a time zone")
+                retired = dict(_EVIDENCE, status="retired", status_since=since,
+                               expires_at="2026-12-01T00:00:00+00:00")
+                successor = _key("evidence-3", "evidence-signing", "active", "2026-12-01T00:00:00+00:00")
+                self._refused(_document(_RETIRED, retired, successor, _SEAL),
+                              "REFUSED:", "is not an ISO 8601 instant with a time zone")
+
     def test_a_revocation_dated_before_the_retirement(self) -> None:
         revoked = dict(_RETIRED, status="revoked", status_since="2026-07-01T00:00:00+00:00")
         self._refused(_document(revoked, _EVIDENCE, _SEAL), "status_since moved back")
