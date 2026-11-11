@@ -151,6 +151,17 @@ class TheRefresh(unittest.TestCase):
             with self.assertRaisesRegex(rk.RefreshRefused, "did not answer within"):
                 rk.fetch(_URL, _Served(200, body, tick))
 
+    def test_a_retired_key_is_revoked_with_a_new_status_date(self) -> None:
+        """A retired key that leaked is revoked; the refresh carries that into keys.json."""
+        repo = _Repo(self, _RETIRED, _EVIDENCE, _SEAL)
+        mode = repo.path.stat().st_mode
+        revoked = dict(_RETIRED, status="revoked", status_since="2026-12-01T00:00:00+00:00")
+        code, out, err = repo.run(_document(revoked, _EVIDENCE, _SEAL))
+        self.assertEqual(code, 0, err)
+        self.assertIn("retired -> revoked", out)
+        self.assertEqual(vf.load_keys(repo.path)[0]["status"], "revoked")
+        self.assertEqual(repo.path.stat().st_mode, mode, "keys.json changed its mode")
+
     def test_a_key_is_retired_by_setting_its_end_once(self) -> None:
         repo = _Repo(self, _RETIRED, _EVIDENCE, _SEAL)
         retired = dict(_EVIDENCE, status="retired", status_since="2026-12-01T00:00:00+00:00",
@@ -207,12 +218,20 @@ class TheRefusals(unittest.TestCase):
         self._refused(_document(revived, evidence, _SEAL), "status went back from retired to active")
 
     def test_a_retired_window_that_is_reopened_or_widened(self) -> None:
-        for change in ({"expires_at": None}, {"expires_at": "2027-01-01T00:00:00+00:00"},
-                       {"status_since": None}, {"status_since": "2026-08-01T00:00:00+00:00"}):
-            field = next(iter(change))
+        for change in ({"expires_at": None}, {"expires_at": "2027-01-01T00:00:00+00:00"}):
             with self.subTest(change=change):
                 self._refused(_document(dict(_RETIRED, **change), _EVIDENCE, _SEAL),
-                              f"{field} changed", "once set it never changes")
+                              "expires_at changed", "once set it never changes")
+
+    def test_a_status_date_that_changes_without_the_status(self) -> None:
+        for since in (None, "2026-08-01T00:00:00+00:00"):
+            with self.subTest(status_since=since):
+                self._refused(_document(dict(_RETIRED, status_since=since), _EVIDENCE, _SEAL),
+                              "status_since changed", "while its status stayed retired")
+
+    def test_a_revocation_dated_before_the_retirement(self) -> None:
+        revoked = dict(_RETIRED, status="revoked", status_since="2026-07-01T00:00:00+00:00")
+        self._refused(_document(revoked, _EVIDENCE, _SEAL), "status_since moved back")
 
     def test_not_a_keys_document(self) -> None:
         self._refused({"schema_id": "devmatrix-keys/2", "keys": []}, "is not a devmatrix-keys/1 document")

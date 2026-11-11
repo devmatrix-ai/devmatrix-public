@@ -13,8 +13,10 @@ it unchanged. It refuses, naming why:
 - a key keys.json lists that the document no longer lists: evidence signed by
   a retired key still verifies, so a key is never dropped;
 - a key whose label, purpose, class, algorithm, public key or start changed,
-  or whose end (expires_at) or status date (status_since) changed once set:
-  a window can be closed, never reopened or widened;
+  or whose end (expires_at) changed once set: a window can be closed, never
+  reopened or widened;
+- a status date (status_since) that changes without the status moving
+  forward, or that moves back in time;
 - a status that goes back (only active to retired or revoked, and retired to
   revoked, are allowed).
 
@@ -38,6 +40,7 @@ import base64
 import json
 import os
 import ssl
+import stat
 import tempfile
 import time
 import sys
@@ -62,7 +65,7 @@ MAX_DOCUMENT_BYTES = 1 << 20
 #: The fields of a key that never change once it is published.
 FIXED_FIELDS = ("key_id", "purpose", "class", "algorithm", "public_key", "created_at")
 #: The fields that may be set once, from null, and never change after.
-SET_ONCE_FIELDS = ("expires_at", "status_since")
+SET_ONCE_FIELDS = ("expires_at",)
 #: The status changes a published key can make.
 FORWARD = frozenset({("active", "retired"), ("active", "revoked"), ("retired", "revoked")})
 
@@ -199,8 +202,23 @@ def changes(published: list[dict], served: list[dict]) -> list[str]:
                 refusals.append(
                     f"{name} {field} changed from {old[field]!r} to {new[field]!r}; once set it never changes"
                 )
+        moved = (old["status"], new["status"]) in FORWARD
+        if new["status_since"] != old["status_since"]:
+            if not moved:
+                refusals.append(
+                    f"{name} status_since changed from {old['status_since']!r} to {new['status_since']!r} "
+                    f"while its status stayed {old['status']}"
+                )
+            elif new["status_since"] is None or (
+                old["status_since"] is not None
+                and vf._instant(new["status_since"], f"{name} status_since")
+                < vf._instant(old["status_since"], f"{name} status_since")
+            ):
+                refusals.append(
+                    f"{name} status_since moved back from {old['status_since']!r} to {new['status_since']!r}"
+                )
         if new["status"] != old["status"]:
-            if (old["status"], new["status"]) not in FORWARD:
+            if not moved:
                 refusals.append(f"{name} status went back from {old['status']} to {new['status']}")
             else:
                 lines.append(f"{name}: {old['status']} -> {new['status']}")
@@ -235,6 +253,7 @@ def _replace(path: Path, data: bytes) -> None:
     try:
         with os.fdopen(handle, "wb") as out:
             out.write(data)
+        os.chmod(name, stat.S_IMODE(path.stat().st_mode))
         os.replace(name, path)
     except BaseException:
         Path(name).unlink(missing_ok=True)
