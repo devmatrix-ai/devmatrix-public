@@ -78,6 +78,103 @@ class ARefusedFingerprint(unittest.TestCase):
         self._refused(dict(_fingerprint(), source_record_digest="sha256:" + "b" * 64), "is not a sha256 digest")
 
 
+def _projected_checks(**changes: object) -> dict:
+    checks = {
+        "schema_id": "dmx_customer_checks_pre_nda/v1",
+        "sealed_schema_id": "dmx_customer_checks/v8",
+        "status": "projected",
+        "scopes": [],
+        "totals": {},
+        "tests": {
+            "ran": True, "total": 10, "planned": 10, "not_reached": 0, "pass_rate": 0.9,
+            "passed": 9, "failed": 1, "not_applicable": 0, "did_not_run": 0,
+            "counted_in_another_tier": 0,
+        },
+        "tests_absent_reason": None,
+    }
+    checks.update(changes)
+    return checks
+
+
+def _complexity(**changes: object) -> dict:
+    measurement = {
+        "schema_id": "complexity-measurement/2", "state": "complete", "calibration": "not_calibrated",
+        "total_milli": 1200, "band": None, "entitlement_reasons": ["Not calibrated."],
+    }
+    measurement.update(changes)
+    return measurement
+
+
+class EveryValueIsOfItsDeclaredForm(unittest.TestCase):
+    def _accepted(self, **changes: object) -> None:
+        vf.check_published_fingerprint(dict(_fingerprint(), **changes))
+
+    def _refused(self, reason: str, **changes: object) -> None:
+        with self.assertRaises(vf.AttestationRefused) as refused:
+            vf.check_published_fingerprint(dict(_fingerprint(), **changes))
+        self.assertIn(reason, str(refused.exception))
+
+    def test_an_outcome_is_a_boolean_or_null(self) -> None:
+        self._accepted(passed=None, terminal_success=False)
+        self._refused("fingerprint.passed: is not true, false or null", passed="yes")
+        self._refused("fingerprint.terminal_success: is not true, false or null", terminal_success=1)
+        self._refused("fingerprint.seal.passed: is not true, false or null", seal={"passed": "true"})
+        self._refused("carries undeclared keys ['by']", seal={"passed": True, "by": "x"})
+
+    def test_a_digest_is_a_sha256_hex_digest(self) -> None:
+        self._accepted(spec_hash=None, release_ref="release:" + "f" * 64)
+        self._refused("fingerprint.spec_hash: is not a sha256 digest", spec_hash="c" * 63)
+        self._refused("fingerprint.spec_hash: is not a sha256 digest", spec_hash="C" * 64)
+        self._refused("fingerprint.release_ref", release_ref="release:abc")
+
+    def test_an_identity_is_a_bounded_string_or_null(self) -> None:
+        self._accepted(verdict_binding=None)
+        self._refused("fingerprint.build_id: is not a bounded string or null", build_id=7)
+        self._refused("fingerprint.job_id: is not a bounded string or null", job_id="j" * 257)
+
+    def test_a_compilation_outcome_is_one_of_its_set(self) -> None:
+        self._refused("fingerprint.compile_status: is not one of its declared values", compile_status="ok")
+
+    def test_the_merkle_commitment(self) -> None:
+        self._accepted(merkle_root="d" * 64)
+        self._accepted(merkle_root={"root_hash": "d" * 64, "sbom_root": "", "leaf_count": 0, "schema_version": "1.4"})
+        self._refused("fingerprint.merkle_root.ir_root: is not a sha256 digest", merkle_root={"ir_root": "xyz"})
+        self._refused("fingerprint.merkle_root.leaf_count: is not a count", merkle_root={"leaf_count": -1})
+        self._refused("carries undeclared keys ['private']", merkle_root={"private": "d" * 64})
+        self._refused("fingerprint.merkle_root: is not a digest or an object", merkle_root=3)
+
+    def test_the_determinism_claim(self) -> None:
+        self._accepted(determinism={"status": "NOT_VERIFIED", "cause": "no_baseline"})
+        self._accepted(determinism={"deterministic": None})
+        self._refused("a cause goes with NOT_VERIFIED", determinism={"status": "VERIFIED", "cause": "no_baseline"})
+        self._refused("fingerprint.determinism.status", determinism={"status": "MAYBE"})
+        self._refused("fingerprint.determinism.deterministic", determinism={"deterministic": "true"})
+
+    def test_the_customer_checks(self) -> None:
+        self._accepted(customer_checks=_projected_checks())
+        self._accepted(customer_checks=_projected_checks(tests=None, tests_absent_reason="runtime_phase_run_by_client"))
+        self._accepted(customer_checks={
+            "schema_id": "dmx_customer_checks_pre_nda/v1", "sealed_schema_id": "dmx_customer_checks/v5",
+            "status": "not_projected", "reason": "cancelled",
+        })
+        self._refused("states its tests or why it has none", customer_checks=_projected_checks(tests=None))
+        tests = dict(_projected_checks()["tests"], pass_rate="90%")
+        self._refused("fingerprint.customer_checks.tests.pass_rate", customer_checks=_projected_checks(tests=tests))
+        tests = dict(_projected_checks()["tests"], ran="yes")
+        self._refused("fingerprint.customer_checks.tests.ran", customer_checks=_projected_checks(tests=tests))
+        self._refused("fingerprint.customer_checks.sealed_schema_id",
+                      customer_checks=_projected_checks(sealed_schema_id="dmx_customer_checks/v9"))
+
+    def test_the_complexity_measurement(self) -> None:
+        self._accepted(complexity_measurement=_complexity())
+        self._accepted(complexity_measurement=_complexity(state="incomplete", total_milli=None))
+        self._refused("a total goes with a complete measurement", complexity_measurement=_complexity(total_milli=None))
+        self._refused("fingerprint.complexity_measurement.band: is not null", complexity_measurement=_complexity(band="S"))
+        self._refused("fingerprint.complexity_measurement.total_milli: is above its bound",
+                      complexity_measurement=_complexity(total_milli=1_000_001))
+        self._refused("states no reason", complexity_measurement=_complexity(entitlement_reasons=[]))
+
+
 class TheCommandLine(unittest.TestCase):
     def _run(self, payload: dict) -> subprocess.CompletedProcess[str]:
         with tempfile.TemporaryDirectory() as tmp:

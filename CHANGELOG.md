@@ -20,6 +20,11 @@
   export manifest). `published-fingerprint/1` was never published and is
   refused by name; any other fingerprint schema is refused as unknown. Before,
   a published fingerprint was refused as an unknown attestation schema.
+- **Every value of a published fingerprint is of its declared form.** An
+  outcome is `true`, `false` or `null` (a `"yes"` fails), a digest is a sha256
+  hex digest, a closed set is closed, and the nested objects (Merkle
+  commitment, determinism, seal, customer checks, complexity) carry exactly
+  their declared keys, each of its declared form.
 - **The published attestation is the delivered file's, and its runner the
   seal's.** With `--published`, the published attestation must be exactly what
   the delivered file is published as: every field is recomputed and each one

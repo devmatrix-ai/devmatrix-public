@@ -588,7 +588,216 @@ PUBLISHED_FINGERPRINT_KEYS = PUBLISHED_FINGERPRINT_REQUIRED + (
     "merkle_root", "determinism", "passed", "terminal_success", "seal",
     "customer_checks", "complexity_measurement",
 )
-_SOURCE_RECORD_DIGEST = re.compile(r"[0-9a-f]{64}")
+_HEX64 = re.compile(r"[0-9a-f]{64}")
+_RELEASE_REF = re.compile(r"release:[0-9a-f]{64}")
+_MERKLE_SCHEMA_VERSION = re.compile(r"[0-9]{1,4}(\.[0-9]{1,4}){0,3}")
+_MAX_IDENTITY = 256
+#: The compilation outcomes a published fingerprint may state.
+COMPILE_STATUSES = (
+    "succeeded", "completed_incomplete", "completed_unverified", "completed_runtime_by_client",
+    "halted_with_gate_failures", "halted_task_exception", "refused_at_admission",
+    "halted_service_build_failure", "halted_with_test_failures", "cancelled", "unknown",
+)
+#: The published Merkle commitment: digests (empty when the build carries no
+#: such layer), its leaf count and its proof schema version.
+MERKLE_ROOT_DIGESTS = ("root_hash", "specs_root", "ir_root", "emit_root", "sbom_root")
+MERKLE_ROOT_KEYS = MERKLE_ROOT_DIGESTS + ("leaf_count", "schema_version")
+#: The customer's checks before the NDA, and the sealed schemas it copies.
+PRE_NDA_CUSTOMER_CHECKS_SCHEMA = "dmx_customer_checks_pre_nda/v1"
+SEALED_CUSTOMER_CHECKS_SCHEMAS = (
+    "dmx_customer_checks/v5", "dmx_customer_checks/v6", "dmx_customer_checks/v7", "dmx_customer_checks/v8",
+)
+CUSTOMER_CHECKS_NOT_PROJECTED_REASONS = (
+    "halted_before_gates", "projection_refused", "predates_projection", "task_exception",
+    "refused_at_admission", "cancelled",
+)
+RUN_BY_CLIENT_CAUSE = "runtime_phase_run_by_client"
+PRE_NDA_TEST_KEYS = (
+    "ran", "total", "planned", "not_reached", "pass_rate", "passed", "failed",
+    "not_applicable", "did_not_run", "counted_in_another_tier",
+)
+#: The published complexity measurement.
+COMPLEXITY_SCHEMA = "complexity-measurement/2"
+COMPLEXITY_STATES = ("complete", "incomplete", "instrument_error")
+COMPLEXITY_CALIBRATIONS = ("not_calibrated",)
+COMPLEXITY_KEYS = ("schema_id", "state", "calibration", "total_milli", "band", "entitlement_reasons")
+_MAX_COMPLEXITY_MILLI = 1_000_000
+
+
+def _hex64(value: object, where: str) -> None:
+    if not isinstance(value, str) or _HEX64.fullmatch(value) is None:
+        raise AttestationRefused(f"{where}: is not a sha256 digest")
+
+
+def _bool_or_null(value: object, where: str) -> None:
+    if value is not None and type(value) is not bool:
+        raise AttestationRefused(f"{where}: is not true, false or null")
+
+
+def _identity(value: object, where: str) -> None:
+    if value is not None and (not isinstance(value, str) or len(value) > _MAX_IDENTITY):
+        raise AttestationRefused(f"{where}: is not a bounded string or null")
+
+
+def _hex64_or_null(value: object, where: str) -> None:
+    if value is not None:
+        _hex64(value, where)
+
+
+def _merkle_digest(value: object, where: str) -> None:
+    """A Merkle digest, or empty: the build carries no such layer."""
+    if value != "":
+        _hex64(value, where)
+
+
+def _merkle_root(value: object, where: str) -> None:
+    if isinstance(value, str):
+        _merkle_digest(value, where)
+        return
+    if not isinstance(value, dict):
+        raise AttestationRefused(f"{where}: is not a digest or an object")
+    undeclared = sorted(set(value) - set(MERKLE_ROOT_KEYS))
+    if undeclared:
+        raise AttestationRefused(f"{where}: carries undeclared keys {undeclared}")
+    for key, item in value.items():
+        if key == "leaf_count":
+            _count(item, f"{where}.{key}")
+        elif key == "schema_version":
+            _pattern(_MERKLE_SCHEMA_VERSION)(item, f"{where}.{key}")
+        else:
+            _merkle_digest(item, f"{where}.{key}")
+
+
+def _determinism(value: object, where: str) -> None:
+    if not isinstance(value, dict):
+        raise AttestationRefused(f"{where}: is not an object")
+    if "status" in value:
+        _object(
+            {"status": _one_of(DETERMINISM_STATUSES), "cause": _one_of(NOT_VERIFIED_CAUSES)},
+            optional=frozenset({"cause"}),
+        )(value, where)
+        if (value["status"] == DETERMINISM_NOT_VERIFIED) != ("cause" in value):
+            raise AttestationRefused(f"{where}: a cause goes with NOT_VERIFIED and only with it")
+        return
+    _object({"deterministic": _bool_or_null})(value, where)
+
+
+def _count_or_null(value: object, where: str) -> None:
+    if value is not None:
+        _count(value, where)
+
+
+def _or_null(check: Check) -> Check:
+    def checked(value: object, where: str) -> None:
+        if value is not None:
+            check(value, where)
+    return checked
+
+
+def _null(value: object, where: str) -> None:
+    """A field the schema states always null: no band is determined yet."""
+    if value is not None:
+        raise AttestationRefused(f"{where}: is not null")
+
+
+def _text(value: object, where: str) -> None:
+    if not isinstance(value, str) or not value or len(value) > 1024:
+        raise AttestationRefused(f"{where}: is not a bounded non-empty text")
+
+
+def _rate_or_null(value: object, where: str) -> None:
+    if value is not None and (type(value) not in (int, float) or not value >= 0):
+        raise AttestationRefused(f"{where}: is not a non-negative rate or null")
+
+
+def _strict_bool(value: object, where: str) -> None:
+    if type(value) is not bool:
+        raise AttestationRefused(f"{where}: is not true or false")
+
+
+def _signed_count_or_null(value: object, where: str) -> None:
+    """A count of tests not reached; a report written before the reach was
+    bounded may state it negative."""
+    if value is not None and (type(value) is not int or abs(value) > _MAX_COUNT):
+        raise AttestationRefused(f"{where}: is not a bounded integer or null")
+
+
+_PRE_NDA_TESTS = _object({
+    "ran": _strict_bool, "total": _count, "planned": _count_or_null,
+    "not_reached": _signed_count_or_null, "pass_rate": _rate_or_null, "passed": _count,
+    "failed": _count, "not_applicable": _count_or_null, "did_not_run": _count,
+    "counted_in_another_tier": _count,
+})
+
+
+def _any_object(value: object, where: str) -> None:
+    if not isinstance(value, dict):
+        raise AttestationRefused(f"{where}: is not an object")
+
+
+def _any_list(value: object, where: str) -> None:
+    if not isinstance(value, list) or len(value) > _MAX_ITEMS:
+        raise AttestationRefused(f"{where}: is not a bounded list")
+
+
+def _customer_checks(value: object, where: str) -> None:
+    """The pre-NDA copy of the customer's checks. Its scopes and totals are
+    the sealed ones, in the shape of the sealed schema it names; this checks
+    they are a list and an object, not that shape."""
+    if not isinstance(value, dict):
+        raise AttestationRefused(f"{where}: is not an object")
+    common = {
+        "schema_id": _one_of((PRE_NDA_CUSTOMER_CHECKS_SCHEMA,)),
+        "sealed_schema_id": _one_of(SEALED_CUSTOMER_CHECKS_SCHEMAS),
+    }
+    if value.get("status") == "not_projected":
+        _object({**common, "status": _one_of(("not_projected",)),
+                 "reason": _one_of(CUSTOMER_CHECKS_NOT_PROJECTED_REASONS)})(value, where)
+        return
+    _object({
+        **common, "status": _one_of(("projected",)), "scopes": _any_list, "totals": _any_object,
+        "tests": _or_null(_PRE_NDA_TESTS),
+        "tests_absent_reason": _or_null(_one_of((RUN_BY_CLIENT_CAUSE,))),
+    })(value, where)
+    if (value["tests"] is None) == (value["tests_absent_reason"] is None):
+        raise AttestationRefused(f"{where}: states its tests or why it has none, exactly one")
+
+
+def _complexity(value: object, where: str) -> None:
+    _object({
+        "schema_id": _one_of((COMPLEXITY_SCHEMA,)), "state": _one_of(COMPLEXITY_STATES),
+        "calibration": _one_of(COMPLEXITY_CALIBRATIONS),
+        "total_milli": _count_or_null,
+        "band": _null,
+        "entitlement_reasons": _list(_text),
+    })(value, where)
+    total = value["total_milli"]
+    if (value["state"] == "complete") != (total is not None):
+        raise AttestationRefused(f"{where}.total_milli: a total goes with a complete measurement and only with it")
+    if total is not None and total > _MAX_COMPLEXITY_MILLI:
+        raise AttestationRefused(f"{where}.total_milli: is above its bound")
+    if not value["entitlement_reasons"]:
+        raise AttestationRefused(f"{where}.entitlement_reasons: states no reason")
+
+
+#: How each value of a published fingerprint is checked.
+PUBLISHED_FINGERPRINT_VALUES: Mapping[str, Check] = {
+    "schema": _one_of((PUBLISHED_FINGERPRINT_SCHEMA_V2,)),
+    "source_record_digest": _hex64,
+    "build_id": _identity,
+    "job_id": _identity,
+    "spec_hash": _hex64_or_null,
+    "verdict_binding": _identity,
+    "compile_status": _one_of(COMPILE_STATUSES),
+    "release_ref": _pattern(_RELEASE_REF),
+    "merkle_root": _merkle_root,
+    "determinism": _determinism,
+    "passed": _bool_or_null,
+    "terminal_success": _bool_or_null,
+    "seal": _object({"passed": _bool_or_null}),
+    "customer_checks": _customer_checks,
+    "complexity_measurement": _complexity,
+}
 
 
 def is_published_fingerprint(payload: dict) -> bool:
@@ -602,9 +811,10 @@ def check_published_fingerprint(payload: dict) -> list[str]:
 
     Raises :class:`AttestationRefused` for a schema that was never published
     (named as such), an unknown one, a ``code_bundle_hash`` (named), any other
-    undeclared top-level key, a missing required key, or a source record
-    digest that is not a sha256 hex digest. The values under the other keys
-    are reported by the signature and hash checks, not validated here.
+    undeclared top-level key, a missing required key, or a value not of its
+    declared form (``PUBLISHED_FINGERPRINT_VALUES``): booleans are booleans,
+    digests are sha256 hex digests, closed sets are closed, and the nested
+    objects carry exactly their declared keys.
     """
     schema = payload.get("schema")
     if schema in PUBLISHED_FINGERPRINT_NEVER_PUBLISHED:
@@ -625,9 +835,8 @@ def check_published_fingerprint(payload: dict) -> list[str]:
     missing = sorted(set(PUBLISHED_FINGERPRINT_REQUIRED) - set(payload))
     if missing:
         raise AttestationRefused(f"fingerprint: lacks {missing}")
-    digest = payload["source_record_digest"]
-    if not isinstance(digest, str) or _SOURCE_RECORD_DIGEST.fullmatch(digest) is None:
-        raise AttestationRefused("fingerprint.source_record_digest: is not a sha256 digest")
+    for key, value in payload.items():
+        PUBLISHED_FINGERPRINT_VALUES[key](value, f"fingerprint.{key}")
     return [f"[OK] fingerprint: {schema}"]
 
 

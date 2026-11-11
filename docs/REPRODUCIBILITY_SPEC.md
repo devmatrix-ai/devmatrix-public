@@ -136,6 +136,21 @@ closed set:
   `determinism`, `passed`, `terminal_success`, `seal`, `customer_checks`,
   `complexity_measurement`.
 
+Every value has a declared form, and the verifier refuses any other:
+
+| Key | Form |
+|-----|------|
+| `source_record_digest`, `spec_hash` | 64 lower-case hex chars (`spec_hash` may be `null`) |
+| `build_id`, `job_id`, `verdict_binding` | string of at most 256 chars, or `null` |
+| `compile_status` | one of the declared compilation outcomes |
+| `release_ref` | `release:` followed by 64 hex chars |
+| `merkle_root` | a digest, or an object of `root_hash`/`specs_root`/`ir_root`/`emit_root`/`sbom_root` (digest, or empty when the build carries no such layer), `leaf_count` (count) and `schema_version` (e.g. `1.4`) |
+| `determinism` | `{"status", "cause"}` (a cause only with `NOT_VERIFIED`, and always with it) or `{"deterministic": true/false/null}` |
+| `passed`, `terminal_success` | `true`, `false` or `null` |
+| `seal` | `{"passed": true/false/null}` |
+| `customer_checks` | the pre-NDA copy (`dmx_customer_checks_pre_nda/v1`): projected, with its tests or the reason it states none, or not projected with its reason; its scopes and totals are the sealed ones, checked as a list and an object |
+| `complexity_measurement` | `complexity-measurement/2`: a total only on a complete measurement, no band, at least one reason |
+
 It carries no `code_bundle_hash`: the delivered code never reproduced that
 digest, and each module's delivered code is sealed in the export manifest
 instead. The verifier refuses a `published-fingerprint/2` that carries it, any
