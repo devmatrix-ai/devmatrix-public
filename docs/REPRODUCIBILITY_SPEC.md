@@ -144,7 +144,7 @@ Every value has a declared form, and the verifier refuses any other:
 | `build_id`, `job_id`, `verdict_binding` | string of at most 256 chars, or `null` |
 | `compile_status` | one of the declared compilation outcomes |
 | `release_ref` | `release:` followed by 64 hex chars |
-| `merkle_root` | a digest, or an object of `root_hash`/`specs_root`/`ir_root`/`emit_root`/`sbom_root` (digest, or empty when the build carries no such layer), `leaf_count` (count) and `schema_version` (e.g. `1.4`) |
+| `merkle_root` | a digest, or an object of `root_hash` (digest), `specs_root`/`ir_root`/`emit_root`/`sbom_root` (digest, or empty when the build carries no such layer), `leaf_count` (count) and `schema_version` (one of `1.1`, `1.2`, `1.3`, `1.4`) |
 | `determinism` | `{"status", "cause"}` (a cause only with `NOT_VERIFIED`, and always with it) or `{"deterministic": true/false/null}` |
 | `passed`, `terminal_success` | `true`, `false` or `null` |
 | `seal` | `{"passed": true/false/null}` |

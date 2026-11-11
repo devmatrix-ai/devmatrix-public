@@ -590,7 +590,6 @@ PUBLISHED_FINGERPRINT_KEYS = PUBLISHED_FINGERPRINT_REQUIRED + (
 )
 _HEX64 = re.compile(r"[0-9a-f]{64}")
 _RELEASE_REF = re.compile(r"release:[0-9a-f]{64}")
-_MERKLE_SCHEMA_VERSION = re.compile(r"[0-9]{1,4}(\.[0-9]{1,4}){0,3}")
 _MAX_IDENTITY = 256
 #: The compilation outcomes a published fingerprint may state.
 COMPILE_STATUSES = (
@@ -602,6 +601,10 @@ COMPILE_STATUSES = (
 #: such layer), its leaf count and its proof schema version.
 MERKLE_ROOT_DIGESTS = ("root_hash", "specs_root", "ir_root", "emit_root", "sbom_root")
 MERKLE_ROOT_KEYS = MERKLE_ROOT_DIGESTS + ("leaf_count", "schema_version")
+#: The sub-roots a build may carry empty (it has no such layer); the root never is.
+MERKLE_SUB_ROOTS = ("specs_root", "ir_root", "emit_root", "sbom_root")
+#: The Merkle proof schemas a published commitment may name.
+MERKLE_SCHEMA_VERSIONS = ("1.1", "1.2", "1.3", "1.4")
 #: The customer's checks before the NDA, and the sealed schemas it copies.
 PRE_NDA_CUSTOMER_CHECKS_SCHEMA = "dmx_customer_checks_pre_nda/v1"
 SEALED_CUSTOMER_CHECKS_SCHEMAS = (
@@ -644,15 +647,15 @@ def _hex64_or_null(value: object, where: str) -> None:
         _hex64(value, where)
 
 
-def _merkle_digest(value: object, where: str) -> None:
-    """A Merkle digest, or empty: the build carries no such layer."""
+def _merkle_sub_root(value: object, where: str) -> None:
+    """A Merkle sub-root digest, or empty: the build carries no such layer."""
     if value != "":
         _hex64(value, where)
 
 
 def _merkle_root(value: object, where: str) -> None:
     if isinstance(value, str):
-        _merkle_digest(value, where)
+        _hex64(value, where)
         return
     if not isinstance(value, dict):
         raise AttestationRefused(f"{where}: is not a digest or an object")
@@ -663,9 +666,11 @@ def _merkle_root(value: object, where: str) -> None:
         if key == "leaf_count":
             _count(item, f"{where}.{key}")
         elif key == "schema_version":
-            _pattern(_MERKLE_SCHEMA_VERSION)(item, f"{where}.{key}")
+            _one_of(MERKLE_SCHEMA_VERSIONS)(item, f"{where}.{key}")
+        elif key in MERKLE_SUB_ROOTS:
+            _merkle_sub_root(item, f"{where}.{key}")
         else:
-            _merkle_digest(item, f"{where}.{key}")
+            _hex64(item, f"{where}.{key}")
 
 
 def _determinism(value: object, where: str) -> None:

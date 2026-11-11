@@ -142,6 +142,10 @@ class EveryValueIsOfItsDeclaredForm(unittest.TestCase):
         self._refused("fingerprint.merkle_root.leaf_count: is not a count", merkle_root={"leaf_count": -1})
         self._refused("carries undeclared keys ['private']", merkle_root={"private": "d" * 64})
         self._refused("fingerprint.merkle_root: is not a digest or an object", merkle_root=3)
+        self._refused("fingerprint.merkle_root: is not a sha256 digest", merkle_root="")
+        self._refused("fingerprint.merkle_root.root_hash: is not a sha256 digest", merkle_root={"root_hash": ""})
+        self._refused("fingerprint.merkle_root.schema_version: is not one of its declared values",
+                      merkle_root={"schema_version": "9999.0"})
 
     def test_the_determinism_claim(self) -> None:
         self._accepted(determinism={"status": "NOT_VERIFIED", "cause": "no_baseline"})
