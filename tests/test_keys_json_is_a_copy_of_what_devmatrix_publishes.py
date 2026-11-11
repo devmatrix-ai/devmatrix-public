@@ -14,13 +14,16 @@ import copy
 import hashlib
 import io
 import json
+import os
 import ssl
 import sys
 import tempfile
 import unittest
 import urllib.request
 from contextlib import redirect_stderr, redirect_stdout
+from collections.abc import Callable
 from email.message import Message
+from unittest import mock
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -67,11 +70,13 @@ def _bytes(document: dict) -> bytes:
 
 
 class _Answer:
-    def __init__(self, status: int, body: bytes) -> None:
-        self.status, self._body = status, body
+    def __init__(self, status: int, body: bytes, on_read: "Callable[[], None]" = lambda: None) -> None:
+        self.status, self._body, self._on_read = status, body, on_read
 
     def read(self, amount: int) -> bytes:
-        return self._body[:amount]
+        self._on_read()
+        chunk, self._body = self._body[:amount], self._body[amount:]
+        return chunk
 
     def __enter__(self) -> "_Answer":
         return self
@@ -83,8 +88,8 @@ class _Answer:
 class _Served:
     """An opener that answers every request with one status and body."""
 
-    def __init__(self, status: int, body: bytes) -> None:
-        self.answer = _Answer(status, body)
+    def __init__(self, status: int, body: bytes, on_read: Callable[[], None] = lambda: None) -> None:
+        self.answer = _Answer(status, body, on_read)
         self.timeouts: list[float] = []
 
     def open(self, request: urllib.request.Request, timeout: float) -> _Answer:
@@ -134,6 +139,27 @@ class TheRefresh(unittest.TestCase):
         rk.fetch(_URL, served)
         self.assertEqual(served.timeouts, [rk.FETCH_TIMEOUT_SECONDS])
 
+    def test_a_slow_answer_is_refused_at_one_deadline_for_the_whole_read(self) -> None:
+        """Each read is quick enough for a socket timeout; together they are not."""
+        clock = [0.0]
+
+        def tick() -> None:
+            clock[0] += rk.FETCH_TIMEOUT_SECONDS / 3
+
+        body = b" " * (rk._READ_CHUNK_BYTES * 5)
+        with mock.patch.object(rk.time, "monotonic", lambda: clock[0]):
+            with self.assertRaisesRegex(rk.RefreshRefused, "did not answer within"):
+                rk.fetch(_URL, _Served(200, body, tick))
+
+    def test_a_key_is_retired_by_setting_its_end_once(self) -> None:
+        repo = _Repo(self, _RETIRED, _EVIDENCE, _SEAL)
+        retired = dict(_EVIDENCE, status="retired", status_since="2026-12-01T00:00:00+00:00",
+                       expires_at="2026-12-01T00:00:00+00:00")
+        successor = _key("evidence-3", "evidence-signing", "active", "2026-12-01T00:00:00+00:00")
+        code, out, err = repo.run(_document(_RETIRED, retired, successor, _SEAL))
+        self.assertEqual(code, 0, err)
+        self.assertIn("active -> retired", out)
+
 
 class TheRefusals(unittest.TestCase):
     def _refused(self, served: dict | bytes, *needles: str, repo: _Repo | None = None) -> None:
@@ -180,6 +206,14 @@ class TheRefusals(unittest.TestCase):
         evidence = dict(_EVIDENCE, status="retired")
         self._refused(_document(revived, evidence, _SEAL), "status went back from retired to active")
 
+    def test_a_retired_window_that_is_reopened_or_widened(self) -> None:
+        for change in ({"expires_at": None}, {"expires_at": "2027-01-01T00:00:00+00:00"},
+                       {"status_since": None}, {"status_since": "2026-08-01T00:00:00+00:00"}):
+            field = next(iter(change))
+            with self.subTest(change=change):
+                self._refused(_document(dict(_RETIRED, **change), _EVIDENCE, _SEAL),
+                              f"{field} changed", "once set it never changes")
+
     def test_not_a_keys_document(self) -> None:
         self._refused({"schema_id": "devmatrix-keys/2", "keys": []}, "is not a devmatrix-keys/1 document")
         self._refused(b"<html>sign in</html>", "is not UTF-8 JSON")
@@ -206,6 +240,12 @@ class TheOpener(unittest.TestCase):
         for code in (301, 302, 303, 307, 308):
             with self.subTest(code=code), self.assertRaisesRegex(rk.RefreshRefused, f"answered {code}, a redirect"):
                 rk.opener().error("https", request, io.BytesIO(b""), code, "Redirect", headers)
+
+    def test_no_proxy_is_used_even_when_the_environment_names_one(self) -> None:
+        with mock.patch.dict(os.environ, {"https_proxy": "http://proxy.invalid:3128", "HTTPS_PROXY": "http://proxy.invalid:3128"}):
+            built = rk.opener()
+        proxies = [h.proxies for h in built.handlers if isinstance(h, urllib.request.ProxyHandler)]
+        self.assertEqual(proxies, [])
 
     def test_the_certificate_and_host_name_are_verified(self) -> None:
         handlers = [h for h in rk.opener().handlers if isinstance(h, urllib.request.HTTPSHandler)]

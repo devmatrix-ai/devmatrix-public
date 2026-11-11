@@ -12,13 +12,16 @@ it unchanged. It refuses, naming why:
 - a purpose with no key, or with other than one active key;
 - a key keys.json lists that the document no longer lists: evidence signed by
   a retired key still verifies, so a key is never dropped;
-- a key whose label, purpose, class, algorithm, public key or start changed;
+- a key whose label, purpose, class, algorithm, public key or start changed,
+  or whose end (expires_at) or status date (status_since) changed once set:
+  a window can be closed, never reopened or widened;
 - a status that goes back (only active to retired or revoked, and retired to
   revoked, are allowed).
 
-The document is read over https only, with certificate verification, a
-timeout and a size limit; a redirect is refused, because the keys are read
-only where they are published.
+The document is read over https only, with certificate verification, no
+proxy, a size limit and one deadline for the whole read; a redirect is
+refused, because the keys are read only where they are published. keys.json
+is replaced in one step, never left half written.
 
 Standard library only.
 
@@ -33,7 +36,10 @@ from __future__ import annotations
 import argparse
 import base64
 import json
+import os
 import ssl
+import tempfile
+import time
 import sys
 import urllib.error
 import urllib.request
@@ -48,11 +54,15 @@ import verify_fingerprint as vf
 PURPOSES = ("evidence-signing", "seal-signing")
 ALGORITHM = "Ed25519"
 ED25519_PUBLIC_KEY_BYTES = 32
+#: The deadline for the whole fetch, connection and every read included.
 FETCH_TIMEOUT_SECONDS = 20
+_READ_CHUNK_BYTES = 16 * 1024
 #: The published document is a few kilobytes; anything near this is not it.
 MAX_DOCUMENT_BYTES = 1 << 20
 #: The fields of a key that never change once it is published.
 FIXED_FIELDS = ("key_id", "purpose", "class", "algorithm", "public_key", "created_at")
+#: The fields that may be set once, from null, and never change after.
+SET_ONCE_FIELDS = ("expires_at", "status_since")
 #: The status changes a published key can make.
 FORWARD = frozenset({("active", "retired"), ("active", "revoked"), ("retired", "revoked")})
 
@@ -94,9 +104,12 @@ class _RefuseRedirect(urllib.request.HTTPRedirectHandler):
 
 
 def opener() -> urllib.request.OpenerDirector:
-    """An opener that verifies the certificate and host name and follows no redirect."""
+    """An opener that verifies the certificate and host name, goes through no
+    proxy and follows no redirect."""
     context = ssl.create_default_context()
-    return urllib.request.build_opener(_RefuseRedirect(), urllib.request.HTTPSHandler(context=context))
+    return urllib.request.build_opener(
+        urllib.request.ProxyHandler({}), _RefuseRedirect(), urllib.request.HTTPSHandler(context=context)
+    )
 
 
 def fetch(url: str, via: Opener | None = None) -> bytes:
@@ -104,11 +117,19 @@ def fetch(url: str, via: Opener | None = None) -> bytes:
     if urlsplit(url).scheme != "https":
         raise RefreshRefused(f"{url} is not an https URL")
     request = urllib.request.Request(url, headers={"Accept": "application/json"})
+    deadline = time.monotonic() + FETCH_TIMEOUT_SECONDS
     try:
         with (via or opener()).open(request, timeout=FETCH_TIMEOUT_SECONDS) as response:
             if response.status != 200:
                 raise RefreshRefused(f"{url} answered {response.status}, not 200")
-            data = response.read(MAX_DOCUMENT_BYTES + 1)
+            data = b""
+            while len(data) <= MAX_DOCUMENT_BYTES:
+                if time.monotonic() > deadline:
+                    raise RefreshRefused(f"{url} did not answer within {FETCH_TIMEOUT_SECONDS} s")
+                chunk = response.read(_READ_CHUNK_BYTES)
+                if not chunk:
+                    break
+                data += chunk
     except urllib.error.HTTPError as exc:
         raise RefreshRefused(f"{url} answered {exc.code}") from exc
     except urllib.error.URLError as exc:
@@ -173,6 +194,11 @@ def changes(published: list[dict], served: list[dict]) -> list[str]:
         for field in FIXED_FIELDS:
             if new[field] != old[field]:
                 refusals.append(f"{name} {field} changed from {old[field]!r} to {new[field]!r}")
+        for field in SET_ONCE_FIELDS:
+            if old[field] is not None and new[field] != old[field]:
+                refusals.append(
+                    f"{name} {field} changed from {old[field]!r} to {new[field]!r}; once set it never changes"
+                )
         if new["status"] != old["status"]:
             if (old["status"], new["status"]) not in FORWARD:
                 refusals.append(f"{name} status went back from {old['status']} to {new['status']}")
@@ -203,6 +229,18 @@ def refresh(data: bytes, source: str, keys_file: Path) -> tuple[bytes, list[str]
     return document_bytes(document), changes(published, served)
 
 
+def _replace(path: Path, data: bytes) -> None:
+    """Write ``data`` to ``path`` in one step: a new file renamed over it."""
+    handle, name = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
+    try:
+        with os.fdopen(handle, "wb") as out:
+            out.write(data)
+        os.replace(name, path)
+    except BaseException:
+        Path(name).unlink(missing_ok=True)
+        raise
+
+
 def main(argv: list[str] | None = None, via: Opener | None = None) -> int:
     parser = argparse.ArgumentParser(description="Refresh keys.json from the keys DevMatrix publishes")
     parser.add_argument(
@@ -230,7 +268,7 @@ def main(argv: list[str] | None = None, via: Opener | None = None) -> int:
     if args.check:
         print(f"{args.keys} differs from what {args.source} publishes", file=sys.stderr)
         return 1
-    args.keys.write_bytes(written)
+    _replace(args.keys, written)
     print(f"wrote {args.keys}")
     return 0
 
