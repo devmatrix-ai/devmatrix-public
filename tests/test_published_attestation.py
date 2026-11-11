@@ -37,13 +37,16 @@ _PUBLIC = base64.b64encode(
 ).decode()
 _KEY_ID = "test-key"
 _KEYS = [{
+    "kid": "sha256:" + hashlib.sha256(base64.b64decode(_PUBLIC)).hexdigest(),
     "key_id": _KEY_ID,
+    "purpose": "evidence-signing",
+    "class": "production",
     "algorithm": "Ed25519",
     "public_key": _PUBLIC,
-    "class": "production",
-    "valid_from": "2026-01-01T00:00:00+00:00",
-    "valid_until": None,
-    "anchor": "independent: made for this test",
+    "status": "active",
+    "status_since": None,
+    "created_at": "2026-01-01T00:00:00+00:00",
+    "expires_at": None,
 }]
 
 
@@ -184,7 +187,7 @@ class TheCommandLine(unittest.TestCase):
     ) -> subprocess.CompletedProcess[str]:
         with tempfile.TemporaryDirectory() as tmp:
             keys = Path(tmp) / "keys.json"
-            keys.write_text(json.dumps({"keys": _KEYS}), encoding="utf-8")
+            keys.write_text(json.dumps({"schema_id": vf.KEYS_SCHEMA_ID, "keys": _KEYS}), encoding="utf-8")
             evidence = Path(tmp) / "attestation.json"
             evidence.write_text(json.dumps(_signed(payload)), encoding="utf-8")
             command = [sys.executable, str(ROOT / "verify_fingerprint.py"), "-f", str(evidence),

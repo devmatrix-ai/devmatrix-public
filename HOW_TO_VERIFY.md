@@ -61,10 +61,10 @@ Every evidence file in this repository carries a `signature` beside its `fingerp
 
 What is signed is the `fingerprint` object serialized as JSON with sorted keys, no whitespace, UTF-8 (`json.dumps(fingerprint, sort_keys=True, separators=(",", ":"), ensure_ascii=False)`). `signed_payload_hash` is the SHA-256 of those same bytes.
 
-A public key inside the file proves nothing by itself: anyone can sign with their own key and paste it there. The keys DevMatrix signs with are published in [`keys.json`](keys.json), each with its `key_id`, `class` and validity window. `verify_fingerprint.py` runs the signature check on every file it reads, and passes only when all of these hold:
+A public key inside the file proves nothing by itself: anyone can sign with their own key and paste it there. The keys DevMatrix signs with are published in [`keys.json`](keys.json), a `devmatrix-keys/1` document: each key has a `kid` (the SHA-256 of its public key), its `key_id`, `purpose`, `class`, `status` and validity window (`created_at` to `expires_at`). One `key_id` once named two keys, so a key is found by its `key_id` and its public key together. `verify_fingerprint.py` runs the signature check on every file it reads, and passes only when all of these hold:
 
 1. `signed_payload_hash` is the SHA-256 of the canonical fingerprint;
-2. `key_id` and the inline `public_key` are one entry of `keys.json`;
+2. `key_id` and the inline `public_key` are one entry of `keys.json`, an `evidence-signing` key that is not `revoked`;
 3. `signed_at` falls inside that entry's window;
 4. the Ed25519 signature verifies over the canonical fingerprint with that key;
 5. the key's class is `production`.
@@ -82,7 +82,7 @@ A failed check prints a `[FAIL] signature: ...` line and the script exits non-ze
 Notes:
 
 - **`signed_at` is claimed, not signed.** It sits beside the signature, outside the signed fingerprint. The window check catches evidence that names a time its key was not in use, but it cannot stop someone who holds a retired private key from signing new evidence and claiming a time inside that key's window. A retired key that leaked would have to be withdrawn from `keys.json`.
-- **Where the keys come from.** `keys.json` lives in this repository with the evidence. Its `anchor` field says whether a key was also published somewhere independent of it; a key whose anchor is not independent prints a `[NOTE]`.
+- **Where the keys come from.** `keys.json` lives in this repository with the evidence. DevMatrix also publishes every key it signs with, without sign-in, at <https://devmatrix.dev/.well-known/devmatrix-keys.json>, in the same format; compare the key the verifier names with the one listed there. A `retired` key still verifies what it signed inside its window; a `revoked` key never verifies.
 - **Production keys only.** `keys.json` lists production keys only. A signature by a key of any other class fails with `NOT a production key`, and no option accepts it.
 - **Unsigned fingerprints.** A flat `build_fingerprint.json` carries no signature, and fails unless you pass `--allow-unsigned`; then only its hashes are checked.
 - **Tests.** `python -m unittest discover -s tests` runs the checks on every evidence file in this repository, plus the tampering cases: a changed signature, payload, key, key id or time.

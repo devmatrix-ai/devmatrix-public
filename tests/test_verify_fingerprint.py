@@ -188,16 +188,29 @@ class TheKeysFile(unittest.TestCase):
         import tempfile
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "keys.json"
-            path.write_text(json.dumps({"keys": [KEYS[0], "not an object"]}), encoding="utf-8")
-            with self.assertRaises(ValueError):
-                vf.load_keys(path)
+            cases = {
+                "an entry that is not an object": {"schema_id": vf.KEYS_SCHEMA_ID, "keys": [KEYS[0], "not an object"]},
+                "the old form": {"keys": KEYS},
+                "an entry with an undeclared field": {"schema_id": vf.KEYS_SCHEMA_ID, "keys": [dict(KEYS[0], anchor="x")]},
+                "a kid that is not its key's": {"schema_id": vf.KEYS_SCHEMA_ID, "keys": [dict(KEYS[0], kid="sha256:" + "0" * 64)]},
+            }
+            for case, document in cases.items():
+                with self.subTest(case=case):
+                    path.write_text(json.dumps(document), encoding="utf-8")
+                    with self.assertRaises(ValueError):
+                        vf.load_keys(path)
 
-    def test_a_key_not_published_independently_says_so(self) -> None:
-        for name in EXPECTED:
-            with self.subTest(name=name):
-                passed, lines = vf.verify_signature(_evidence(name), KEYS)
-                self.assertTrue(passed, lines)
-                self.assertTrue(any("published only in keys.json" in line for line in lines), lines)
+    def test_a_revoked_key_never_verifies(self) -> None:
+        name = next(iter(EXPECTED))
+        passed, lines = vf.verify_signature(_evidence(name), [dict(k, status="revoked") for k in KEYS])
+        self.assertFalse(passed, lines)
+        self.assertIn("REVOKED", lines[-1])
+
+    def test_a_key_that_signs_no_evidence_never_verifies(self) -> None:
+        name = next(iter(EXPECTED))
+        passed, lines = vf.verify_signature(_evidence(name), [dict(k, purpose="seal-signing") for k in KEYS])
+        self.assertFalse(passed, lines)
+        self.assertIn("does not sign evidence", lines[-1])
 
 
 PRODUCTION_PAIR = (
@@ -268,7 +281,7 @@ class TheCommandLine(unittest.TestCase):
         name = next(iter(EXPECTED))
         with tempfile.TemporaryDirectory() as tmp:
             keys = Path(tmp) / "keys.json"
-            keys.write_text(json.dumps({"keys": [dict(k, **{"class": "staging"}) for k in KEYS]}), encoding="utf-8")
+            keys.write_text(json.dumps({"schema_id": vf.KEYS_SCHEMA_ID, "keys": [dict(k, **{"class": "staging"}) for k in KEYS]}), encoding="utf-8")
             refused = _run("-f", name, "--compare", name, "--keys", str(keys))
         self.assertNotEqual(refused.returncode, 0, refused.stdout)
         self.assertIn("NOT a production key", refused.stdout)

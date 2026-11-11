@@ -34,6 +34,15 @@ KEYS_FILE = Path(__file__).resolve().parent / "keys.json"
 #: The only class of key that signs a DevMatrix attestation.
 PRODUCTION = "production"
 
+#: The registry keys.json is a copy of: DevMatrix publishes every key it signs
+#: with there, without sign-in, in the same devmatrix-keys/1 document.
+KEYS_URL = "https://devmatrix.dev/.well-known/devmatrix-keys.json"
+KEYS_SCHEMA_ID = "devmatrix-keys/1"
+KEY_FIELDS = frozenset({
+    "kid", "key_id", "purpose", "class", "algorithm", "public_key",
+    "status", "status_since", "created_at", "expires_at",
+})
+
 
 def sha256_file(filepath: Path) -> str:
     """Compute SHA-256 hash of a file."""
@@ -176,13 +185,25 @@ def canonical_payload(fingerprint: dict) -> bytes:
 
 
 def load_keys(path: Path) -> list[dict]:
-    """The published keys in ``path`` (keys.json)."""
-    keys = read_json(path).get("keys")
+    """The published keys in ``path`` (keys.json, a devmatrix-keys/1 document).
+
+    Each key is identified by ``kid``, the SHA-256 of its public key; one
+    ``key_id`` once named two keys, so a key is found by its label and its
+    public key together.
+    """
+    document = read_json(path)
+    if set(document) != {"schema_id", "keys"} or document["schema_id"] != KEYS_SCHEMA_ID:
+        raise ValueError(f"{path} is not a {KEYS_SCHEMA_ID} document")
+    keys = document["keys"]
     if not isinstance(keys, list) or not keys:
         raise ValueError(f"{path} lists no keys")
-    malformed = [i for i, k in enumerate(keys) if not isinstance(k, dict)]
+    malformed = [i for i, k in enumerate(keys) if not isinstance(k, dict) or set(k) != KEY_FIELDS]
     if malformed:
-        raise ValueError(f"{path}: key entries {malformed} are not objects")
+        raise ValueError(f"{path}: key entries {malformed} are not {KEYS_SCHEMA_ID} keys")
+    for i, key in enumerate(keys):
+        raw = _b64(key["public_key"], f"key {i} public_key")
+        if key["kid"] != "sha256:" + hashlib.sha256(raw).hexdigest():
+            raise ValueError(f"{path}: key {i} kid is not the SHA-256 of its public key")
     return keys
 
 
@@ -213,8 +234,10 @@ def verify_signature(
     1. the pack carries a ``fingerprint`` object and a ``signature`` object;
     2. the algorithm is Ed25519;
     3. ``signed_payload_hash`` is the SHA-256 of the canonical fingerprint;
-    4. ``key_id`` and the inline ``public_key`` are one entry of keys.json;
-    5. ``signed_at`` falls inside that entry's window (``signed_at`` is claimed
+    4. ``key_id`` and the inline ``public_key`` are one entry of keys.json, an
+       evidence-signing key that is not revoked;
+    5. ``signed_at`` falls inside that entry's ``created_at`` .. ``expires_at``
+       window (``signed_at`` is claimed
        by the signer, not signed: the window bounds the claim, it does not
        protect against a retired private key that leaked);
     6. the signature verifies over the canonical fingerprint with that key;
@@ -246,13 +269,17 @@ def verify_signature(
         ]
     if entry.get("algorithm") != "Ed25519":
         return False, [f"[FAIL] signature: the published key {key_id!r} is not an Ed25519 key"]
+    if entry.get("purpose") != "evidence-signing":
+        return False, [f"[FAIL] signature: the published key {key_id!r} does not sign evidence"]
+    if entry.get("status") == "revoked":
+        return False, [f"[FAIL] signature: the published key {key_id!r} is REVOKED"]
 
     try:
         signed_at = _instant(signature.get("signed_at"), "signed_at")
-        valid_from = _instant(entry.get("valid_from"), "valid_from")
+        valid_from = _instant(entry.get("created_at"), "created_at")
         valid_until = (
-            None if entry.get("valid_until") is None
-            else _instant(entry.get("valid_until"), "valid_until")
+            None if entry.get("expires_at") is None
+            else _instant(entry.get("expires_at"), "expires_at")
         )
         public_key = _b64(entry.get("public_key"), "public_key")
         signature_bytes = _b64(signature.get("signature"), "signature")
@@ -277,9 +304,6 @@ def verify_signature(
         return False, [f"[FAIL] signature: INVALID for key {key_id!r}"]
 
     lines = [f"[OK] signature: Ed25519, key {key_id!r} ({entry.get('class')}), signed {signature.get('signed_at')}"]
-    anchor = entry.get("anchor")
-    if not (isinstance(anchor, str) and anchor.startswith("independent")):
-        lines.append(f"[NOTE] key {key_id!r} is published only in keys.json: {anchor}")
     if entry.get("class") != PRODUCTION:
         return False, lines + [
             f"[FAIL] signature: {key_id!r} is NOT a production key; this is not a DevMatrix attestation"

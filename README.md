@@ -96,8 +96,9 @@ including attestations and every failure case, is
 **It does not prove:**
 
 - that the keys are DevMatrix's beyond this repository: `keys.json` lives here
-  with the evidence, and each key's `anchor` says whether it was also published
-  somewhere else. A key that was not prints a `[NOTE]`;
+  with the evidence. DevMatrix also publishes every key it signs with, without
+  sign-in, at https://devmatrix.dev/.well-known/devmatrix-keys.json; compare
+  the key the verifier names with the one listed there;
 - the signing time: `signed_at` is claimed by the signer and is not covered by
   the signature;
 - anything about code you cannot see: the hashes are compared, the generated
