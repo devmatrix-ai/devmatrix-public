@@ -318,9 +318,20 @@ class TheCommand(unittest.TestCase):
         self._fails(build, "the statement's signature is INVALID for key 'seal-test'")
 
     def test_a_seal_key_that_is_not_a_production_key(self) -> None:
+        # A keys file holds one environment's keys: a seal key of another
+        # class next to a production evidence key is refused before any check.
         build = OneBuild()
         build.keys[0]["class"] = "staging"
-        self._fails(build, "is NOT a production key; this is not a DevMatrix seal")
+        self._fails(build, "the keys mix ['production', 'staging'] keys")
+
+    def test_a_seal_key_that_is_not_a_production_key_is_refused_in_process(self) -> None:
+        build = OneBuild()
+        with tempfile.TemporaryDirectory() as tmp:
+            build.run(Path(tmp))
+            keys = [dict(k, **{"class": "staging"}) for k in build.keys]
+            with self.assertRaises(vf.BindingRefused) as raised:
+                vf.read_seal(Path(tmp) / "seal", keys)
+        self.assertIn("is NOT a production key; this is not a DevMatrix seal", str(raised.exception))
 
     def test_a_published_attestation_of_an_earlier_schema_cannot_be_bound(self) -> None:
         build = OneBuild()

@@ -76,7 +76,15 @@ VERIFICATION PASSED
 ```
 
 Anything it cannot prove prints `[FAIL]` and exits non-zero; nothing is
-skipped. To check a single file, leave out `--compare`. The full guide,
+skipped. Every verdict names the keys file it was reached with (`Keys: <path>
+(<class> keys)`).
+
+**Exit codes.** `0` means `VERIFICATION PASSED`: every check held against
+production keys. `1` means a check failed, or the keys file was refused. `3`
+means every check held, but against a keys file whose keys are not production
+keys: the verdict prints that file's own label followed by `— not a production
+attestation`, and never `PASSED`. A script that reads only the exit code must
+treat anything but `0` as not a DevMatrix attestation. To check a single file, leave out `--compare`. The full guide,
 including attestations and every failure case, is
 [HOW_TO_VERIFY.md](HOW_TO_VERIFY.md).
 

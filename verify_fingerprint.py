@@ -34,6 +34,14 @@ KEYS_FILE = Path(__file__).resolve().parent / "keys.json"
 
 #: The only class of key that signs a DevMatrix attestation.
 PRODUCTION = "production"
+#: The exit status when every check passed against keys that are not
+#: production keys: not 0, so that whoever reads only the exit status never
+#: takes it for a pass. Such a verdict never says PASSED.
+NOT_PRODUCTION_EXIT = 3
+#: A keys file whose keys are not production keys names them with a label,
+#: printed in the verdict: a bounded word that never claims production or a pass.
+_LABEL = re.compile(r"[A-Za-z0-9][A-Za-z0-9 ._-]{0,63}")
+_CLASS = re.compile(r"[a-z][a-z0-9_-]{0,31}")
 
 #: The registry keys.json is a copy of: DevMatrix publishes every key it signs
 #: with there, without sign-in, in the same devmatrix-keys/1 document.
@@ -195,7 +203,7 @@ def load_keys(path: Path) -> list[dict]:
     ``key_id`` once named two keys, so a key is found by its label and its
     public key together.
     """
-    return keys_of(read_json(path), str(path))
+    return trusted_keys_of(read_json(path), str(path)).keys
 
 
 def keys_of(document: object, path: str) -> list[dict]:
@@ -225,6 +233,68 @@ def keys_of(document: object, path: str) -> list[dict]:
         if key["status"] not in KEY_STATUSES:
             raise ValueError(f"{path}: key {i} status {key['status']!r} is not one of {sorted(KEY_STATUSES)}")
     return keys
+
+
+def keys_class(keys: list[dict]) -> str:
+    """The one class of every key in ``keys``, or ``ValueError``: a keys file
+    holds the keys of one environment."""
+    classes = sorted({str(key.get("class")) for key in keys})
+    if len(classes) != 1:
+        raise ValueError(f"the keys mix {classes} keys: a keys file holds one environment's keys")
+    if not _CLASS.fullmatch(classes[0]):
+        raise ValueError(f"key class {classes[0]!r} is not a key class")
+    return classes[0]
+
+
+class TrustedKeys:
+    """The keys of a keys file, their one class, the label a file of keys
+    that are not production keys gives them, and where they were read from."""
+
+    def __init__(self, keys: list[dict], key_class: str, label: str | None, source: str) -> None:
+        self.keys = keys
+        self.key_class = key_class
+        self.label = label
+        self.source = source
+
+
+def trusted_keys_of(document: object, path: str) -> TrustedKeys:
+    """The keys of the keys file ``document`` read from ``path``, or
+    ``ValueError`` naming why. A file of production keys is exactly a
+    devmatrix-keys/1 document. A file of keys of any other class adds
+    ``label``, the name its verdict prints; without one it is refused, so
+    such keys are never read as production keys."""
+    if not isinstance(document, dict):
+        raise ValueError(f"{path} is not a {KEYS_SCHEMA_ID} document")
+    label = document.get("label")
+    keys = keys_of({k: v for k, v in document.items() if k != "label"}, path)
+    key_class = keys_class(keys)
+    if key_class == PRODUCTION:
+        if "label" in document:
+            raise ValueError(f"{path} lists production keys and a label: production keys carry none")
+        return TrustedKeys(keys, key_class, None, path)
+    if label is None:
+        raise ValueError(
+            f"{path} lists {key_class!r} keys; a {key_class!r} key is NOT a production key, "
+            "and the file declares no label for them"
+        )
+    if (
+        not isinstance(label, str)
+        or not _LABEL.fullmatch(label)
+        or any(word in label.casefold() for word in ("production", "pass"))
+    ):
+        raise ValueError(f"{path}: label {label!r} is not a label for {key_class!r} keys")
+    return TrustedKeys(keys, key_class, label, path)
+
+
+def class_refusal(entry: dict, key_id: object, accept: str, document: str) -> str | None:
+    """Why the key ``entry`` does not count when ``accept`` keys are trusted,
+    or ``None`` when it does. ``document`` names what it would sign."""
+    if entry.get("class") == accept:
+        return None
+    if accept == PRODUCTION:
+        return f"{key_id!r} is NOT a production key; this is not a DevMatrix {document}"
+    return f"{key_id!r} is a {entry.get('class')!r} key; these keys are {accept!r} keys"
+
 
 
 def _instant(value: object, what: str) -> datetime:
@@ -284,7 +354,7 @@ def published_key(
 
 
 def verify_signature(
-    evidence: dict, keys: list[dict]
+    evidence: dict, keys: list[dict], accept: str = PRODUCTION
 ) -> tuple[bool, list[str]]:
     """Verify the Ed25519 signature of a published evidence pack.
 
@@ -299,8 +369,10 @@ def verify_signature(
        by the signer, not signed: the window bounds the claim, it does not
        protect against a retired private key that leaked);
     6. the signature verifies over the canonical fingerprint with that key;
-    7. the key is a production key; a key of any other class is refused, with
-       no option to accept it.
+    7. the key is of the class ``accept`` trusts: a production key, unless
+       the caller verifies against a keys file of another class. A key that
+       is not a production key never passes as production, with no option to
+       accept it.
 
     Returns whether it passed and the lines to report.
     """
@@ -343,15 +415,16 @@ def verify_signature(
         return False, [f"[FAIL] signature: INVALID for key {key_id!r}"]
 
     lines = [f"[OK] signature: Ed25519, key {key_id!r} ({entry.get('class')}), signed {signature.get('signed_at')}"]
-    if entry.get("class") != PRODUCTION:
-        return False, lines + [
-            f"[FAIL] signature: {key_id!r} is NOT a production key; this is not a DevMatrix attestation"
-        ]
+    refusal = class_refusal(entry, key_id, accept, "attestation")
+    if refusal is not None:
+        return False, lines + [f"[FAIL] signature: {refusal}"]
+    if accept != PRODUCTION:
+        lines.append(f"[NOTE] signature: {key_id!r} is a {accept!r} key, NOT a production key")
     return True, lines
 
 
 def check_signature(
-    label: str, evidence: dict, keys: list[dict], allow_unsigned: bool
+    label: str, evidence: dict, keys: list[dict], allow_unsigned: bool, accept: str = PRODUCTION
 ) -> bool:
     """Print the signature verdict of ``evidence``; an unsigned file fails
     unless ``allow_unsigned``."""
@@ -365,7 +438,7 @@ def check_signature(
             f"--allow-unsigned checks the hashes of an unsigned build{suffix}"
         )
         return False
-    passed, lines = verify_signature(evidence, keys)
+    passed, lines = verify_signature(evidence, keys, accept)
     for line in lines:
         print(f"{line}{suffix}")
     return passed
@@ -1061,7 +1134,7 @@ def reproducible_sha256(block: object) -> str:
     return _sha256_prefixed(canonical.encode("utf-8"))
 
 
-def read_seal(bundle: Path, keys: list[dict]) -> tuple[dict, list[str]]:
+def read_seal(bundle: Path, keys: list[dict], accept: str = PRODUCTION) -> tuple[dict, list[str]]:
     """The seal statement of a seal verification bundle, once its signature
     verifies with a published seal-signing key of keys.json, and the lines
     to report. The key inside the bundle proves nothing by itself: it has to
@@ -1096,12 +1169,16 @@ def read_seal(bundle: Path, keys: list[dict]) -> tuple[dict, list[str]]:
         pem_key.verify(signature, statement_bytes)
     except InvalidSignature as exc:
         raise BindingRefused(f"seal: the statement's signature is INVALID for key {key_id!r}") from exc
-    if entry.get("class") != PRODUCTION:
-        raise BindingRefused(f"seal: {key_id!r} is NOT a production key; this is not a DevMatrix seal")
-    return statement, [
+    refusal = class_refusal(entry, key_id, accept, "seal")
+    if refusal is not None:
+        raise BindingRefused(f"seal: {refusal}")
+    lines = [
         f"[OK] seal: {statement['schema_id']}, key {key_id!r} ({entry.get('class')}), "
         f"sealed {statement.get('sealed_at')}"
     ]
+    if accept != PRODUCTION:
+        lines.append(f"[NOTE] seal: {key_id!r} is a {accept!r} key, NOT a production key")
+    return statement, lines
 
 
 def _delivered(path: Path) -> tuple[bytes, dict]:
@@ -1301,14 +1378,16 @@ def _published_failures(
     return []
 
 
-def _published_for_binding(path: Path, keys: list[dict]) -> tuple[dict | None, list[str], list[str]]:
+def _published_for_binding(
+    path: Path, keys: list[dict], accept: str = PRODUCTION,
+) -> tuple[dict | None, list[str], list[str]]:
     """The published attestation to bind, the lines to report and the
     failures; ``None`` when it cannot be bound, so the rest still runs."""
     try:
         evidence = read_json(path)
     except (OSError, ValueError) as exc:
         return None, [], [f"published attestation: cannot read {path}: {exc}"]
-    passed, lines = verify_signature(evidence, keys)
+    passed, lines = verify_signature(evidence, keys, accept)
     if not passed:
         return None, [], ["published attestation: " + "; ".join(lines)]
     payload = signed_payload(evidence)
@@ -1327,6 +1406,7 @@ def _published_for_binding(path: Path, keys: list[dict]) -> tuple[dict | None, l
 
 def verify_binding(
     bundle: Path, attestations: list[tuple[str, Path]], published_path: Path | None, keys: list[dict],
+    accept: str = PRODUCTION,
 ) -> bool:
     """Print the verdict of binding each delivered attestation to the seal
     (and the published attestation, when given); whether all of it held.
@@ -1334,7 +1414,7 @@ def verify_binding(
     the [FAIL] lines what was not."""
     lines: list[str] = []
     try:
-        statement, seal_lines = read_seal(bundle, keys)
+        statement, seal_lines = read_seal(bundle, keys, accept)
     except (BindingRefused, OSError, ValueError) as refusal:
         print(f"[FAIL] {refusal}")
         return False
@@ -1342,7 +1422,7 @@ def verify_binding(
     failures: list[str] = []
     published = None
     if published_path is not None:
-        published, published_lines, published_failures = _published_for_binding(published_path, keys)
+        published, published_lines, published_failures = _published_for_binding(published_path, keys, accept)
         lines += published_lines
         failures += published_failures
     if published is not None and len(attestations) != 1:
@@ -1365,6 +1445,48 @@ def _attestation_argument(value: str) -> tuple[str, Path]:
     if not separator or not service or not path:
         raise argparse.ArgumentTypeError("name the service: <service>=<fingerprint_attestation.json>")
     return service, Path(path)
+
+
+def load_trusted_keys(path: Path) -> TrustedKeys:
+    """The keys of the keys file at ``path`` and where they were read from;
+    exits 1 naming why when the file is missing or refused."""
+    source = path.resolve()
+    if not source.is_file():
+        print(f"ERROR: Keys file not found: {source}")
+        sys.exit(1)
+    try:
+        return trusted_keys_of(read_json(source), str(source))
+    except (OSError, ValueError) as exc:
+        print(f"[FAIL] keys file refused: {exc}")
+        print("VERIFICATION FAILED")
+        sys.exit(1)
+
+
+def keys_line(trusted: TrustedKeys) -> str:
+    return f"Keys: {trusted.source} ({trusted.key_class} keys)"
+
+
+def exit_with_verdict(passed: bool, trusted: TrustedKeys, failed: str) -> None:
+    """Print the verdict, naming the keys it was reached with, and exit: 0
+    only when every check passed against production keys; NOT_PRODUCTION_EXIT,
+    with the label the keys file gives, when it passed against keys of any
+    other class; 1 when a check failed."""
+    print()
+    print("=" * 60)
+    if not passed:
+        print("VERIFICATION FAILED")
+        print(failed)
+        print(keys_line(trusted))
+        sys.exit(1)
+    if trusted.key_class != PRODUCTION:
+        print(f"{trusted.label} — not a production attestation")
+        print(f"Every check above held against {trusted.key_class!r} keys, which are NOT production keys.")
+        print(keys_line(trusted))
+        sys.exit(NOT_PRODUCTION_EXIT)
+    print("VERIFICATION PASSED")
+    print("Every check above passed.")
+    print(keys_line(trusted))
+    sys.exit(0)
 
 
 def main():
@@ -1444,17 +1566,13 @@ Examples:
     if args.seal is not None or args.attestation or args.published is not None:
         if args.seal is None or not args.attestation or args.fingerprint is not None:
             parser.error("--seal takes one or more --attestation SERVICE=FILE (and optionally --published), without --fingerprint")
-        if not args.keys.exists():
-            print(f"ERROR: Keys file not found: {args.keys}")
-            sys.exit(1)
+        trusted = load_trusted_keys(args.keys)
         print("=" * 60)
         print("DevMatrix Seal and Attestation Verification")
         print("=" * 60)
-        passed = verify_binding(args.seal, args.attestation, args.published, load_keys(args.keys))
-        print()
-        print("=" * 60)
-        print("VERIFICATION PASSED" if passed else "VERIFICATION FAILED")
-        sys.exit(0 if passed else 1)
+        print(keys_line(trusted))
+        passed = verify_binding(args.seal, args.attestation, args.published, trusted.keys, trusted.key_class)
+        exit_with_verdict(passed, trusted, "At least one check above failed: see the [FAIL] lines.")
     if args.fingerprint is None:
         parser.error("name a --fingerprint, or a --seal with its --attestation files")
 
@@ -1465,20 +1583,19 @@ Examples:
 
     evidence = read_json(args.fingerprint)
     fingerprint = flatten_fingerprint(evidence)
-    if not args.keys.exists():
-        print(f"ERROR: Keys file not found: {args.keys}")
-        sys.exit(1)
-    keys = load_keys(args.keys)
+    trusted = load_trusted_keys(args.keys)
+    keys, accept = trusted.keys, trusted.key_class
 
     print("=" * 60)
     print("DevMatrix Build Fingerprint Verification")
     print("=" * 60)
+    print(keys_line(trusted))
     print(f"\nFingerprint: {args.fingerprint}")
     print_identity(evidence)
     print()
 
     all_passed = check_signature(
-        "", evidence, keys, args.allow_unsigned
+        "", evidence, keys, args.allow_unsigned, accept
     )
     if not check_attestation("", evidence):
         all_passed = False
@@ -1493,7 +1610,7 @@ Examples:
         print(f"Comparing with: {args.compare}")
         print_identity(evidence2)
         if not check_signature(
-            str(args.compare), evidence2, keys, args.allow_unsigned
+            str(args.compare), evidence2, keys, args.allow_unsigned, accept
         ):
             all_passed = False
         if not check_attestation(str(args.compare), evidence2):
@@ -1539,17 +1656,7 @@ Examples:
             print("Use --spec and/or --output to verify hashes.")
             print("Use --compare to compare two fingerprints.")
 
-    # Final result
-    print()
-    print("=" * 60)
-    if all_passed:
-        print("VERIFICATION PASSED")
-        print("Every check above passed.")
-        sys.exit(0)
-    else:
-        print("VERIFICATION FAILED")
-        print("At least one check above failed: see the [FAIL] lines.")
-        sys.exit(1)
+    exit_with_verdict(all_passed, trusted, "At least one check above failed: see the [FAIL] lines.")
 
 
 if __name__ == "__main__":
