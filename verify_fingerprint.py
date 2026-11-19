@@ -980,15 +980,252 @@ def check_published_attestation(payload: dict) -> list[str]:
     return lines
 
 
-def check_attestation(label: str, evidence: dict) -> bool:
+# ---------------------------------------------------------------------------
+# Published platform seals: the public record of a signed platform seal. It
+# carries digests, versions, closed-set statuses, grades and counts, the
+# digest of the exact signed seal statement and the seal signature over it;
+# no platform or service name. A holder of the seal statement checks its
+# SHA-256 against ``statement_sha256``.
+# ---------------------------------------------------------------------------
+
+#: The seal statement from which every sealed build states the lowest grade it
+#: could be sealed at (``seal_floor``) and every test that failed, by name.
+SEAL_STATEMENT_WITH_FLOOR = "seal-statement/5"
+#: The grades, best first; the lowest grade a build is sealed at from
+#: seal-statement/5 on, and the grades at or above it.
+GRADES = ("A+", "A", "B", "C", "D", "F")
+SEAL_FLOOR = "A"
+SEALABLE_GRADES = GRADES[: GRADES.index(SEAL_FLOOR) + 1]
+PUBLISHED_PLATFORM_SEAL_PREFIX = "published-platform-seal/"
+#: The record of a seal-statement/3 or /4 seal: the client's grade states the
+#: share of tests it was sealed at.
+PUBLISHED_PLATFORM_SEAL_V1 = "published-platform-seal/1"
+#: The record of a seal-statement/5 seal: every service states the grade
+#: floor it was sealed at (``seal_floor``), its grade at or above it, and how
+#: many of its tests failed (``failed``); no share of tests.
+PUBLISHED_PLATFORM_SEAL_V2 = "published-platform-seal/2"
+#: The seal statements each record version is published from.
+PLATFORM_SEAL_STATEMENTS = {
+    PUBLISHED_PLATFORM_SEAL_V1: ("seal-statement/3", "seal-statement/4"),
+    PUBLISHED_PLATFORM_SEAL_V2: (SEAL_STATEMENT_WITH_FLOOR,),
+}
+#: Who measured a sealed platform, as the record states it, and who ran its tests.
+VERIFICATION_OF_RUN_BY = {"devmatrix": "devmatrix", "self_attested": "client"}
+_HEX64_ONLY = re.compile(r"[0-9a-f]{64}")
+_SEAL_KEY_ID = re.compile(r"[a-z0-9][a-z0-9._-]{0,63}")
+_SEALED_AT = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?Z")
+_BASE64 = re.compile(r"[A-Za-z0-9+/]{1,4096}={0,2}")
+_MAX_SEALED_SERVICES = 10_000
+
+
+def _count_upto(upper: int) -> Check:
+    def check(value: object, where: str) -> None:
+        if type(value) is not int or not 0 <= value <= upper:
+            raise AttestationRefused(f"{where}: is not a count in its range")
+    return check
+
+
+def _services_list(item: Check) -> Check:
+    def check(value: object, where: str) -> None:
+        if not isinstance(value, list) or not 0 < len(value) <= _MAX_SEALED_SERVICES:
+            raise AttestationRefused(f"{where}: is not a bounded, non-empty list")
+        for index, element in enumerate(value):
+            item(element, f"{where}[{index}]")
+    return check
+
+
+_SEAL_VERIFICATION = _one_of(tuple(VERIFICATION_OF_RUN_BY))
+_SERVICE_COMMON: Mapping[str, Check] = {
+    "spec_hash": _digest,
+    "spec_version": _count,
+    "verification": _SEAL_VERIFICATION,
+    "qa_score_hundredths": _or_null(_count_upto(10_000)),
+    "build_fingerprint": _digest,
+    "merkle_root": _digest,
+    "evidence_content_hash": _digest,
+    "evidence_key_id": _pattern(_SEAL_KEY_ID),
+    "fingerprint_attestation": _or_null(_object({
+        "document_sha256": _digest,
+        "reproducible_sha256": _digest,
+    })),
+}
+_SEALED_SERVICE_V1 = _object({
+    **_SERVICE_COMMON,
+    "grade": _or_null(_one_of(GRADES)),
+    "self_attested_grade": _or_null(_object({
+        "letter": _one_of(GRADES),
+        "score_percent": _count_upto(100),
+        "passed": _count,
+        "applicable": _count,
+        "failed": _count,
+        "listed_not_emitted": _count,
+        "listed_declared_skips": _count,
+        "required_percent": _count_upto(100),
+    })),
+})
+_SEALED_SERVICE_V2 = _object({
+    **_SERVICE_COMMON,
+    "grade": _or_null(_one_of(SEALABLE_GRADES)),
+    "self_attested_grade": _or_null(_object({
+        "letter": _one_of(SEALABLE_GRADES),
+        "score_percent": _count_upto(100),
+        "passed": _count,
+        "applicable": _count,
+        "listed_not_emitted": _count,
+        "listed_declared_skips": _count,
+    })),
+    "seal_floor": _one_of((SEAL_FLOOR,)),
+    "failed": _count,
+})
+
+
+def _platform_seal_record(schema: str, service: Check) -> Check:
+    """The closed schema of one published platform-seal record version."""
+    return _object({
+        "schema": _one_of((schema,)),
+        "seal_hash": _pattern(_HEX64_ONLY),
+        "sealed_at": _pattern(_SEALED_AT),
+        "statement_schema_id": _one_of(PLATFORM_SEAL_STATEMENTS[schema]),
+        "statement_sha256": _pattern(_HEX64_ONLY),
+        "seal_signature": _object({
+            "algorithm": _one_of(("Ed25519",)),
+            "key_id": _pattern(_SEAL_KEY_ID),
+            "signature_b64": _pattern(_BASE64),
+        }),
+        "seal_public_key": _object({
+            "key_id": _pattern(_SEAL_KEY_ID),
+            "public_key_b64": _pattern(_BASE64),
+        }),
+        "platform": _object({
+            "spec_hash": _digest,
+            "spec_version": _count,
+            "verification": _SEAL_VERIFICATION,
+            "qa_score_hundredths": _or_null(_count_upto(10_000)),
+        }),
+        "services": _services_list(service),
+        "run_by": _one_of(RUN_BY_VALUES),
+        "seal_class": _one_of(SEAL_CLASSES),
+    })
+
+
+PLATFORM_SEAL_SCHEMAS: Mapping[str, Check] = {
+    PUBLISHED_PLATFORM_SEAL_V1: _platform_seal_record(PUBLISHED_PLATFORM_SEAL_V1, _SEALED_SERVICE_V1),
+    PUBLISHED_PLATFORM_SEAL_V2: _platform_seal_record(PUBLISHED_PLATFORM_SEAL_V2, _SEALED_SERVICE_V2),
+}
+
+
+def is_published_platform_seal(payload: dict) -> bool:
+    """Whether a signed payload names a published platform-seal schema."""
+    schema = payload.get("schema")
+    return isinstance(schema, str) and schema.startswith(PUBLISHED_PLATFORM_SEAL_PREFIX)
+
+
+def _measurer_refusal(record: dict) -> str | None:
+    """Why the record does not state one measurer and only that measurer's
+    account, or ``None``: DevMatrix's score (and, on a service, its grade)
+    when DevMatrix ran the tests; the client's grade and no DevMatrix score
+    or grade when the client ran them."""
+    platform = record["platform"]
+    measurer = platform["verification"]
+    if VERIFICATION_OF_RUN_BY[measurer] != record["run_by"]:
+        return "platform seal.run_by: is not who the platform states measured it"
+    by_devmatrix = measurer == "devmatrix"
+    if (platform["qa_score_hundredths"] is not None) != by_devmatrix:
+        return "platform seal.platform.qa_score_hundredths: is not the account of who measured the platform"
+    for index, service in enumerate(record["services"]):
+        where = f"platform seal.services[{index}]"
+        if service["verification"] != measurer:
+            return f"{where}.verification: names another measurer than its platform"
+        devmatrix_account = (service["qa_score_hundredths"], service["grade"])
+        client_grade = service["self_attested_grade"]
+        if by_devmatrix and (None in devmatrix_account or client_grade is not None):
+            return f"{where}: is tested by DevMatrix and does not state exactly its score and grade"
+        if not by_devmatrix and (devmatrix_account != (None, None) or client_grade is None):
+            return f"{where}: is tested by its client and does not state exactly the client's grade"
+        if record["schema"] == PUBLISHED_PLATFORM_SEAL_V2 and client_grade is not None:
+            passed, applicable = client_grade["passed"], client_grade["applicable"]
+            if not 0 < applicable or passed > applicable:
+                return f"{where}.self_attested_grade: its test counts do not hold"
+            if service["failed"] != applicable - passed:
+                return f"{where}.failed: is not every test that did not pass"
+    return None
+
+
+def check_published_platform_seal(payload: dict, keys: list[dict], accept: str = PRODUCTION) -> list[str]:
+    """Validate a published platform seal against the closed schema it names.
+
+    Returns the lines to report; raises :class:`AttestationRefused` when the
+    schema is unknown, the record is not exactly that schema (an undeclared or
+    missing key at any level, a value not of its declared form, a record
+    version published from another seal statement), the seal class does not
+    go with who ran the tests, the record states another measurer's account
+    beside its own, or the seal key it names is not a seal-signing key
+    keys.json publishes for that ``key_id``, whose window holds ``sealed_at``.
+    From ``/2`` every service is graded at the seal floor or above and, when
+    the client ran its tests, ``failed`` is every test that did not pass.
+    """
+    schema = payload.get("schema")
+    check = PLATFORM_SEAL_SCHEMAS.get(schema) if isinstance(schema, str) else None
+    if check is None:
+        raise AttestationRefused(f"unknown platform seal schema {schema!r}")
+    check(payload, "platform seal")
+    if SEAL_CLASS_OF_RUN_BY[payload["run_by"]] != payload["seal_class"]:
+        raise AttestationRefused(
+            f"platform seal.seal_class: {payload['seal_class']!r} does not go with tests run by "
+            f"{payload['run_by']!r}"
+        )
+    key_id = payload["seal_signature"]["key_id"]
+    if payload["seal_public_key"]["key_id"] != key_id:
+        raise AttestationRefused("platform seal.seal_public_key: is not the key that signed the seal")
+    refusal = _measurer_refusal(payload)
+    if refusal is not None:
+        raise AttestationRefused(refusal)
+    try:
+        entry = published_key(
+            keys, key_id, payload["seal_public_key"]["public_key_b64"], "seal-signing", "seals",
+            payload["sealed_at"], "sealed",
+        )
+    except ValueError as exc:
+        raise AttestationRefused(f"platform seal: {exc}") from exc
+    refusal = class_refusal(entry, key_id, accept, "seal")
+    if refusal is not None:
+        raise AttestationRefused(f"platform seal: {refusal}")
+    services = payload["services"]
+    lines = [
+        f"[OK] platform seal: {schema} of a {payload['statement_schema_id']}; tests run by "
+        f"{payload['run_by']}, seal {payload['seal_class']}; {len(services)} sealed service(s)",
+        f"[OK] platform seal: seal key {key_id!r} ({entry.get('class')}), sealed {payload['sealed_at']}; "
+        f"the seal statement's SHA-256 is {payload['statement_sha256']}",
+    ]
+    if schema == PUBLISHED_PLATFORM_SEAL_V2:
+        for index, service in enumerate(services):
+            grade = service["self_attested_grade"]
+            letter = service["grade"] if grade is None else grade["letter"]
+            lines.append(
+                f"[OK] platform seal: services[{index}] graded {letter}, sealed at grade "
+                f"{service['seal_floor']} or better, {service['failed']} failed test(s)"
+            )
+    return lines
+
+
+def check_attestation(label: str, evidence: dict, keys: list[dict], accept: str = PRODUCTION) -> bool:
     """Print the schema verdict of ``evidence`` when its signed payload is a
-    published fingerprint or a published attestation; other documents have
-    nothing to check here."""
+    published fingerprint, a published platform seal or a published
+    attestation; other documents have nothing to check here."""
     payload = signed_payload(evidence)
+    suffix = f"  ({label})" if label else ""
+    if is_published_platform_seal(payload):
+        try:
+            lines = check_published_platform_seal(payload, keys, accept)
+        except AttestationRefused as refusal:
+            print(f"[FAIL] {refusal}{suffix}")
+            return False
+        for line in lines:
+            print(f"{line}{suffix}")
+        return True
     fingerprint = is_published_fingerprint(payload)
     if not fingerprint and not is_published_attestation(payload):
         return True
-    suffix = f"  ({label})" if label else ""
     try:
         lines = (check_published_fingerprint if fingerprint else check_published_attestation)(payload)
     except AttestationRefused as refusal:
@@ -1110,7 +1347,7 @@ def compare_fingerprints(fp1: dict, fp2: dict) -> list[tuple[str, bool, str]]:
 #: The fingerprint attestation a build's download carries.
 DELIVERED_ATTESTATION_SCHEMA = "fingerprint-attestation/2"
 #: The seal statements whose services state their fingerprint attestation.
-SEAL_STATEMENT_SCHEMAS = ("seal-statement/2", "seal-statement/3", "seal-statement/4")
+SEAL_STATEMENT_SCHEMAS = ("seal-statement/2", "seal-statement/3", "seal-statement/4", "seal-statement/5")
 SEAL_FILES = ("seal-statement.json", "seal-statement.sig.b64", "seal-public-key.pem")
 
 
@@ -1358,6 +1595,86 @@ def _measurer_failures(
     return []
 
 
+def _whole(value: object) -> bool:
+    return type(value) is int and 0 <= value <= _MAX_COUNT
+
+
+def _floor_problem(sealed: dict) -> str | None:
+    """Why one service of a seal-statement/5 does not state the grade floor
+    it was sealed at and every test that failed, or ``None``: the floor is
+    ``SEAL_FLOOR``, the grade (DevMatrix's, or the client's when the client
+    ran the tests) is at it or above, and the failed tests are names, each
+    once and in order; a build the client tested names exactly the tests
+    that did not pass."""
+    if sealed.get("seal_floor") != SEAL_FLOOR:
+        return f"does not state that it was sealed at grade {SEAL_FLOOR} or better"
+    failed = sealed.get("failed_tests")
+    if not isinstance(failed, list) or not all(isinstance(name, str) and name for name in failed):
+        return "its failed tests are not names"
+    if failed != sorted(set(failed)):
+        return "its failed tests are not each named once, in order"
+    measurer = sealed.get("verification")
+    if measurer == "devmatrix":
+        if sealed.get("self_attested_grade") is not None:
+            return "is measured by devmatrix and states a client grade"
+        letter = sealed.get("grade")
+    elif measurer == "self_attested":
+        grade = sealed.get("self_attested_grade")
+        if not isinstance(grade, dict):
+            return "is self-attested and states no client grade"
+        if sealed.get("grade") is not None or sealed.get("qa_score_hundredths") is not None:
+            return "is self-attested and states a DevMatrix grade or score"
+        letter = grade.get("letter")
+        passed, applicable = grade.get("passed"), grade.get("applicable")
+        if not (_whole(passed) and _whole(applicable) and 0 < applicable and passed <= applicable):
+            return "is self-attested and its test counts do not hold"
+        if len(failed) != applicable - passed:
+            return "is self-attested and its failed tests are not every test that did not pass"
+    else:
+        return "does not state who measured the build"
+    if letter not in SEALABLE_GRADES:
+        return f"is graded {letter!r}, below the grade {SEAL_FLOOR} it was sealed at"
+    return None
+
+
+def seal_floor_findings(statement: dict) -> tuple[list[str], list[str]]:
+    """The lines and the failures of the grade floor of every service of a
+    seal-statement/5: each service is graded at the floor or above and names
+    every test that failed; both are printed. Earlier statements state no
+    floor, and nothing is read into them."""
+    if statement.get("schema_id") != SEAL_STATEMENT_WITH_FLOOR:
+        return [], []
+    services = statement.get("services")
+    if not isinstance(services, list) or not services:
+        return [], ["the seal lists no sealed service"]
+    lines: list[str] = []
+    failures: list[str] = []
+    for index, sealed in enumerate(services):
+        name = sealed.get("name") if isinstance(sealed, dict) else None
+        label = name if isinstance(name, str) and name else f"services[{index}]"
+        if not isinstance(sealed, dict):
+            failures.append(f"{label}: is not a sealed service")
+            continue
+        problem = _floor_problem(sealed)
+        if problem is not None:
+            failures.append(f"{label}: {problem}")
+            continue
+        failed = sealed["failed_tests"]
+        if sealed["verification"] == "devmatrix":
+            account = f"graded {sealed['grade']} (score {sealed.get('qa_score_hundredths')} hundredths), measured by DevMatrix"
+        else:
+            grade = sealed["self_attested_grade"]
+            account = (
+                f"graded {grade['letter']} ({grade.get('score_percent')}%), self-attested: "
+                f"{grade['passed']}/{grade['applicable']} tests passed on the client's machine"
+            )
+        lines.append(
+            f"[OK] {label}: {account}; sealed at grade {SEAL_FLOOR} or better, {len(failed)} failed test(s)"
+        )
+        lines += [f"      {label}: failed {test}" for test in failed]
+    return lines, failures
+
+
 def _published_failures(
     service: str, data: bytes, document: dict, published: dict, lines: list[str],
 ) -> list[str]:
@@ -1419,7 +1736,8 @@ def verify_binding(
         print(f"[FAIL] {refusal}")
         return False
     lines += seal_lines
-    failures: list[str] = []
+    floor_lines, failures = seal_floor_findings(statement)
+    lines += floor_lines
     published = None
     if published_path is not None:
         published, published_lines, published_failures = _published_for_binding(published_path, keys, accept)
@@ -1597,7 +1915,7 @@ Examples:
     all_passed = check_signature(
         "", evidence, keys, args.allow_unsigned, accept
     )
-    if not check_attestation("", evidence):
+    if not check_attestation("", evidence, keys, accept):
         all_passed = False
 
     # Mode 1: Compare two fingerprints
@@ -1613,7 +1931,7 @@ Examples:
             str(args.compare), evidence2, keys, args.allow_unsigned, accept
         ):
             all_passed = False
-        if not check_attestation(str(args.compare), evidence2):
+        if not check_attestation(str(args.compare), evidence2, keys, accept):
             all_passed = False
         print()
 

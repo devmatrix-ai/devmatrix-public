@@ -14,6 +14,18 @@
 
 ## Verifier
 
+- **A seal taken at the grade floor verifies.** `seal-statement/5` is read:
+  every sealed service states the lowest grade it was sealed at (`A`), a grade
+  at it or above and every failed test by name, and each is printed. A grade
+  below the floor, a floor other than `A`, or failed tests not named once and
+  in order (for a build the client tested, not exactly the tests that did not
+  pass) fail. `seal-statement/2` to `/4` are read as before.
+- **A published platform seal is checked against its closed schema.**
+  `published-platform-seal/1` (the record of a `seal-statement/3` or `/4`
+  seal) and `published-platform-seal/2` (of a `seal-statement/5` seal: floor,
+  grade at or above it, failed count) are verified with `-f`; the seal key
+  each names must be a published `seal-signing` key. Before, such a record was
+  refused as an unknown attestation schema.
 - **A published fingerprint is checked against its one schema.**
   `published-fingerprint/2` is verified against its closed set of keys and
   carries no `code_bundle_hash` (the delivered code is sealed per module in the

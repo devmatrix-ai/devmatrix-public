@@ -458,6 +458,117 @@ class TheCommand(unittest.TestCase):
         self.assertIn("--seal takes one or more --attestation", result.stderr)
 
 
+def _floor_statement(document: dict, *failed: str) -> dict:
+    """A seal-statement/5: the build is graded at the seal floor or above and
+    names every test that failed."""
+    statement = _statement(document)
+    statement["schema_id"] = "seal-statement/5"
+    statement["services"][0].update(
+        qa_score_hundredths=9800, grade="A", self_attested_grade=None,
+        seal_floor="A", failed_tests=list(failed),
+    )
+    return statement
+
+
+def _client_floor_statement(document: dict, *failed: str) -> dict:
+    """A seal-statement/5 of a build the client tested: 10 applicable tests."""
+    statement = _floor_statement(document, *failed)
+    statement["platform"].update(verification="self_attested", qa_score_hundredths=None)
+    statement["services"][0].update(
+        verification="self_attested", qa_score_hundredths=None, grade=None,
+        self_attested_grade={
+            "letter": "A", "score_percent": 90, "passed": 10 - len(failed), "applicable": 10,
+            "listed_not_emitted": 0, "listed_declared_skips": 0, "run_ids": {_SERVICE: "run-1"},
+        },
+    )
+    return statement
+
+
+class ASealAtTheGradeFloor(unittest.TestCase):
+    """From seal-statement/5 a build is sealed while its grade is A or better,
+    and every test that failed is named."""
+
+    _run = TheCommand._run
+    _fails = TheCommand._fails
+
+    def test_a_build_graded_at_the_floor_binds_and_names_its_failed_tests(self) -> None:
+        build = OneBuild()
+        build.statement = _floor_statement(build.document, "test_one", "test_two")
+        result = self._run(build)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        for line in (
+            "[OK] seal: seal-statement/5, key 'seal-test' (production)",
+            "[OK] orders: graded A (score 9800 hundredths), measured by DevMatrix; "
+            "sealed at grade A or better, 2 failed test(s)",
+            "      orders: failed test_one",
+            "      orders: failed test_two",
+            "[OK] orders: the delivered attestation is the sealed one",
+            "[OK] orders: tests run by devmatrix, as the seal states (measured by devmatrix)",
+            "VERIFICATION PASSED",
+        ):
+            self.assertIn(line, result.stdout)
+
+    def test_a_build_the_client_ran_binds_at_the_floor(self) -> None:
+        build = OneBuild()
+        _run_by_client(build.document)
+        build.statement = _client_floor_statement(build.document, "test_one")
+        build.published = dict(_published(build.document), run_by="client", seal_class="self_attested")
+        result = self._run(build)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn(
+            "[OK] orders: graded A (90%), self-attested: 9/10 tests passed on the client's machine; "
+            "sealed at grade A or better, 1 failed test(s)",
+            result.stdout,
+        )
+        self.assertIn("      orders: failed test_one", result.stdout)
+
+    def test_a_grade_below_the_floor(self) -> None:
+        build = OneBuild()
+        build.statement = _floor_statement(build.document)
+        build.statement["services"][0]["grade"] = "B"
+        self._fails(build, "orders: is graded 'B', below the grade A it was sealed at")
+
+    def test_a_client_grade_below_the_floor(self) -> None:
+        build = OneBuild()
+        _run_by_client(build.document)
+        build.statement = _client_floor_statement(build.document)
+        build.statement["services"][0]["self_attested_grade"]["letter"] = "C"
+        build.published = None
+        self._fails(build, "orders: is graded 'C', below the grade A it was sealed at")
+
+    def test_a_floor_other_than_a(self) -> None:
+        build = OneBuild()
+        build.statement = _floor_statement(build.document)
+        build.statement["services"][0]["seal_floor"] = "C"
+        self._fails(build, "orders: does not state that it was sealed at grade A or better")
+
+    def test_failed_tests_named_twice_or_out_of_order(self) -> None:
+        for failed in (("test_b", "test_a"), ("test_a", "test_a")):
+            with self.subTest(failed=failed):
+                build = OneBuild()
+                build.statement = _floor_statement(build.document, *failed)
+                self._fails(build, "orders: its failed tests are not each named once, in order")
+
+    def test_failed_tests_that_are_not_names(self) -> None:
+        build = OneBuild()
+        build.statement = _floor_statement(build.document)
+        build.statement["services"][0]["failed_tests"] = None
+        self._fails(build, "orders: its failed tests are not names")
+
+    def test_a_client_run_whose_failed_tests_are_not_every_test_that_did_not_pass(self) -> None:
+        build = OneBuild()
+        _run_by_client(build.document)
+        build.statement = _client_floor_statement(build.document, "test_one")
+        build.statement["services"][0]["self_attested_grade"]["passed"] = 10
+        build.published = None
+        self._fails(build, "orders: is self-attested and its failed tests are not every test that did not pass")
+
+    def test_an_earlier_statement_states_no_floor_and_still_binds(self) -> None:
+        result = self._run(OneBuild())
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertNotIn("sealed at grade", result.stdout)
+
+
 class APublishedV3(unittest.TestCase):
     def test_it_states_the_spec_identity(self) -> None:
         lines = vf.check_published_attestation(_published(_delivered()))

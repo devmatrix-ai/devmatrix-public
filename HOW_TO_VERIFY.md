@@ -137,11 +137,16 @@ It passes only when all of these hold:
 4. the file's `reproducible_sha256` is the digest of its reproducible block, and the seal and the published attestation state the same one;
 5. the file's platform spec hash and its hash for the service are the seal's `platform.spec_hash` and the service's `spec_hash`;
 6. who ran the tests, read from the file's platform verdict, is who the seal says measured the build: `devmatrix` with a seal measured by `devmatrix`, `client` with a `self_attested` one. A `seal-statement/2` does not state who measured the build, so it is refused, with what to do: re-seal the platform (a new seal is `seal-statement/3` or later) and verify the new seal;
-7. the published attestation is exactly what the file is published as: every field is recomputed from the file (its digest, identity, Merkle commitment, modules, determinism, gate verdict, counts, coverage, certificate, who ran the tests and the seal class that goes with them) and compared, and every field that differs is named.
+7. from `seal-statement/5` on, every service of the seal states the lowest grade it was sealed at (`seal_floor`, which is `A`), a grade at it or above (DevMatrix's, or the client's when the client ran the tests) and every test that failed, by name, each once and in order; for a build the client tested, those are exactly the tests that did not pass. The grade and each failed test are printed;
+8. the published attestation is exactly what the file is published as: every field is recomputed from the file (its digest, identity, Merkle commitment, modules, determinism, gate verdict, counts, coverage, certificate, who ran the tests and the seal class that goes with them) and compared, and every field that differs is named.
 
 Every check that can run does: the `[OK]` lines say what was verified and the `[FAIL]` lines what was not. A published `published-attestation/1` or `/2` is refused with what to do (republish the build's attestation, which is published as `/3`), and the file is still bound to the seal.
 
 `--published` is optional: without it, the file is bound to the seal alone. Name several `--attestation` options to bind every service of a seal; a published attestation is one build's, so it goes with exactly one.
+
+### A published platform seal
+
+`python verify_fingerprint.py -f platform-seals/<seal>.json` verifies the publication signature of a published platform seal and the closed schema it names. `published-platform-seal/1` is the record of a `seal-statement/3` or `/4` seal; `published-platform-seal/2` is the record of a `seal-statement/5` seal, where every service states the floor it was sealed at (`seal_floor`), its grade at or above it, and how many of its tests failed (`failed`; for a build the client tested, every test that did not pass). The record carries no platform or service name. The seal key it names must be a `seal-signing` key `keys.json` publishes, whose window holds `sealed_at`. A holder of the seal statement checks that its SHA-256 is the record's `statement_sha256`.
 
 ---
 
