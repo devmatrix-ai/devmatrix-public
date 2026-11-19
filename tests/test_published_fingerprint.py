@@ -167,7 +167,7 @@ class EveryValueIsOfItsDeclaredForm(unittest.TestCase):
         tests = dict(_projected_checks()["tests"], ran="yes")
         self._refused("fingerprint.customer_checks.tests.ran", customer_checks=_projected_checks(tests=tests))
         self._refused("fingerprint.customer_checks.sealed_schema_id",
-                      customer_checks=_projected_checks(sealed_schema_id="dmx_customer_checks/v9"))
+                      customer_checks=_projected_checks(sealed_schema_id="dmx_customer_checks/v10"))
 
     def test_the_complexity_measurement(self) -> None:
         self._accepted(complexity_measurement=_complexity())
