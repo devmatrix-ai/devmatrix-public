@@ -229,6 +229,24 @@ class APublishedPlatformSeal(unittest.TestCase):
         keys[0]["purpose"] = "evidence-signing"
         self._refused(_record_v2(), "the published key 'seal-test' does not sign seals", keys)
 
+    def test_a_seal_taken_outside_the_keys_window(self) -> None:
+        record = _record_v2()
+        record["sealed_at"] = "2025-12-31T23:59:59Z"
+        self._refused(record, "sealed at 2025-12-31T23:59:59Z, outside the window of 'seal-test'")
+        keys = _keys()
+        keys[0]["expires_at"] = "2026-11-01T00:00:00+00:00"
+        self._refused(_record_v2(), "sealed at 2026-11-19T10:00:00Z, outside the window of 'seal-test'", keys)
+
+    def test_a_revoked_seal_key(self) -> None:
+        keys = _keys()
+        keys[0]["status"] = "revoked"
+        self._refused(_record_v2(), "the published key 'seal-test' is REVOKED, not active or retired", keys)
+
+    def test_a_seal_key_that_is_not_a_production_key(self) -> None:
+        keys = _keys()
+        keys[0]["class"] = "staging"
+        self._refused(_record_v2(), "'seal-test' is NOT a production key; this is not a DevMatrix seal", keys)
+
     def test_a_signature_by_another_key_than_the_one_named(self) -> None:
         record = _record_v2()
         record["seal_public_key"]["key_id"] = "seal-other"
