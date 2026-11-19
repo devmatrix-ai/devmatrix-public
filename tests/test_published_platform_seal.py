@@ -256,6 +256,8 @@ class TheCommandOnAPublishedPlatformSeal(unittest.TestCase):
         result = self._run(_record_v2())
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         for line in (
+            "Seal: " + _hex("1"),
+            "Sealed at: 2026-11-19T10:00:00Z",
             "[OK] signature: Ed25519, key 'evidence-test' (production)",
             "[OK] platform seal: published-platform-seal/2 of a seal-statement/5",
             "VERIFICATION PASSED",

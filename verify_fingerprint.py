@@ -1240,9 +1240,10 @@ def check_attestation(label: str, evidence: dict, keys: list[dict], accept: str 
 #: fingerprint its build, a published attestation its job, the earliest
 #: fingerprints their run. A document that names none is refused, never
 #: shown as ``N/A``.
-IDENTITY_FIELDS = (("build_id", "Build ID"), ("job_id", "Job ID"), ("run_id", "Run ID"))
+#: A published platform seal is named by its seal hash.
+IDENTITY_FIELDS = (("build_id", "Build ID"), ("job_id", "Job ID"), ("run_id", "Run ID"), ("seal_hash", "Seal"))
 #: When the signed document says it was made, in the field its kind uses.
-TIME_FIELDS = (("build_timestamp", "Timestamp"), ("created_at", "Created at"))
+TIME_FIELDS = (("build_timestamp", "Timestamp"), ("created_at", "Created at"), ("sealed_at", "Sealed at"))
 
 
 class IdentityMissing(ValueError):
