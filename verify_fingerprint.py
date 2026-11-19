@@ -678,7 +678,8 @@ _MAX_IDENTITY = 256
 COMPILE_STATUSES = (
     "succeeded", "completed_incomplete", "completed_unverified", "completed_runtime_by_client",
     "halted_with_gate_failures", "halted_task_exception", "refused_at_admission",
-    "halted_service_build_failure", "halted_with_test_failures", "cancelled", "unknown",
+    "halted_service_build_failure", "halted_with_test_failures", "halted_delivery_refused",
+    "cancelled", "unknown",
 )
 #: The published Merkle commitment: digests (empty when the build carries no
 #: such layer), its leaf count and its proof schema version.
@@ -692,6 +693,7 @@ MERKLE_SCHEMA_VERSIONS = ("1.1", "1.2", "1.3", "1.4")
 PRE_NDA_CUSTOMER_CHECKS_SCHEMA = "dmx_customer_checks_pre_nda/v1"
 SEALED_CUSTOMER_CHECKS_SCHEMAS = (
     "dmx_customer_checks/v5", "dmx_customer_checks/v6", "dmx_customer_checks/v7", "dmx_customer_checks/v8",
+    "dmx_customer_checks/v9",
 )
 CUSTOMER_CHECKS_NOT_PROJECTED_REASONS = (
     "halted_before_gates", "projection_refused", "predates_projection", "task_exception",
