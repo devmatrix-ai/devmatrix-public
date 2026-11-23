@@ -736,9 +736,6 @@ class AnUntrustedEvidenceFolder(unittest.TestCase):
             vf.evidence_total_cap = saved
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 
 class TheVerdictJson(unittest.TestCase):
     """``--verdict-json`` names the verdict and the reason class of every
@@ -766,6 +763,26 @@ class TheVerdictJson(unittest.TestCase):
         verdict, result = self._verdict(build, lambda tmp: _evidence(tmp / "evidence", build.statement, _qa_files()))
         self.assertEqual(verdict, {"verdict": "VERIFIED", "reason_classes": [], "key_class": "production"})
         self.assertEqual(result.returncode, 0, result.stdout)
+
+    def test_a_run_that_stops_early_leaves_no_earlier_verdict(self) -> None:
+        """MUT-RED: the verdict file not reset at the start of a run."""
+        build = OneBuild()
+        build.published = None
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "verdict.json"
+            out.write_text(json.dumps({"verdict": "VERIFIED", "reason_classes": [], "key_class": "production"}))
+            keys = Path(tmp) / "refused-keys.json"
+            keys.write_text("{}", encoding="utf-8")
+            result = subprocess.run(
+                [sys.executable, str(vf.__file__), "--keys", str(keys), "--seal", str(Path(tmp) / "seal"),
+                 "--attestation", f"{_SERVICE}={Path(tmp) / 'none.json'}", "--verdict-json", str(out)],
+                capture_output=True, text=True, check=False,
+            )
+            self.assertEqual(result.returncode, 1, result.stdout)
+            self.assertEqual(json.loads(out.read_text(encoding="utf-8")),
+                             {"verdict": "FAILED", "reason_classes": ["unclassified"], "key_class": None})
+            self.assertEqual(sorted(path.name for path in Path(tmp).iterdir()),
+                             ["refused-keys.json", "verdict.json"])
 
     def test_the_printed_verdict_is_the_same_without_it(self) -> None:
         build = self._deferred_on_its_qa_run()
@@ -850,8 +867,7 @@ class TheVerdictJson(unittest.TestCase):
                 build, evidence = make()
                 verdict, result = self._verdict(build, evidence)
                 self.assertEqual(verdict["verdict"], "FAILED", result.stdout)
-                self.assertIn(expected, verdict["reason_classes"], result.stdout)
-                self.assertNotIn("unclassified", verdict["reason_classes"])
+                self.assertEqual(verdict["reason_classes"], [expected], result.stdout)
                 self.assertEqual(verdict["key_class"], "production")
                 self.assertEqual(result.returncode, 1)
 
@@ -859,3 +875,7 @@ class TheVerdictJson(unittest.TestCase):
 def vf_test_other_key():
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
     return Ed25519PrivateKey.generate()
+
+
+if __name__ == "__main__":
+    unittest.main()

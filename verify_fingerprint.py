@@ -2667,9 +2667,18 @@ def verdict_document(passed: bool, failed: list[Failure], key_class: str) -> dic
     }
 
 
-def write_verdict_json(path: Path, passed: bool, failed: list[Failure], trusted: TrustedKeys) -> None:
-    path.write_text(json.dumps(verdict_document(passed, failed, trusted.key_class), sort_keys=True) + "\n",
-                    encoding="utf-8")
+#: What ``--verdict-json`` holds from the start of a run until its verdict
+#: is reached: a run that stops before it (keys refused, usage refused, an
+#: error) never leaves an earlier verdict at the path.
+ABORTED_VERDICT = {"verdict": "FAILED", "reason_classes": [UNCLASSIFIED], "key_class": None}
+
+
+def write_verdict_json(path: Path, document: dict) -> None:
+    """Write ``document`` to ``path`` whole: to a file beside it, then moved
+    over it, so a reader never sees half of one."""
+    partial = path.with_name(path.name + ".partial")
+    partial.write_text(json.dumps(document, sort_keys=True) + "\n", encoding="utf-8")
+    os.replace(partial, path)
 
 
 def _attestation_argument(value: str) -> tuple[str, Path]:
@@ -2809,6 +2818,8 @@ Examples:
 
     if (args.seal is not None or args.attestation or args.published is not None or args.evidence is not None
             or args.verdict_json is not None):
+        if args.verdict_json is not None:
+            write_verdict_json(args.verdict_json, ABORTED_VERDICT)
         if args.seal is None or not args.attestation or args.fingerprint is not None:
             parser.error("--seal takes one or more --attestation SERVICE=FILE (and optionally --published, --evidence "
                          "and --verdict-json), without --fingerprint")
@@ -2822,7 +2833,7 @@ Examples:
             args.seal, args.attestation, args.published, trusted.keys, trusted.key_class, args.evidence, failed,
         )
         if args.verdict_json is not None:
-            write_verdict_json(args.verdict_json, passed, failed, trusted)
+            write_verdict_json(args.verdict_json, verdict_document(passed, failed, trusted.key_class))
         exit_with_verdict(passed, trusted, "At least one check above failed: see the [FAIL] lines.")
     if args.fingerprint is None:
         parser.error("name a --fingerprint, or a --seal with its --attestation files")

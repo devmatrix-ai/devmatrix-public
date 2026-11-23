@@ -22,9 +22,11 @@
   evidence_refused, attestation_digest, attestation_identity,
   published_deferred), so two verifiers can be compared over the same signed
   seals by verdict and class, never by wording. It is additive: the printed
-  verdict and the exit status do not change. A delivered attestation that is
-  not JSON, or a seal key file that is not a public key, is now refused by
-  name instead of with the parser's message.
+  verdict and the exit status do not change. The file says FAILED from the
+  start of a run until its verdict is reached, so a run that stops early never
+  leaves an earlier verdict there. A delivered or published attestation nested
+  too deep, which stopped with a traceback, and a seal key file that is not a
+  public key, are now refused by name.
 - **A seal states what its grade rests on.** `seal-statement/7` is read:
   every sealed service names its build, rests on its compile, a QA run on
   DevMatrix (named by its run and its report's SHA-256) or the client's run,
