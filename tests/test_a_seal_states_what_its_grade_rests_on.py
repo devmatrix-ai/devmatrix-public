@@ -829,7 +829,14 @@ class TheVerdictJson(unittest.TestCase):
             files[name] = files[name][:-2] + bytes([files[name][-2] ^ 1]) + files[name][-1:]
             return build, lambda tmp: _evidence(tmp / "evidence", build.statement, files)
 
+        def attestation_identity() -> tuple[OneBuild, object]:
+            build = OneBuild()
+            build.data = b"[" * 100_000
+            build.published = None
+            return build, None
+
         for expected, make in (
+            ("attestation_identity", attestation_identity),
             ("runner", runner), ("mixture", mixture), ("unknown_version", unknown_version),
             ("signature", signature), ("attestation_digest", attestation_digest),
             ("published_deferred", published_deferred), ("evidence_refused", evidence_refused),
