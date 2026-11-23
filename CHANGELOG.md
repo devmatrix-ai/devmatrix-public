@@ -18,6 +18,10 @@
   client tested states a whole share from 1 to 100%, counts that hold, enough
   tests passed to meet that share, and every test that did not pass named once,
   in order; a seal below its share fails.
+- **Proof rows that are not the rows the seal states fail as proofs.** Once
+  the proof rows file matches its digest, a file that is not JSON, not in the
+  seal's serialization, or not sorted distinct rows fails with the proofs
+  class, as the bundled verifier reads it.
 - **A QA run report or proof rows file may be up to 8 MiB** (it was 4 MiB):
   the proof rows name each row's module, so they can outgrow their report.
 - **Origin is checked against the keys this repository ships.** With no

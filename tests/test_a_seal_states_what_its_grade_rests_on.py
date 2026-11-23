@@ -585,8 +585,12 @@ class TheEvidence(unittest.TestCase):
 
     def test_proof_rows_that_do_not_hold(self) -> None:
         """MUT-RED: the serialization, the order, the witnessed set, the not
-        shown rows."""
+        shown rows; past the digest, each fails as proofs, never raises."""
         cases = (
+            (b"\xff{", "the proof rows file is not JSON"),
+            (b"[ ]", "the proof rows file is not written in the seal's serialization"),
+            (_proof_bytes([{"module_id": _SERVICE}]),
+             "the proof rows are not each a module, a test, sorted distinct witnesses and whether witnessed"),
             (_proof_bytes(_rows()) + b"\n", "the proof rows file is not written in the seal's serialization"),
             (_proof_bytes(list(reversed(_rows()))), "the proof rows are not each once, sorted by module and test"),
             (_proof_bytes([dict(_rows()[0], witnessed=False), _rows()[1]]),
@@ -601,8 +605,10 @@ class TheEvidence(unittest.TestCase):
                 _run_by_client(document)
                 statement = _on_the_client_run(document)
                 statement["services"][0]["proof_rows_sha256"] = hashlib.sha256(data).hexdigest()
-                _, failures = self._findings(statement, {f"proofs/{_BUILD}.json": data})
-                self.assertIn(f"{_SERVICE}: {reason}", failures)
+                with tempfile.TemporaryDirectory() as tmp:
+                    folder = _evidence(Path(tmp) / "evidence", statement, {f"proofs/{_BUILD}.json": data}, None)
+                    _, found = vf.evidence_findings(folder, statement, _statement_bytes(statement))
+                self.assertIn(vf.Failure(f"{_SERVICE}: {reason}", "proofs"), found)
 
     def test_a_file_the_seal_rests_on_that_is_not_held(self) -> None:
         statement = _on_the_qa_run(OneBuild().document)

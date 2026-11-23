@@ -2538,14 +2538,15 @@ def _proofs_failures(label: str, sealed: dict, data: bytes) -> list[Failure]:
     test), each once, with sorted distinct witnesses; the witnessed rows are
     exactly the tests the seal states proven not applicable, each of a module
     whose collected tests the seal digests, and every other row's test is
-    named not judged."""
+    named not judged. Past the digest, a file that is not the rows the seal
+    states fails as proofs."""
     if hashlib.sha256(data).hexdigest() != sealed["proof_rows_sha256"]:
         return [Failure(f"{label}: the proof rows file is not the one the seal signed (proof_rows_sha256)", "evidence_tampered")]
     rows, parsed = _json_of(data)
     if not parsed:
-        return [Failure(f"{label}: the proof rows file is not JSON", "evidence_tampered")]
+        return [Failure(f"{label}: the proof rows file is not JSON", "proofs")]
     if _canonical_seal_bytes(rows) != data:
-        return [Failure(f"{label}: the proof rows file is not written in the seal's serialization", "evidence_tampered")]
+        return [Failure(f"{label}: the proof rows file is not written in the seal's serialization", "proofs")]
     if not (isinstance(rows, list) and all(
         isinstance(row, dict) and set(row) == _PROOF_ROW_FIELDS
         and isinstance(row["module_id"], str) and row["module_id"]
@@ -2553,10 +2554,10 @@ def _proofs_failures(label: str, sealed: dict, data: bytes) -> list[Failure]:
         and _names_in_order(row["witnesses"]) and isinstance(row["witnessed"], bool)
         for row in rows
     )):
-        return [Failure(f"{label}: the proof rows are not each a module, a test, sorted distinct witnesses and whether witnessed", "evidence_tampered")]
+        return [Failure(f"{label}: the proof rows are not each a module, a test, sorted distinct witnesses and whether witnessed", "proofs")]
     keys = [(row["module_id"], row["test_id"]) for row in rows]
     if keys != sorted(set(keys)):
-        return [Failure(f"{label}: the proof rows are not each once, sorted by module and test", "evidence_tampered")]
+        return [Failure(f"{label}: the proof rows are not each once, sorted by module and test", "proofs")]
     witnessed = [f"{row['module_id']}::{row['test_id']}" for row in rows if row["witnessed"]]
     shown_not = [f"{row['module_id']}::{row['test_id']}" for row in rows if not row["witnessed"]]
     failures: list[Failure] = []
