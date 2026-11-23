@@ -53,6 +53,13 @@ def _rows() -> list[dict]:
     ]
 
 
+def _run_by_the_client(document: dict) -> None:
+    """The build was delivered with its tests left to the client."""
+    document["attested"]["platform_verdict"] = {
+        "uts_disposition": "NOT_RUN", "uts_not_run_reason": "runtime_phase_run_by_client",
+    }
+
+
 def _deferred_to_its_qa_run(document: dict) -> None:
     """The build was delivered with its tests deferred to a QA run."""
     document["attested"]["platform_verdict"] = {
@@ -250,7 +257,7 @@ class ASealOfStatement7(unittest.TestCase):
         for line in (
             f"      {_SERVICE}: rests on QA run {_RUN} (attempt 1, qa-run-report/2",
             f"[OK] {_SERVICE}: the delivered attestation is the sealed one",
-            f"[OK] {_SERVICE}: tests run by qa_run, as the seal states (rests on qa_run)",
+            f"[OK] {_SERVICE}: tests deferred to a QA run, as the seal states (rests on qa_run)",
             f"[OK] {_SERVICE}: QA run report qa-runs/{_BUILD}/report.json is the one the seal signed",
             "VERIFICATION PASSED",
         ):
@@ -258,21 +265,45 @@ class ASealOfStatement7(unittest.TestCase):
 
     def test_a_basis_its_delivered_attestation_does_not_state(self) -> None:
         """MUT-RED: the basis-runner binding removed."""
-        for deferred, statement_of, reason in (
-            (False, _on_the_qa_run, "the seal says its grade rests on qa_run, but its attestation says the tests "
-                                    "were run by devmatrix"),
-            (True, _on_the_compile, "the seal says its grade rests on compile, but its attestation says the tests "
-                                    "were run by qa_run"),
+        for runner, statement_of, reason in (
+            ("devmatrix", _on_the_qa_run, "the seal says its grade rests on qa_run, but its attestation says the "
+                                          "tests were run by devmatrix"),
+            ("client", _on_the_qa_run, "the seal says its grade rests on qa_run, but its attestation says the "
+                                       "tests were run by client"),
+            ("deferred", _on_the_compile, "the seal says its grade rests on compile, but its attestation says the "
+                                          "tests were deferred to a QA run"),
+            ("devmatrix", _on_the_client_run, "the seal says its grade rests on client_run, but its attestation "
+                                              "says the tests were run by devmatrix"),
         ):
             with self.subTest(reason=reason):
                 build = OneBuild()
-                if deferred:
+                if runner == "deferred":
                     _deferred_to_its_qa_run(build.document)
+                elif runner == "client":
+                    _run_by_the_client(build.document)
                 build.statement = statement_of(build.document)
                 build.published = None
                 result = self._run(build)
                 self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
                 self.assertIn(f"[FAIL] {_SERVICE}: {reason}", result.stdout)
+
+    def test_a_client_run_seal_binds_to_a_deferred_build(self) -> None:
+        """A paid build with no completed QA run may be run by the client
+        (contract §5 item 9): its client-run seal binds."""
+        for runner in ("client", "deferred"):
+            with self.subTest(runner=runner):
+                build = OneBuild()
+                if runner == "deferred":
+                    _deferred_to_its_qa_run(build.document)
+                else:
+                    _run_by_the_client(build.document)
+                build.statement = _on_the_client_run(build.document)
+                build.published = None
+                result = self._run(build)
+                shown = "deferred to a QA run" if runner == "deferred" else "run by client"
+                self.assertIn(f"[OK] {_SERVICE}: tests {shown}, as the seal states (rests on client_run)",
+                              result.stdout)
+                self.assertNotIn(f"[FAIL] {_SERVICE}: the seal says its grade rests on", result.stdout)
 
     def test_a_deferred_build_before_statement_7_does_not_bind(self) -> None:
         build = OneBuild()
@@ -281,7 +312,7 @@ class ASealOfStatement7(unittest.TestCase):
         build.published = None
         result = self._run(build)
         self.assertIn(f"[FAIL] {_SERVICE}: the seal says the build was measured by devmatrix, but its attestation "
-                      "says the tests were run by qa_run", result.stdout)
+                      "says the tests were deferred to a QA run", result.stdout)
 
     def test_a_deferred_build_has_no_published_attestation_to_bind(self) -> None:
         """No published attestation version states a QA-run runner, so it is
@@ -291,8 +322,8 @@ class ASealOfStatement7(unittest.TestCase):
         build.statement = _on_the_qa_run(build.document)
         result = self._run(build)
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
-        self.assertIn(f"[FAIL] {_SERVICE}: the delivered attestation says its tests are run by qa_run, which no "
-                      "published attestation version states; bind it to its seal without --published", result.stdout)
+        self.assertIn(f"[FAIL] {_SERVICE}: the delivered attestation says its tests were deferred to a QA run, "
+                      "which no published attestation version states; bind it to its seal without --published", result.stdout)
 
     def test_a_seal_that_mixes_measurers(self) -> None:
         """MUT-RED: the mixture check removed (§8a)."""
