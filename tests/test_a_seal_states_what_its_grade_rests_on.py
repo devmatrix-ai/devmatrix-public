@@ -475,6 +475,24 @@ class TheEvidence(unittest.TestCase):
                 change(folder)
             return _texts(vf.evidence_findings(folder, statement, _statement_bytes(statement)))
 
+    def test_a_file_the_manifest_does_not_name_is_refused(self) -> None:
+        """MUT-RED: an unlisted file of a name the bundle may hold passes, or
+        fails as tampered rather than refused. The verifier's own files
+        (verify.py, VERIFY.md) need not be named."""
+        statement = _on_the_qa_run(OneBuild().document)
+
+        def add_unlisted(folder: Path) -> None:
+            (folder / "seal-payload.json").write_text("{}\n", encoding="utf-8")
+            (folder / "VERIFY.md").write_text("read me\n", encoding="utf-8")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = _evidence(Path(tmp) / "evidence", statement, _qa_files(), None)
+            add_unlisted(folder)
+            _, failures = vf.evidence_findings(folder, statement, _statement_bytes(statement))
+        self.assertIn(vf.Failure("evidence: the bundle holds files its manifest does not name: ['seal-payload.json']",
+                                 "evidence_refused"), failures)
+        self.assertNotIn("evidence_tampered", {failure.reason_class for failure in failures})
+
     def test_the_report_and_the_proofs_agree_with_the_seal(self) -> None:
         statement = _on_the_qa_run(OneBuild().document)
         lines, failures = self._findings(statement, _qa_files())
@@ -620,6 +638,12 @@ class TheEvidence(unittest.TestCase):
             (b"[" * 100_000, f"evidence: {vf.EVIDENCE_MANIFEST} is not JSON"),
             (json.dumps({"schema": vf.EVIDENCE_SCHEMA, "seal_hash": statement["seal_hash"],
                          "files": [{"path": [1], "sha256": "x", "size_bytes": 1}], "absent": []}).encode(),
+             "evidence: the manifest's entries are not each a file named by its path"),
+            (json.dumps({"schema": vf.EVIDENCE_SCHEMA, "seal_hash": statement["seal_hash"],
+                         "files": [], "absent": [{"state": "purged", "reason": None}]}).encode(),
+             "evidence: the manifest's entries are not each a file named by its path"),
+            (json.dumps({"schema": vf.EVIDENCE_SCHEMA, "seal_hash": statement["seal_hash"],
+                         "files": [{"path": "x", "sha256": "x"}], "absent": []}).encode(),
              "evidence: the manifest's files are not each a path, a digest and a size"),
             (json.dumps({"schema": vf.EVIDENCE_SCHEMA, "seal_hash": statement["seal_hash"], "files": [],
                          "absent": [{"path": "a", "state": {"x": 1}, "reason": None}]}).encode(),

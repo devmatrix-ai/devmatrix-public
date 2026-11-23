@@ -18,6 +18,12 @@
   client tested states a whole share from 1 to 100%, counts that hold, enough
   tests passed to meet that share, and every test that did not pass named once,
   in order; a seal below its share fails.
+- **Evidence and seal keys, as the bundled verifier reads them.** Proofs the
+  seal states that the proof rows do not show fail as proofs; a manifest entry
+  that is not a file named by its path, or a file the manifest does not name
+  (other than the manifest, verify.py and VERIFY.md), is refused evidence; a
+  seal sealed at or after its key retired (status_since) is refused, as is a
+  retired seal key that states no retirement instant.
 - **A QA run report's modules state the tests they collected.** Each module
   of a qa-run-report/2 emitted suite states its collected test ids, strictly
   ordered or null, and their digest (the JSON array sorted by code point, no

@@ -893,5 +893,28 @@ class WhoMeasuredAStatement4(unittest.TestCase):
         self.assertIn("[FAIL] platform: is measured by DevMatrix and states no score", result.stdout)
 
 
+class ARetiredSealKey(unittest.TestCase):
+    """A seal key retires at ``status_since``: it seals nothing from then on."""
+
+    def _published(self, purpose: str, status_since: str | None, at: str) -> dict:
+        entry = dict(_key(_SEAL_KEY, "k", purpose), status="retired", status_since=status_since)
+        return vf.published_key([entry], "k", entry["public_key"], purpose, "seals", at, "sealed")
+
+    def test_a_seal_at_or_after_it_retired_is_refused(self) -> None:
+        """MUT-RED: the retired rule removed, or > for >=."""
+        for at in ("2026-06-01T00:00:00+00:00", "2026-07-01T00:00:00+00:00"):
+            with self.subTest(at=at), self.assertRaisesRegex(vf.KeyRefused, "once 'k' was retired"):
+                self._published("seal-signing", "2026-06-01T00:00:00+00:00", at)
+        with self.assertRaisesRegex(vf.KeyRefused, "names no instant it retired"):
+            self._published("seal-signing", None, "2026-03-01T00:00:00+00:00")
+
+    def test_a_seal_before_it_retired_holds(self) -> None:
+        self._published("seal-signing", "2026-06-01T00:00:00+00:00", "2026-05-31T23:59:59+00:00")
+
+    def test_an_evidence_key_signs_at_its_retirement_instant(self) -> None:
+        """A published evidence key's status_since is its last signature."""
+        self._published("evidence-signing", "2026-06-01T00:00:00+00:00", "2026-06-01T00:00:00+00:00")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -353,6 +353,14 @@ def published_key(
     valid_until = None if entry.get("expires_at") is None else _instant(entry.get("expires_at"), "expires_at")
     if instant < valid_from or (valid_until is not None and instant > valid_until):
         raise KeyRefused(f"{verb} at {at}, outside the window of {key_id!r}")
+    #: A seal key retires at ``status_since``: nothing it seals from then on
+    #: is its seal. (An evidence key's ``status_since`` is the instant of its
+    #: last signature, so that rule does not hold for it.)
+    if purpose == "seal-signing" and entry.get("status") == "retired":
+        if entry.get("status_since") is None:
+            raise KeyRefused(f"the published key {key_id!r} is retired and names no instant it retired (status_since)")
+        if instant >= _instant(entry.get("status_since"), "status_since"):
+            raise KeyRefused(f"{verb} at {at}, once {key_id!r} was retired ({entry.get('status_since')})")
     return entry
 
 
@@ -2456,6 +2464,12 @@ def _json_of(data: bytes) -> tuple[object, bool]:
         return None, False
 
 
+#: The files of an evidence bundle its manifest need not name: the manifest
+#: itself, and the verifier the bundle ships with its instructions, which no
+#: verdict reads.
+EVIDENCE_UNLISTED_FILES = frozenset({EVIDENCE_MANIFEST, "verify.py", "VERIFY.md"})
+
+
 def _manifest_failures(held: dict[str, bytes], statement: dict, statement_bytes: bytes) -> tuple[list[Failure], dict]:
     """The failures of the bundle's manifest against the files it holds,
     and the files it says are not held, by name: the manifest is of this seal,
@@ -2473,6 +2487,11 @@ def _manifest_failures(held: dict[str, bytes], statement: dict, statement_bytes:
     if manifest["seal_hash"] != statement.get("seal_hash"):
         failures.append(Failure("evidence: the bundle is of another seal than the statement verified", "evidence_tampered"))
     files, absent = manifest["files"], manifest["absent"]
+    if not all(isinstance(entries, list) and all(
+        isinstance(e, dict) and isinstance(e.get("path"), str) and e["path"] for e in entries
+    ) for entries in (files, absent)):
+        return failures + [Failure("evidence: the manifest's entries are not each a file named by its path",
+                                   "evidence_refused")], {}
     if not (isinstance(files, list) and all(
         isinstance(e, dict) and set(e) == {"path", "sha256", "size_bytes"} and isinstance(e["path"], str)
         for e in files
@@ -2485,7 +2504,11 @@ def _manifest_failures(held: dict[str, bytes], statement: dict, statement_bytes:
     )):
         return failures + [Failure("evidence: the manifest's absent files are not each a path, a state and a reason", "evidence_tampered")], {}
     listed = {entry["path"]: entry for entry in files}
-    if len(listed) != len(files) or sorted(listed) != sorted(set(held) - {EVIDENCE_MANIFEST}):
+    unlisted = sorted(set(held) - EVIDENCE_UNLISTED_FILES - set(listed))
+    if unlisted:
+        failures.append(Failure(f"evidence: the bundle holds files its manifest does not name: {_shown(unlisted)}",
+                                "evidence_refused"))
+    if len(listed) != len(files) or not set(listed) <= set(held) - {EVIDENCE_MANIFEST}:
         failures.append(Failure("evidence: the manifest does not name exactly the files the bundle holds", "evidence_tampered"))
     for name, entry in sorted(listed.items()):
         data = held.get(name)
@@ -2537,10 +2560,10 @@ def _proofs_failures(label: str, sealed: dict, data: bytes) -> list[Failure]:
     shown_not = [f"{row['module_id']}::{row['test_id']}" for row in rows if not row["witnessed"]]
     failures: list[Failure] = []
     if witnessed != sealed["proven_not_applicable_tests"]:
-        failures.append(Failure(f"{label}: the witnessed proof rows are not the tests the seal states proven not applicable", "evidence_tampered"))
+        failures.append(Failure(f"{label}: the witnessed proof rows are not the tests the seal states proven not applicable", "proofs"))
     missing = sorted(set(shown_not) - set(sealed["not_judged_tests"]))
     if missing:
-        failures.append(Failure(f"{label}: proofs not shown that the seal does not name not judged: {missing}", "evidence_tampered"))
+        failures.append(Failure(f"{label}: proofs not shown that the seal does not name not judged: {missing}", "proofs"))
     return failures
 
 
