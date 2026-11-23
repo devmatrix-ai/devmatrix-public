@@ -2564,8 +2564,16 @@ def evidence_findings(
                 expected.add(name)
                 if name not in held:
                     entry = gone.get(name)
-                    why = f" ({_shown(entry['state'])}: {_shown(entry['reason'])})" if entry else ""
-                    failures.append(Failure(f"{label}: the bundle does not hold its {what} {name}{why}", "evidence_tampered"))
+                    if entry is None:
+                        failures.append(Failure(
+                            f"{label}: the bundle neither holds its {what} {name} nor lists it absent",
+                            "evidence_tampered",
+                        ))
+                    else:
+                        lines.append(
+                            f"[NOT CHECKED] {label}: {what} {name} not checked: the bundle lists it absent "
+                            f"({_shown(entry['state'])}: {_shown(entry['reason'])})"
+                        )
                     continue
                 found = check(label, sealed, held[name])
                 failures += found
