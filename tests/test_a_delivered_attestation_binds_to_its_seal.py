@@ -417,6 +417,7 @@ class TheCommand(unittest.TestCase):
         """MUT-RED: each /4 share rule removed in turn."""
         for grade, reason in (
             (_share_grade(), None),
+            (_share_grade(passed=8, failed=("a", "b")), None),
             (_share_grade(passed=7, failed=("a", "b", "c")),
              "is self-attested and 7/10 tests passed, below the 80% it states"),
             (_share_grade(failed=()), "is self-attested and its failed tests are not every test that did not "
@@ -435,8 +436,9 @@ class TheCommand(unittest.TestCase):
                 result = self._run(build)
                 if reason is None:
                     self.assertEqual(result.returncode, 0, result.stdout)
-                    self.assertIn(f"[OK] {_SERVICE}: self-attested 9/10 tests passed, at or above the 80% it was "
-                                  "sealed at, 1 failed test(s) named", result.stdout)
+                    self.assertIn(f"[OK] {_SERVICE}: self-attested {grade['passed']}/10 tests passed, at or above "
+                                  f"the 80% it was sealed at, {len(grade['failed_tests'])} failed test(s) named",
+                                  result.stdout)
                 else:
                     self.assertEqual(result.returncode, 1, result.stdout)
                     self.assertIn(f"[FAIL] {_SERVICE}: {reason}", result.stdout)
