@@ -303,7 +303,8 @@ class ASealOfStatement7(unittest.TestCase):
                 shown = "deferred to a QA run" if runner == "deferred" else "run by client"
                 self.assertIn(f"[OK] {_SERVICE}: tests {shown}, as the seal states (rests on client_run)",
                               result.stdout)
-                self.assertNotIn(f"[FAIL] {_SERVICE}: the seal says its grade rests on", result.stdout)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn("VERIFICATION PASSED", result.stdout)
 
     def test_a_deferred_build_before_statement_7_does_not_bind(self) -> None:
         build = OneBuild()
