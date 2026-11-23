@@ -31,7 +31,9 @@
 - **Shared seal vectors.** `conformance/seal-verifier-vectors/` holds signed
   seals with their downloads and evidence, each with the verdict, reason
   classes and key class the bundled verifier gives it; the set's digest is
-  pinned and this verifier must give every vector the same verdict.
+  pinned and this verifier must give every vector the same verdict. A vector
+  the bundled verifier runs without a keys file is run here with the keys
+  this repository ships, and must be refused on its key, never verified.
 - **Evidence and seal keys, as the bundled verifier reads them.** Proofs the
   seal states that the proof rows do not show fail as proofs; a manifest entry
   that is not a file named by its path, or a file the manifest does not name

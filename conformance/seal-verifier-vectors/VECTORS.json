@@ -1,5 +1,5 @@
 {
-  "schema": "seal-verifier-vectors/1",
+  "schema": "seal-verifier-vectors/2",
   "vectors": [
     {
       "downloads": {
@@ -9,6 +9,7 @@
       "expect": "VERIFIED",
       "id": "v7_compile_devmatrix",
       "key_class": "fixture",
+      "keys": "keys.fixture.json",
       "reason_classes": [],
       "seal": "v7_compile_devmatrix/seal"
     },
@@ -20,6 +21,7 @@
       "expect": "VERIFIED",
       "id": "v7_qa_run_deferred",
       "key_class": "fixture",
+      "keys": "keys.fixture.json",
       "reason_classes": [],
       "seal": "v7_qa_run_deferred/seal"
     },
@@ -31,6 +33,7 @@
       "expect": "VERIFIED",
       "id": "v7_client_run_client",
       "key_class": "fixture",
+      "keys": "keys.fixture.json",
       "reason_classes": [],
       "seal": "v7_client_run_client/seal"
     },
@@ -42,6 +45,7 @@
       "expect": "VERIFIED",
       "id": "v7_client_run_deferred",
       "key_class": "fixture",
+      "keys": "keys.fixture.json",
       "reason_classes": [],
       "seal": "v7_client_run_deferred/seal"
     },
@@ -53,6 +57,7 @@
       "expect": "VERIFIED",
       "id": "v6_self_attested_client",
       "key_class": "fixture",
+      "keys": "keys.fixture.json",
       "reason_classes": [],
       "seal": "v6_self_attested_client/seal"
     },
@@ -64,6 +69,7 @@
       "expect": "VERIFIED",
       "id": "v4_share_met",
       "key_class": "fixture",
+      "keys": "keys.fixture.json",
       "reason_classes": [],
       "seal": "v4_share_met/seal"
     },
@@ -75,6 +81,7 @@
       "expect": "VERIFIED",
       "id": "v4_share_exactly_met",
       "key_class": "fixture",
+      "keys": "keys.fixture.json",
       "reason_classes": [],
       "seal": "v4_share_exactly_met/seal"
     },
@@ -86,6 +93,7 @@
       "expect": "FAILED",
       "id": "v4_grade_states_a_field_of_no_v4",
       "key_class": "fixture",
+      "keys": "keys.fixture.json",
       "reason_classes": [
         "statement_version"
       ],
@@ -99,6 +107,7 @@
       "expect": "FAILED",
       "id": "v4_grade_names_no_run",
       "key_class": "fixture",
+      "keys": "keys.fixture.json",
       "reason_classes": [
         "statement_version"
       ],
@@ -112,6 +121,7 @@
       "expect": "FAILED",
       "id": "v4_self_attested_states_a_devmatrix_grade",
       "key_class": "fixture",
+      "keys": "keys.fixture.json",
       "reason_classes": [
         "basis_measurer"
       ],
@@ -125,6 +135,7 @@
       "expect": "FAILED",
       "id": "v4_share_not_met",
       "key_class": "fixture",
+      "keys": "keys.fixture.json",
       "reason_classes": [
         "grade_floor"
       ],
@@ -138,6 +149,7 @@
       "expect": "FAILED",
       "id": "v4_failed_list_inexact",
       "key_class": "fixture",
+      "keys": "keys.fixture.json",
       "reason_classes": [
         "statement_version"
       ],
@@ -151,6 +163,7 @@
       "expect": "FAILED",
       "id": "v7_compile_run_by_client",
       "key_class": "fixture",
+      "keys": "keys.fixture.json",
       "reason_classes": [
         "runner"
       ],
@@ -164,6 +177,7 @@
       "expect": "FAILED",
       "id": "v7_qa_run_run_by_devmatrix",
       "key_class": "fixture",
+      "keys": "keys.fixture.json",
       "reason_classes": [
         "runner"
       ],
@@ -177,6 +191,7 @@
       "expect": "FAILED",
       "id": "v7_client_run_run_by_devmatrix",
       "key_class": "fixture",
+      "keys": "keys.fixture.json",
       "reason_classes": [
         "runner"
       ],
@@ -190,6 +205,7 @@
       "expect": "FAILED",
       "id": "v6_over_a_deferred_build",
       "key_class": "fixture",
+      "keys": "keys.fixture.json",
       "reason_classes": [
         "runner"
       ],
@@ -203,6 +219,7 @@
       "expect": "FAILED",
       "id": "v7_qa_run_report_tampered",
       "key_class": "fixture",
+      "keys": "keys.fixture.json",
       "reason_classes": [
         "evidence_tampered"
       ],
@@ -216,6 +233,7 @@
       "expect": "FAILED",
       "id": "v7_qa_run_report_listed_absent",
       "key_class": "fixture",
+      "keys": "keys.fixture.json",
       "reason_classes": [
         "evidence_absent"
       ],
@@ -229,6 +247,7 @@
       "expect": "FAILED",
       "id": "v7_qa_run_evidence_link",
       "key_class": "fixture",
+      "keys": "keys.fixture.json",
       "links": {
         "v7_qa_run_evidence_link/evidence/qa-runs/00000000-0000-0000-0000-000000000013/report.json": "v7_qa_run_deferred/evidence/qa-runs/00000000-0000-0000-0000-000000000002/report.json"
       },
@@ -245,6 +264,7 @@
       "expect": "FAILED",
       "id": "v7_attestation_states_another_reproducible_digest",
       "key_class": "fixture",
+      "keys": "keys.fixture.json",
       "reason_classes": [
         "attestation_digest"
       ],
@@ -258,6 +278,7 @@
       "expect": "FAILED",
       "id": "v7_seal_signs_another_reproducible_digest",
       "key_class": "fixture",
+      "keys": "keys.fixture.json",
       "reason_classes": [
         "attestation_digest"
       ],
@@ -271,10 +292,25 @@
       "expect": "FAILED",
       "id": "v7_qa_run_names_an_unwitnessed_proof",
       "key_class": "fixture",
+      "keys": "keys.fixture.json",
       "reason_classes": [
         "proofs"
       ],
       "seal": "v7_qa_run_names_an_unwitnessed_proof/seal"
+    },
+    {
+      "downloads": {
+        "app": "v7_qa_run_2_signs_proofs_not_stated/downloads/app.json"
+      },
+      "evidence": "v7_qa_run_2_signs_proofs_not_stated/evidence",
+      "expect": "FAILED",
+      "id": "v7_qa_run_2_signs_proofs_not_stated",
+      "key_class": "fixture",
+      "keys": "keys.fixture.json",
+      "reason_classes": [
+        "proofs"
+      ],
+      "seal": "v7_qa_run_2_signs_proofs_not_stated/seal"
     },
     {
       "downloads": {
@@ -284,6 +320,7 @@
       "expect": "FAILED",
       "id": "v7_qa_run_states_another_collection",
       "key_class": "fixture",
+      "keys": "keys.fixture.json",
       "reason_classes": [
         "evidence_tampered"
       ],
@@ -297,6 +334,7 @@
       "expect": "FAILED",
       "id": "v7_qa_run_finished_at_another_time",
       "key_class": "fixture",
+      "keys": "keys.fixture.json",
       "reason_classes": [
         "evidence_tampered"
       ],
@@ -310,6 +348,7 @@
       "expect": "FAILED",
       "id": "v7_evidence_holds_an_unlisted_file",
       "key_class": "fixture",
+      "keys": "keys.fixture.json",
       "reason_classes": [
         "evidence_refused"
       ],
@@ -323,10 +362,51 @@
       "expect": "FAILED",
       "id": "v7_evidence_manifest_entry_not_a_path",
       "key_class": "fixture",
+      "keys": "keys.fixture.json",
       "reason_classes": [
         "evidence_refused"
       ],
       "seal": "v7_evidence_manifest_entry_not_a_path/seal"
+    },
+    {
+      "downloads": {
+        "app": "v7_qa_run_proofs_larger_than_its_report/downloads/app.json"
+      },
+      "evidence": "v7_qa_run_proofs_larger_than_its_report/evidence",
+      "expect": "VERIFIED",
+      "id": "v7_qa_run_proofs_larger_than_its_report",
+      "key_class": "fixture",
+      "keys": "keys.fixture.json",
+      "reason_classes": [],
+      "seal": "v7_qa_run_proofs_larger_than_its_report/seal"
+    },
+    {
+      "downloads": {
+        "app": "v7_compile_devmatrix_without_keys/downloads/app.json"
+      },
+      "evidence": null,
+      "expect": "CONSISTENT_ORIGIN_NOT_CHECKED",
+      "id": "v7_compile_devmatrix_without_keys",
+      "key_class": null,
+      "keys": null,
+      "reason_classes": [
+        "origin_not_checked"
+      ],
+      "seal": "v7_compile_devmatrix_without_keys/seal"
+    },
+    {
+      "downloads": {
+        "app": "v7_runner_failure_without_keys/downloads/app.json"
+      },
+      "evidence": null,
+      "expect": "FAILED",
+      "id": "v7_runner_failure_without_keys",
+      "key_class": null,
+      "keys": null,
+      "reason_classes": [
+        "runner"
+      ],
+      "seal": "v7_runner_failure_without_keys/seal"
     },
     {
       "downloads": {
@@ -336,6 +416,7 @@
       "expect": "FAILED",
       "id": "v7_mixture",
       "key_class": "fixture",
+      "keys": "keys.fixture.json",
       "reason_classes": [
         "mixture"
       ],
@@ -349,6 +430,7 @@
       "expect": "FAILED",
       "id": "v8_unknown_version",
       "key_class": "fixture",
+      "keys": "keys.fixture.json",
       "reason_classes": [
         "unknown_version"
       ],
