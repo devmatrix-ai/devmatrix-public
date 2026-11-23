@@ -18,6 +18,10 @@
   client tested states a whole share from 1 to 100%, counts that hold, enough
   tests passed to meet that share, and every test that did not pass named once,
   in order; a seal below its share fails.
+- **Origin is checked against the keys this repository ships.** With no
+  `--keys`, only the keys in `keys.json` are trusted, and a seal whose key it
+  does not publish is not verified; `--keys` stays as an override. A seal
+  bundle's own `verify.py` is a quick integrity check, not a check of origin.
 - **Shared seal vectors.** `conformance/seal-verifier-vectors/` holds signed
   seals with their downloads and evidence, each with the verdict, reason
   classes and key class the bundled verifier gives it; the set's digest is

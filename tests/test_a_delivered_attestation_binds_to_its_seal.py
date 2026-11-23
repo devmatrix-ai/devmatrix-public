@@ -217,6 +217,9 @@ class OneBuild:
         self.keys = _keys()
         self.bundle_key = _SEAL_KEY
         self.signing_key = _SEAL_KEY
+        #: Whether the run names its keys file; without it the verifier
+        #: reads the keys.json it ships with.
+        self.names_keys = True
 
     def run(self, tmp: Path, *extra: str) -> subprocess.CompletedProcess[str]:
         bundle = tmp / "seal"
@@ -233,7 +236,8 @@ class OneBuild:
         delivered.write_bytes(_bytes(self.document) if self.data is None else self.data)
         keys = tmp / "keys.json"
         keys.write_text(json.dumps({"schema_id": vf.KEYS_SCHEMA_ID, "keys": self.keys}), encoding="utf-8")
-        command = [sys.executable, str(ROOT / "verify_fingerprint.py"), "--keys", str(keys),
+        command = [sys.executable, str(ROOT / "verify_fingerprint.py"),
+                   *(["--keys", str(keys)] if self.names_keys else []),
                    "--seal", str(bundle), "--attestation", f"{_SERVICE}={delivered}", *extra]
         if self.published_file is not None:
             command += ["--published", str(self.published_file)]
@@ -319,6 +323,21 @@ class TheCommand(unittest.TestCase):
         build = OneBuild()
         build.bundle_key = build.signing_key = Ed25519PrivateKey.generate()
         self._fails(build, "the public key in the file is not the one published for 'seal-test'")
+
+    def test_with_no_flags_only_the_keys_the_verifier_ships_with_are_trusted(self) -> None:
+        """MUT-RED: a seal key the shipped keys.json does not publish passes
+        when no keys file is named."""
+        build = OneBuild()
+        build.published = None
+        build.names_keys = False
+        with tempfile.TemporaryDirectory() as tmp:
+            verdict = Path(tmp) / "verdict.json"
+            result = build.run(Path(tmp), "--verdict-json", str(verdict))
+            document = json.loads(verdict.read_text(encoding="utf-8"))
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn(f"Keys: {vf.KEYS_FILE}", result.stdout)
+        self.assertIn("key_id 'seal-test' is not a published DevMatrix key", result.stdout)
+        self.assertEqual(document, {"verdict": "FAILED", "reason_classes": ["key"], "key_class": "production"})
 
     def test_an_evidence_key_does_not_sign_seals(self) -> None:
         build = OneBuild()
