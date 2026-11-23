@@ -403,7 +403,7 @@ class TheEvidence(unittest.TestCase):
             with self.subTest(name=name):
                 _, failures = self._findings(statement, _qa_files(), change=flip(name))
                 self.assertIn(reason, failures)
-                self.assertIn(f"evidence: {name} is not the file the manifest names", failures)
+                self.assertIn(f"evidence: '{name}' is not the file the manifest names", failures)
 
     def test_a_report_that_says_otherwise_than_the_seal(self) -> None:
         """MUT-RED per report field class: a run field, the reds, the
@@ -465,13 +465,41 @@ class TheEvidence(unittest.TestCase):
         absent = [{"path": f"qa-runs/{_BUILD}/report.json", "state": "not_found", "reason": "purged"}]
         _, failures = self._findings(statement, files, absent)
         self.assertIn(f"{_SERVICE}: the bundle does not hold its QA run report qa-runs/{_BUILD}/report.json "
-                      "(not_found: purged)", failures)
+                      "('not_found': 'purged')", failures)
 
     def test_a_report_the_seal_does_not_rest_on(self) -> None:
         statement = _on_the_compile(OneBuild().document)
         _, failures = self._findings(statement, _qa_files())
         self.assertIn(f"evidence: files the seal does not rest on: ['proofs/{_BUILD}.json', "
                       f"'qa-runs/{_BUILD}/report.json']", failures)
+
+    def test_a_hostile_manifest_is_a_failure_never_a_traceback(self) -> None:
+        """MUT-RED: only ValueError caught, or a path not checked as text."""
+        statement = _on_the_qa_run(OneBuild().document)
+        for content, reason in (
+            (b"[" * 100_000, f"evidence: {vf.EVIDENCE_MANIFEST} is not JSON"),
+            (json.dumps({"schema": vf.EVIDENCE_SCHEMA, "seal_hash": statement["seal_hash"],
+                         "files": [{"path": [1], "sha256": "x", "size_bytes": 1}], "absent": []}).encode(),
+             "evidence: the manifest's files are not each a path, a digest and a size"),
+            (json.dumps({"schema": vf.EVIDENCE_SCHEMA, "seal_hash": statement["seal_hash"], "files": [],
+                         "absent": [{"path": "a", "state": {"x": 1}, "reason": None}]}).encode(),
+             "evidence: the manifest's absent files are not each a path, a state and a reason"),
+        ):
+            with self.subTest(reason=reason):
+                def hostile(folder: Path, content: bytes = content) -> None:
+                    (folder / vf.EVIDENCE_MANIFEST).write_bytes(content)
+                _, failures = self._findings(statement, _qa_files(), change=hostile)
+                self.assertIn(reason, failures)
+
+    def test_an_absent_reason_is_printed_escaped(self) -> None:
+        """MUT-RED: the state and reason printed raw."""
+        statement = _on_the_qa_run(OneBuild().document)
+        files = _qa_files()
+        del files[f"qa-runs/{_BUILD}/report.json"]
+        absent = [{"path": f"qa-runs/{_BUILD}/report.json", "state": "gone", "reason": "x\n[OK] fine"}]
+        _, failures = self._findings(statement, files, absent)
+        self.assertIn(f"{_SERVICE}: the bundle does not hold its QA run report qa-runs/{_BUILD}/report.json "
+                      "('gone': 'x\\n[OK] fine')", failures)
 
     def test_a_manifest_of_another_seal(self) -> None:
         statement = _on_the_qa_run(OneBuild().document)
@@ -502,14 +530,14 @@ class AnUntrustedEvidenceFolder(unittest.TestCase):
         def link(tmp: Path, folder: Path) -> None:
             (tmp / "outside.json").write_text("{}")
             os.symlink(tmp / "outside.json", folder / "verify.py")
-        self._refused(link, "verify.py is not a regular file (a link is not followed)")
+        self._refused(link, "'verify.py' is not a regular file (a link is not followed)")
 
     def test_a_folder_that_is_a_link(self) -> None:
         """MUT-RED: the folder-link check removed."""
         def link(tmp: Path, folder: Path) -> None:
             (tmp / "elsewhere").mkdir()
             os.symlink(tmp / "elsewhere", folder / "client-runs")
-        self._refused(link, "client-runs is a link; links are not followed")
+        self._refused(link, "'client-runs' is a link; links are not followed")
 
     def test_the_folder_itself_a_link(self) -> None:
         statement = _on_the_qa_run(OneBuild().document)
@@ -528,13 +556,47 @@ class AnUntrustedEvidenceFolder(unittest.TestCase):
                     path = folder / name
                     path.parent.mkdir(parents=True, exist_ok=True)
                     path.write_text("{}")
-                self._refused(add, "is not a file an evidence bundle holds")
+                self._refused(add, "an evidence bundle holds")
 
     def test_a_file_over_its_bound(self) -> None:
         """MUT-RED: the per-file bound removed."""
         def big(tmp: Path, folder: Path) -> None:
             (folder / "VERIFY.md").write_bytes(b"x" * (vf.EVIDENCE_OTHER_MAX_BYTES + 1))
-        self._refused(big, "VERIFY.md is over its bound of 1048576 bytes")
+        self._refused(big, "'VERIFY.md' is over its bound of 1048576 bytes")
+
+    def test_an_unknown_folder_even_empty(self) -> None:
+        """MUT-RED: the folder name check removed."""
+        self._refused(lambda tmp, folder: (folder / "extra").mkdir(), "'extra' is not a folder an evidence bundle holds")
+
+    def test_a_folder_that_cannot_be_read(self) -> None:
+        """MUT-RED: unreadable folders skipped in silence."""
+        if os.geteuid() == 0:
+            self.skipTest("root reads every folder")
+
+        def lock(tmp: Path, folder: Path) -> None:
+            (folder / "client-runs").mkdir()
+            os.chmod(folder / "client-runs", 0)
+        try:
+            self._refused(lock, "a folder of the evidence bundle cannot be read")
+        finally:
+            for path in Path(tempfile.gettempdir()).glob("*/evidence/client-runs"):
+                os.chmod(path, 0o700)
+
+    def test_a_fifo_is_not_read(self) -> None:
+        """MUT-RED: the regular-file check removed (reading would block)."""
+        self._refused(lambda tmp, folder: os.mkfifo(folder / "VERIFY.md"),
+                      "'VERIFY.md' is not a regular file (a link is not followed)")
+
+    def test_a_name_with_control_characters_is_printed_escaped(self) -> None:
+        """MUT-RED: names printed raw."""
+        def add(tmp: Path, folder: Path) -> None:
+            (folder / "x\n[OK] all good\x1b[8m").write_text("{}")
+        statement = _on_the_qa_run(OneBuild().document)
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = _evidence(Path(tmp) / "evidence", statement, _qa_files())
+            add(Path(tmp), folder)
+            _, failures = vf.evidence_findings(folder, statement, _statement_bytes(statement))
+        self.assertEqual(failures, ["evidence: 'x\\n[OK] all good\\x1b[8m' is not a file an evidence bundle holds"])
 
     def test_more_files_than_its_bound(self) -> None:
         """MUT-RED: the count bound removed."""

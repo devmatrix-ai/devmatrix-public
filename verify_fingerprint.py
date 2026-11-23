@@ -1497,6 +1497,13 @@ def reproducible_sha256(block: object) -> str:
 
 
 def read_seal(bundle: Path, keys: list[dict], accept: str = PRODUCTION) -> tuple[dict, list[str]]:
+    """The seal statement of a seal verification bundle once its signature
+    verifies, and the lines to report (:func:`read_signed_seal`)."""
+    statement, lines, _ = read_signed_seal(bundle, keys, accept)
+    return statement, lines
+
+
+def read_signed_seal(bundle: Path, keys: list[dict], accept: str = PRODUCTION) -> tuple[dict, list[str], bytes]:
     """The seal statement of a seal verification bundle, once its signature
     verifies with a published seal-signing key of keys.json, and the lines
     to report. The key inside the bundle proves nothing by itself: it has to
@@ -1540,7 +1547,7 @@ def read_seal(bundle: Path, keys: list[dict], accept: str = PRODUCTION) -> tuple
     ]
     if accept != PRODUCTION:
         lines.append(f"[NOTE] seal: {key_id!r} is a {accept!r} key, NOT a production key")
-    return statement, lines
+    return statement, lines, statement_bytes
 
 
 def _delivered(path: Path) -> tuple[bytes, dict]:
@@ -2174,44 +2181,86 @@ def _evidence_name_cap(name: str) -> int | None:
     return None
 
 
+def _shown(value: object) -> str:
+    """A value read from the evidence folder as it is printed: escaped, so no
+    control character or newline it carries reaches the report."""
+    return ascii(value)
+
+
+_EVIDENCE_FOLDER = re.compile(
+    rf"(qa-runs|proofs|client-runs)(/{_UUID_TEXT})?|qa-runs/{_UUID_TEXT}|client-runs/{_UUID_TEXT}/{_COMPONENT_TEXT}(/{_COMPONENT_TEXT})?"
+)
+
+
+def _evidence_folder_known(name: str) -> bool:
+    if name.startswith("proofs/"):
+        return False
+    return bool(_EVIDENCE_FOLDER.fullmatch(name))
+
+
 def read_evidence(root: Path, services: int) -> dict[str, bytes]:
     """Every file of the unzipped evidence bundle ``root``, by its name in
     the bundle. Refused (:class:`EvidenceRefused`) at the first link (file or
-    folder), file that is not a regular file, name the bundle never holds,
-    file over its bound, more than ``EVIDENCE_MAX_FILES`` files, or more bytes
-    than the bound for ``services`` sealed services."""
+    folder), file that is not a regular file (checked again once opened), name
+    or folder the bundle never holds, folder that cannot be read, file over
+    its bound, more than ``EVIDENCE_MAX_FILES`` entries, or more bytes than the
+    bound for ``services`` sealed services. A platform that cannot open a file
+    without following a link is refused rather than followed."""
+    nofollow = getattr(os, "O_NOFOLLOW", None)
+    if nofollow is None:
+        raise EvidenceRefused("this platform cannot open a file without following a link")
     if root.is_symlink() or not root.is_dir():
-        raise EvidenceRefused(f"{root} is not a folder (a link is not followed)")
+        raise EvidenceRefused(f"{_shown(str(root))} is not a folder (a link is not followed)")
     total_cap = evidence_total_cap(services)
     held: dict[str, bytes] = {}
+    entries = 0
     total = 0
-    for folder, subfolders, files in os.walk(root, followlinks=False):
+
+    def unreadable(error: OSError) -> None:
+        raise EvidenceRefused(f"a folder of the evidence bundle cannot be read: {_shown(error.filename)}")
+
+    for folder, subfolders, files in os.walk(root, onerror=unreadable, followlinks=False):
         for sub in sorted(subfolders):
+            name = os.path.relpath(os.path.join(folder, sub), root).replace(os.sep, "/")
             if os.path.islink(os.path.join(folder, sub)):
-                raise EvidenceRefused(f"{os.path.relpath(os.path.join(folder, sub), root)} is a link; links are not followed")
+                raise EvidenceRefused(f"{_shown(name)} is a link; links are not followed")
+            if not _evidence_folder_known(name):
+                raise EvidenceRefused(f"{_shown(name)} is not a folder an evidence bundle holds")
+        entries += len(subfolders) + len(files)
+        if entries > EVIDENCE_MAX_FILES:
+            raise EvidenceRefused(f"the evidence bundle holds more than {EVIDENCE_MAX_FILES} files")
         for file in sorted(files):
             path = os.path.join(folder, file)
             name = os.path.relpath(path, root).replace(os.sep, "/")
             info = os.lstat(path)
             if not stat.S_ISREG(info.st_mode):
-                raise EvidenceRefused(f"{name} is not a regular file (a link is not followed)")
+                raise EvidenceRefused(f"{_shown(name)} is not a regular file (a link is not followed)")
             cap = _evidence_name_cap(name)
             if cap is None:
-                raise EvidenceRefused(f"{name} is not a file an evidence bundle holds")
-            if len(held) >= EVIDENCE_MAX_FILES:
-                raise EvidenceRefused(f"the evidence bundle holds more than {EVIDENCE_MAX_FILES} files")
+                raise EvidenceRefused(f"{_shown(name)} is not a file an evidence bundle holds")
             if info.st_size > cap:
-                raise EvidenceRefused(f"{name} is over its bound of {cap} bytes")
-            descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+                raise EvidenceRefused(f"{_shown(name)} is over its bound of {cap} bytes")
+            descriptor = os.open(path, os.O_RDONLY | nofollow | getattr(os, "O_NONBLOCK", 0))
             with os.fdopen(descriptor, "rb") as handle:
+                if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
+                    raise EvidenceRefused(f"{_shown(name)} is not a regular file (a link is not followed)")
                 data = handle.read(cap + 1)
             if len(data) > cap:
-                raise EvidenceRefused(f"{name} is over its bound of {cap} bytes")
+                raise EvidenceRefused(f"{_shown(name)} is over its bound of {cap} bytes")
             total += len(data)
             if total > total_cap:
                 raise EvidenceRefused(f"the evidence bundle is over its bound of {total_cap} bytes")
             held[name] = data
     return held
+
+
+def _json_of(data: bytes) -> tuple[object, bool]:
+    """The JSON document ``data`` holds and whether it parsed: any parse
+    failure, nesting too deep included, is a document that is not JSON."""
+    try:
+        return json.loads(data), True
+    except (ValueError, RecursionError):
+        return None, False
 
 
 def _manifest_failures(held: dict[str, bytes], statement: dict, statement_bytes: bytes) -> tuple[list[str], dict]:
@@ -2221,9 +2270,8 @@ def _manifest_failures(held: dict[str, bytes], statement: dict, statement_bytes:
     only files it does not hold; the statement it holds is the one verified."""
     if EVIDENCE_MANIFEST not in held:
         return [f"evidence: the bundle has no {EVIDENCE_MANIFEST}"], {}
-    try:
-        manifest = json.loads(held[EVIDENCE_MANIFEST])
-    except ValueError:
+    manifest, parsed = _json_of(held[EVIDENCE_MANIFEST])
+    if not parsed:
         return [f"evidence: {EVIDENCE_MANIFEST} is not JSON"], {}
     if not (isinstance(manifest, dict) and set(manifest) == {"schema", "seal_hash", "files", "absent"}
             and manifest["schema"] == EVIDENCE_SCHEMA):
@@ -2232,10 +2280,16 @@ def _manifest_failures(held: dict[str, bytes], statement: dict, statement_bytes:
     if manifest["seal_hash"] != statement.get("seal_hash"):
         failures.append("evidence: the bundle is of another seal than the statement verified")
     files, absent = manifest["files"], manifest["absent"]
-    if not (isinstance(files, list) and all(isinstance(e, dict) and set(e) == {"path", "sha256", "size_bytes"} for e in files)):
+    if not (isinstance(files, list) and all(
+        isinstance(e, dict) and set(e) == {"path", "sha256", "size_bytes"} and isinstance(e["path"], str)
+        for e in files
+    )):
         return failures + ["evidence: the manifest's files are not each a path, a digest and a size"], {}
-    if not (isinstance(absent, list) and all(isinstance(e, dict) and set(e) == {"path", "state", "reason"}
-                                             and isinstance(e["path"], str) for e in absent)):
+    if not (isinstance(absent, list) and all(
+        isinstance(e, dict) and set(e) == {"path", "state", "reason"} and isinstance(e["path"], str)
+        and isinstance(e["state"], str) and (e["reason"] is None or isinstance(e["reason"], str))
+        for e in absent
+    )):
         return failures + ["evidence: the manifest's absent files are not each a path, a state and a reason"], {}
     listed = {entry["path"]: entry for entry in files}
     if len(listed) != len(files) or sorted(listed) != sorted(set(held) - {EVIDENCE_MANIFEST}):
@@ -2243,7 +2297,7 @@ def _manifest_failures(held: dict[str, bytes], statement: dict, statement_bytes:
     for name, entry in sorted(listed.items()):
         data = held.get(name)
         if data is not None and (entry["sha256"] != hashlib.sha256(data).hexdigest() or entry["size_bytes"] != len(data)):
-            failures.append(f"evidence: {name} is not the file the manifest names")
+            failures.append(f"evidence: {_shown(name)} is not the file the manifest names")
     gone = {entry["path"]: entry for entry in absent}
     if len(gone) != len(absent) or set(gone) & set(held):
         failures.append("evidence: the manifest names a file absent twice, or absent and held")
@@ -2270,9 +2324,8 @@ def _proofs_failures(label: str, sealed: dict, data: bytes) -> list[str]:
     named not judged."""
     if hashlib.sha256(data).hexdigest() != sealed["proof_rows_sha256"]:
         return [f"{label}: the proof rows file is not the one the seal signed (proof_rows_sha256)"]
-    try:
-        rows = json.loads(data)
-    except ValueError:
+    rows, parsed = _json_of(data)
+    if not parsed:
         return [f"{label}: the proof rows file is not JSON"]
     if _canonical_seal_bytes(rows) != data:
         return [f"{label}: the proof rows file is not written in the seal's serialization"]
@@ -2305,9 +2358,8 @@ def _report_failures(label: str, sealed: dict, data: bytes) -> list[str]:
     run = sealed["qa_run"]
     if hashlib.sha256(data).hexdigest() != run["report_sha256"]:
         return [f"{label}: the QA run report is not the one the seal signed (report_sha256)"]
-    try:
-        report = json.loads(data)
-    except ValueError:
+    report, parsed = _json_of(data)
+    if not parsed:
         return [f"{label}: the QA run report is not JSON"]
     if not isinstance(report, dict):
         return [f"{label}: the QA run report is not a report"]
@@ -2409,13 +2461,13 @@ def evidence_findings(
     except (EvidenceRefused, OSError) as refused:
         return [], [f"evidence: {refused}"]
     failures, gone = _manifest_failures(held, statement, statement_bytes)
-    lines = [f"[OK] evidence: {len(held)} file(s) read from {root}, none through a link, each within its bound"]
+    lines = [f"[OK] evidence: {len(held)} file(s) read from {_shown(str(root))}, none through a link, each within its bound"]
     if not failures:
         lines.append("[OK] evidence: the manifest names exactly the files held, each by its digest and size")
     expected: set[str] = set()
     if statement.get("schema_id") == SEAL_STATEMENT_WITH_BASIS:
-        for sealed in services:
-            label = sealed["name"]
+        for index, sealed in enumerate(services):
+            label = sealed.get("name", f"services[{index}]")
             checks = []
             if sealed["basis"] == "qa_run":
                 checks.append((f"qa-runs/{sealed['compilation_id']}/report.json", _report_failures, "QA run report"))
@@ -2425,7 +2477,7 @@ def evidence_findings(
                 expected.add(name)
                 if name not in held:
                     entry = gone.get(name)
-                    why = f" ({entry['state']}: {entry['reason']})" if entry else ""
+                    why = f" ({_shown(entry['state'])}: {_shown(entry['reason'])})" if entry else ""
                     failures.append(f"{label}: the bundle does not hold its {what} {name}{why}")
                     continue
                 found = check(label, sealed, held[name])
@@ -2435,7 +2487,7 @@ def evidence_findings(
     stray = sorted(name for name in held if (_QA_RUN_REPORT_FILE.fullmatch(name) or _PROOFS_FILE.fullmatch(name))
                    and name not in expected)
     if stray:
-        failures.append(f"evidence: files the seal does not rest on: {stray}")
+        failures.append(f"evidence: files the seal does not rest on: {_shown(stray)}")
     return lines, failures
 
 
@@ -2445,8 +2497,9 @@ def unchecked_evidence_lines(statement: dict) -> list[str]:
     if statement.get("schema_id") != SEAL_STATEMENT_WITH_BASIS:
         return []
     return [
-        f"[NOT CHECKED] {sealed['name']}: QA run report and proof rows not checked: no evidence given (--evidence)"
-        for sealed in statement["services"]
+        f"[NOT CHECKED] {sealed.get('name', f'services[{index}]')}: QA run report and proof rows not checked: "
+        "no evidence given (--evidence)"
+        for index, sealed in enumerate(statement["services"])
         if isinstance(sealed, dict) and (sealed.get("basis") == "qa_run" or sealed.get("proven_not_applicable_count") is not None)
     ]
 
@@ -2461,7 +2514,7 @@ def verify_binding(
     the [FAIL] lines what was not."""
     lines: list[str] = []
     try:
-        statement, seal_lines = read_seal(bundle, keys, accept)
+        statement, seal_lines, statement_bytes = read_signed_seal(bundle, keys, accept)
     except (BindingRefused, OSError, ValueError) as refusal:
         print(f"[FAIL] {refusal}")
         return False
@@ -2471,9 +2524,7 @@ def verify_binding(
     if evidence is None:
         lines += unchecked_evidence_lines(statement)
     elif not failures:
-        evidence_lines, evidence_failures = evidence_findings(
-            evidence, statement, (bundle / "seal-statement.json").read_bytes(),
-        )
+        evidence_lines, evidence_failures = evidence_findings(evidence, statement, statement_bytes)
         lines += evidence_lines
         failures += evidence_failures
     else:
