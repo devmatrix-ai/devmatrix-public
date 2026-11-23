@@ -19,6 +19,7 @@ import copy
 import hashlib
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -51,6 +52,12 @@ def _rows() -> list[dict]:
          "witnessed": True},
         {"module_id": _SERVICE, "test_id": "tests/test_q.py::test_q", "witnesses": [], "witnessed": False},
     ]
+
+
+def _texts(found: tuple[list[str], list]) -> tuple[list[str], list[str]]:
+    """The lines and the printed text of each failure."""
+    lines, failures = found
+    return lines, [failure.text for failure in failures]
 
 
 def _run_by_the_client(document: dict) -> None:
@@ -387,7 +394,7 @@ class ASealOfStatement7(unittest.TestCase):
         service = statement["services"][0]
         service["qa_run"]["report_schema_id"] = "qa-run-report/1"
         _proofs(service, None)
-        lines, failures = vf.seal_floor_findings(statement)
+        lines, failures = _texts(vf.seal_floor_findings(statement))
         self.assertEqual(failures, [])
         self.assertIn(f"      {_SERVICE}: {vf.PROOFS_NOT_STATED}", lines)
 
@@ -406,7 +413,7 @@ class ASealOfStatement7(unittest.TestCase):
             with self.subTest(reason=reason):
                 statement = _on_the_qa_run(OneBuild().document)
                 statement["services"][0].update(change)
-                _, failures = vf.seal_floor_findings(statement)
+                _, failures = _texts(vf.seal_floor_findings(statement))
                 self.assertEqual(failures, [f"{_SERVICE}: the signed statement is refused by its content: it {reason}"])
 
     def test_a_qa_run_stated_inexactly(self) -> None:
@@ -422,11 +429,11 @@ class ASealOfStatement7(unittest.TestCase):
             with self.subTest(field=field):
                 statement = _on_the_qa_run(OneBuild().document)
                 statement["services"][0]["qa_run"][field] = value
-                _, failures = vf.seal_floor_findings(statement)
+                _, failures = _texts(vf.seal_floor_findings(statement))
                 self.assertEqual(failures, [f"{_SERVICE}: the signed statement is refused by its content: it {reason}"])
         statement = _on_the_compile(OneBuild().document)
         statement["services"][0]["qa_run"] = _on_the_qa_run(OneBuild().document)["services"][0]["qa_run"]
-        _, failures = vf.seal_floor_findings(statement)
+        _, failures = _texts(vf.seal_floor_findings(statement))
         self.assertEqual(failures, [f"{_SERVICE}: the signed statement is refused by its content: it rests on compile "
                                     "and names a QA run"])
 
@@ -462,7 +469,7 @@ class TheEvidence(unittest.TestCase):
             folder = _evidence(Path(tmp) / "evidence", statement, files, absent)
             if change is not None:
                 change(folder)
-            return vf.evidence_findings(folder, statement, _statement_bytes(statement))
+            return _texts(vf.evidence_findings(folder, statement, _statement_bytes(statement)))
 
     def test_the_report_and_the_proofs_agree_with_the_seal(self) -> None:
         statement = _on_the_qa_run(OneBuild().document)
@@ -614,7 +621,7 @@ class AnUntrustedEvidenceFolder(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             folder = _evidence(Path(tmp) / "evidence", statement, _qa_files())
             change(Path(tmp), folder)
-            lines, failures = vf.evidence_findings(folder, statement, _statement_bytes(statement))
+            lines, failures = _texts(vf.evidence_findings(folder, statement, _statement_bytes(statement)))
         self.assertEqual(lines, [])
         self.assertEqual(len(failures), 1, failures)
         self.assertIn(reason, failures[0])
@@ -638,7 +645,7 @@ class AnUntrustedEvidenceFolder(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             folder = _evidence(Path(tmp) / "evidence", statement, _qa_files())
             os.symlink(folder, Path(tmp) / "alias")
-            _, failures = vf.evidence_findings(Path(tmp) / "alias", statement, _statement_bytes(statement))
+            _, failures = _texts(vf.evidence_findings(Path(tmp) / "alias", statement, _statement_bytes(statement)))
         self.assertIn("is not a folder (a link is not followed)", failures[0])
 
     def test_a_name_an_evidence_bundle_never_holds(self) -> None:
@@ -703,7 +710,7 @@ class AnUntrustedEvidenceFolder(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             folder = _evidence(Path(tmp) / "evidence", statement, _qa_files())
             add(Path(tmp), folder)
-            _, failures = vf.evidence_findings(folder, statement, _statement_bytes(statement))
+            _, failures = _texts(vf.evidence_findings(folder, statement, _statement_bytes(statement)))
         self.assertEqual(failures, ["evidence: 'x\\n[OK] all good\\x1b[8m' is not a file an evidence bundle holds"])
 
     def test_more_files_than_its_bound(self) -> None:
@@ -727,3 +734,117 @@ class AnUntrustedEvidenceFolder(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TheVerdictJson(unittest.TestCase):
+    """``--verdict-json`` names the verdict and the reason class of every
+    failure (contract §5 item 11); the printed verdict and the exit status
+    are those without it."""
+
+    def _verdict(self, build: OneBuild, evidence=None) -> tuple[dict, subprocess.CompletedProcess[str]]:
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "verdict.json"
+            extra = ["--verdict-json", str(out)]
+            if evidence is not None:
+                extra += ["--evidence", str(evidence(Path(tmp)))]
+            result = build.run(Path(tmp), *extra)
+            return json.loads(out.read_text(encoding="utf-8")), result
+
+    def _deferred_on_its_qa_run(self) -> OneBuild:
+        build = OneBuild()
+        _deferred_to_its_qa_run(build.document)
+        build.statement = _on_the_qa_run(build.document)
+        build.published = None
+        return build
+
+    def test_a_binding_that_holds(self) -> None:
+        build = self._deferred_on_its_qa_run()
+        verdict, result = self._verdict(build, lambda tmp: _evidence(tmp / "evidence", build.statement, _qa_files()))
+        self.assertEqual(verdict, {"verdict": "VERIFIED", "reason_classes": [], "key_class": "production"})
+        self.assertEqual(result.returncode, 0, result.stdout)
+
+    def test_the_printed_verdict_is_the_same_without_it(self) -> None:
+        build = self._deferred_on_its_qa_run()
+        build.statement["services"][0]["basis"] = "compile"
+        runs = []
+        for extra in ((), ("--verdict-json",)):
+            with tempfile.TemporaryDirectory() as tmp:
+                args = [*extra, str(Path(tmp) / "verdict.json")] if extra else []
+                result = build.run(Path(tmp), *args)
+                runs.append((result.returncode, result.stdout.replace(tmp, "<tmp>")))
+        self.assertEqual(runs[0], runs[1])
+        self.assertEqual(runs[0][0], 1)
+
+    def test_each_failure_names_its_class(self) -> None:
+        """MUT-RED: a producer's class changed."""
+        def runner() -> tuple[OneBuild, object]:
+            build = OneBuild()
+            build.statement = _on_the_qa_run(build.document)
+            build.published = None
+            return build, lambda tmp: _evidence(tmp / "evidence", build.statement, _qa_files())
+
+        def mixture() -> tuple[OneBuild, object]:
+            build = OneBuild()
+            build.statement = _on_the_compile(build.document)
+            other = copy.deepcopy(_on_the_client_run(build.document)["services"][0])
+            other["name"] = "zz-billing"
+            build.statement["services"].append(other)
+            return build, None
+
+        def unknown_version() -> tuple[OneBuild, object]:
+            build = OneBuild()
+            build.statement["schema_id"] = "seal-statement/8"
+            return build, None
+
+        def signature() -> tuple[OneBuild, object]:
+            build = OneBuild()
+            build.signing_key = vf_test_other_key()
+            return build, None
+
+        def attestation_digest() -> tuple[OneBuild, object]:
+            build = OneBuild()
+            build.statement["services"][0]["fingerprint_attestation"]["document_sha256"] = "sha256:" + _hex("9")
+            build.published = None
+            return build, None
+
+        def published_deferred() -> tuple[OneBuild, object]:
+            build = self._deferred_on_its_qa_run()
+            build.published = _published(OneBuild().document)
+            return build, lambda tmp: _evidence(tmp / "evidence", build.statement, _qa_files())
+
+        def evidence_refused() -> tuple[OneBuild, object]:
+            build = self._deferred_on_its_qa_run()
+
+            def folder(tmp: Path) -> Path:
+                made = _evidence(tmp / "evidence", build.statement, _qa_files())
+                (tmp / "outside.json").write_text("{}")
+                os.symlink(tmp / "outside.json", made / "verify.py")
+                return made
+            return build, folder
+
+        def evidence_tampered() -> tuple[OneBuild, object]:
+            build = self._deferred_on_its_qa_run()
+            files = _qa_files()
+            name = f"qa-runs/{_BUILD}/report.json"
+            files[name] = files[name][:-2] + bytes([files[name][-2] ^ 1]) + files[name][-1:]
+            return build, lambda tmp: _evidence(tmp / "evidence", build.statement, files)
+
+        for expected, make in (
+            ("runner", runner), ("mixture", mixture), ("unknown_version", unknown_version),
+            ("signature", signature), ("attestation_digest", attestation_digest),
+            ("published_deferred", published_deferred), ("evidence_refused", evidence_refused),
+            ("evidence_tampered", evidence_tampered),
+        ):
+            with self.subTest(expected=expected):
+                build, evidence = make()
+                verdict, result = self._verdict(build, evidence)
+                self.assertEqual(verdict["verdict"], "FAILED", result.stdout)
+                self.assertIn(expected, verdict["reason_classes"], result.stdout)
+                self.assertNotIn("unclassified", verdict["reason_classes"])
+                self.assertEqual(verdict["key_class"], "production")
+                self.assertEqual(result.returncode, 1)
+
+
+def vf_test_other_key():
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    return Ed25519PrivateKey.generate()

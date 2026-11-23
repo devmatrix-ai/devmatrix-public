@@ -319,7 +319,10 @@ class TheCommandLine(unittest.TestCase):
              "--seal", "--attestation", "--published",
              # 2026-11-23: the seal's evidence bundle, read only as the
              # seal statement verified with a production key says.
-             "--evidence"},
+             "--evidence",
+             # 2026-11-23: the verdict as a JSON file, by reason class, for
+             # comparing two verifiers over the same signed vectors.
+             "--verdict-json"},
         )
 
     def test_without_cryptography_the_signature_fails_never_skips(self) -> None:

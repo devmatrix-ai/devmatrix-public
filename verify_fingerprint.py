@@ -28,6 +28,7 @@ import re
 import stat
 import sys
 from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
@@ -1476,9 +1477,39 @@ SEAL_STATEMENT_SCHEMAS = (
 SEAL_FILES = ("seal-statement.json", "seal-statement.sig.b64", "seal-public-key.pem")
 
 
+#: Why a binding check failed, one class per failure (contract §5 item 11):
+#: what ``--verdict-json`` reports, so two verifiers are compared by verdict
+#: and class, never by wording.
+REASON_CLASSES = frozenset({
+    "signature", "key", "unknown_version", "statement_version", "basis_measurer", "mixture", "runner",
+    "qa_run_binding", "proofs", "grade_floor", "not_judged", "evidence_tampered", "evidence_refused",
+    "attestation_digest", "attestation_identity", "published_deferred",
+})
+
+
+@dataclass(frozen=True)
+class Failure:
+    """One failed check: what is printed after ``[FAIL]``, and its class."""
+
+    text: str
+    reason_class: str
+
+    def __post_init__(self) -> None:
+        if self.reason_class not in REASON_CLASSES:
+            raise ValueError(f"{self.reason_class!r} is not a reason class")
+
+    def under(self, prefix: str) -> "Failure":
+        """The same failure, its text after ``prefix``."""
+        return Failure(prefix + self.text, self.reason_class)
+
+
 class BindingRefused(ValueError):
     """The delivered attestation, the seal and the published attestation do
-    not name one build."""
+    not name one build; ``reason_class`` says why (:data:`REASON_CLASSES`)."""
+
+    def __init__(self, text: str, reason_class: str) -> None:
+        super().__init__(text)
+        self.failure = Failure(text, reason_class)
 
 
 def _bare(digest: object) -> object:
@@ -1510,22 +1541,25 @@ def read_signed_seal(bundle: Path, keys: list[dict], accept: str = PRODUCTION) -
     be the one keys.json publishes for the statement's ``key_id``."""
     missing = [name for name in SEAL_FILES if not (bundle / name).is_file()]
     if missing:
-        raise BindingRefused(f"the seal bundle {bundle} lacks {missing}")
+        raise BindingRefused(f"the seal bundle {bundle} lacks {missing}", "signature")
     statement_bytes = (bundle / "seal-statement.json").read_bytes()
     statement, parsed = _json_of(statement_bytes)
     if not parsed:
-        raise BindingRefused("the seal statement is not JSON")
+        raise BindingRefused("the seal statement is not JSON", "signature")
     if not isinstance(statement, dict) or statement.get("schema_id") not in SEAL_STATEMENT_SCHEMAS:
-        raise BindingRefused("the seal statement is not one that states its builds' attestations")
+        raise BindingRefused("the seal statement is not one that states its builds' attestations", "unknown_version")
     try:
         from cryptography.exceptions import InvalidSignature
         from cryptography.hazmat.primitives import serialization
         from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
     except ImportError as exc:
-        raise BindingRefused("the 'cryptography' package is required (pip install cryptography)") from exc
-    pem_key = serialization.load_pem_public_key((bundle / "seal-public-key.pem").read_bytes())
+        raise BindingRefused("the 'cryptography' package is required (pip install cryptography)", "signature") from exc
+    try:
+        pem_key = serialization.load_pem_public_key((bundle / "seal-public-key.pem").read_bytes())
+    except ValueError as exc:
+        raise BindingRefused(f"seal: seal-public-key.pem is not a public key: {exc}", "signature") from exc
     if not isinstance(pem_key, Ed25519PublicKey):
-        raise BindingRefused("seal-public-key.pem is not an Ed25519 key")
+        raise BindingRefused("seal-public-key.pem is not an Ed25519 key", "signature")
     raw = pem_key.public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
     key_id = statement.get("key_id")
     try:
@@ -1533,16 +1567,19 @@ def read_signed_seal(bundle: Path, keys: list[dict], accept: str = PRODUCTION) -
             keys, key_id, base64.b64encode(raw).decode("ascii"), "seal-signing", "seals",
             statement.get("sealed_at"), "sealed",
         )
+    except ValueError as exc:
+        raise BindingRefused(f"seal: {exc}", "key") from exc
+    try:
         signature = _b64((bundle / "seal-statement.sig.b64").read_text(encoding="ascii").strip(), "seal signature")
     except ValueError as exc:
-        raise BindingRefused(f"seal: {exc}") from exc
+        raise BindingRefused(f"seal: {exc}", "signature") from exc
     try:
         pem_key.verify(signature, statement_bytes)
     except InvalidSignature as exc:
-        raise BindingRefused(f"seal: the statement's signature is INVALID for key {key_id!r}") from exc
+        raise BindingRefused(f"seal: the statement's signature is INVALID for key {key_id!r}", "signature") from exc
     refusal = class_refusal(entry, key_id, accept, "seal")
     if refusal is not None:
-        raise BindingRefused(f"seal: {refusal}")
+        raise BindingRefused(f"seal: {refusal}", "key")
     lines = [
         f"[OK] seal: {statement['schema_id']}, key {key_id!r} ({entry.get('class')}), "
         f"sealed {statement.get('sealed_at')}"
@@ -1554,15 +1591,15 @@ def read_signed_seal(bundle: Path, keys: list[dict], accept: str = PRODUCTION) -
 
 def _delivered(path: Path) -> tuple[bytes, dict]:
     data = path.read_bytes()
-    document = json.loads(data)
-    if not isinstance(document, dict) or document.get("schema") != DELIVERED_ATTESTATION_SCHEMA:
-        raise BindingRefused(f"{path} is not a {DELIVERED_ATTESTATION_SCHEMA} document")
+    document, parsed = _json_of(data)
+    if not parsed or not isinstance(document, dict) or document.get("schema") != DELIVERED_ATTESTATION_SCHEMA:
+        raise BindingRefused(f"{path} is not a {DELIVERED_ATTESTATION_SCHEMA} document", "attestation_identity")
     reproducible = document.get("reproducible")
     identity = reproducible.get("identity") if isinstance(reproducible, dict) else None
     if not isinstance(identity, dict) or not isinstance(identity.get(SERVICE_SPEC_HASHES), dict):
-        raise BindingRefused(f"{path} states no spec identity")
+        raise BindingRefused(f"{path} states no spec identity", "attestation_identity")
     if reproducible_sha256(reproducible) != document.get("reproducible_sha256"):
-        raise BindingRefused(f"{path}: reproducible_sha256 is not the digest of its reproducible block")
+        raise BindingRefused(f"{path}: reproducible_sha256 is not the digest of its reproducible block", "attestation_digest")
     return data, document
 
 
@@ -1615,7 +1652,7 @@ def delivered_run_by(document: dict) -> str:
         return DEFERRED_RUN_BY
     if isinstance(disposition, str) and disposition in RAN_BY_DEVMATRIX:
         return "devmatrix"
-    raise BindingRefused("the delivered attestation's platform verdict does not state who ran the tests")
+    raise BindingRefused("the delivered attestation's platform verdict does not state who ran the tests", "runner")
 
 
 def project_published(document: dict, data: bytes) -> dict:
@@ -1636,7 +1673,8 @@ def project_published(document: dict, data: bytes) -> dict:
     if run_by not in SEAL_CLASS_OF_RUN_BY:
         raise BindingRefused(
             f"the delivered attestation says its tests were {_tests_of(run_by)}, which no published "
-            "attestation version states; bind it to its seal without --published"
+            "attestation version states; bind it to its seal without --published",
+            "published_deferred",
         )
     return {
         "schema": ATTESTATION_SCHEMA_V3,
@@ -1669,7 +1707,7 @@ def project_published(document: dict, data: bytes) -> dict:
 
 def bind_attestation(
     service: str, path: Path, statement: dict, published: dict | None, lines: list[str],
-) -> list[str]:
+) -> list[Failure]:
     """Bind one service's delivered attestation to the seal and, when given,
     to the published attestation. Every check runs; the lines of those that
     hold are appended to ``lines`` and the ones that do not are returned:
@@ -1686,28 +1724,30 @@ def bind_attestation(
     by_name = {s.get("name"): s for s in statement.get("services", []) if isinstance(s, dict)}
     sealed = by_name.get(service)
     if sealed is None:
-        return [f"{service}: no such service in this seal"]
+        return [Failure(f"{service}: no such service in this seal", "attestation_identity")]
     sealed_attestation = sealed.get("fingerprint_attestation")
     if not isinstance(sealed_attestation, dict):
-        return [f"{service}: the seal states no fingerprint attestation for it"]
+        return [Failure(f"{service}: the seal states no fingerprint attestation for it", "attestation_identity")]
     try:
         data, document = _delivered(path)
     except BindingRefused as refused:
-        return [f"{service}: {refused}"]
-    failures: list[str] = []
+        return [refused.failure.under(f"{service}: ")]
+    failures: list[Failure] = []
     digest = _sha256_prefixed(data)
     lines.append(f"      {service}: delivered attestation {digest}")
     if sealed_attestation.get("document_sha256") != digest:
-        failures.append(
-            f"{service}: the delivered attestation is not the sealed one ({sealed_attestation.get('document_sha256')})"
-        )
+        failures.append(Failure(
+            f"{service}: the delivered attestation is not the sealed one ({sealed_attestation.get('document_sha256')})",
+            "attestation_digest",
+        ))
     else:
         lines.append(f"[OK] {service}: the delivered attestation is the sealed one")
     if sealed_attestation.get("reproducible_sha256") != document["reproducible_sha256"]:
-        failures.append(
+        failures.append(Failure(
             f"{service}: reproducible_sha256 differs: delivered {document['reproducible_sha256']}, "
-            f"sealed {sealed_attestation.get('reproducible_sha256')}"
-        )
+            f"sealed {sealed_attestation.get('reproducible_sha256')}",
+            "attestation_digest",
+        ))
     else:
         lines.append(f"[OK] {service}: reproducible {document['reproducible_sha256']}")
     identity = document["reproducible"]["identity"]
@@ -1718,7 +1758,8 @@ def bind_attestation(
         ("service spec", identity[SERVICE_SPEC_HASHES].get(service), sealed.get("spec_hash")),
     )
     spec_failures = [
-        f"{service}: the attestation's {what} hash {attested} is not the sealed {sealed_hash}"
+        Failure(f"{service}: the attestation's {what} hash {attested} is not the sealed {sealed_hash}",
+                "attestation_identity")
         for what, attested, sealed_hash in spec_pairs
         if attested is None or attested != sealed_hash
     ]
@@ -1733,35 +1774,38 @@ def bind_attestation(
 
 def _measurer_failures(
     service: str, statement: dict, sealed: dict, document: dict, lines: list[str],
-) -> list[str]:
+) -> list[Failure]:
     if statement.get("schema_id") == SEAL_STATEMENT_WITHOUT_MEASURER:
-        return [
+        return [Failure(
             f"{service}: the seal is a {SEAL_STATEMENT_WITHOUT_MEASURER}, which does not state who measured "
             "the build, so who ran its tests cannot be checked against it; re-seal the platform (a new seal "
-            "is seal-statement/3 or later) and verify the new seal"
-        ]
+            "is seal-statement/3 or later) and verify the new seal",
+            "statement_version",
+        )]
     measurer = sealed.get("verification")
     if measurer not in RUN_BY_OF_MEASURER:
-        return [f"{service}: the seal does not state who measured the build"]
+        return [Failure(f"{service}: the seal does not state who measured the build", "statement_version")]
     try:
         run_by = delivered_run_by(document)
     except BindingRefused as refused:
-        return [f"{service}: {refused}"]
+        return [refused.failure.under(f"{service}: ")]
     if statement.get("schema_id") == SEAL_STATEMENT_WITH_BASIS:
         basis = sealed.get("basis")
         allowed = DELIVERED_RUN_BY_OF_BASIS.get(basis, frozenset()) if isinstance(basis, str) else frozenset()
         if run_by not in allowed:
-            return [
+            return [Failure(
                 f"{service}: the seal says its grade rests on {basis}, "
-                f"but its attestation says the tests were {_tests_of(run_by)}"
-            ]
+                f"but its attestation says the tests were {_tests_of(run_by)}",
+                "runner",
+            )]
         lines.append(f"[OK] {service}: tests {_tests_of(run_by)}, as the seal states (rests on {basis})")
         return []
     if RUN_BY_OF_MEASURER[measurer] != run_by:
-        return [
+        return [Failure(
             f"{service}: the seal says the build was measured by {measurer}, "
-            f"but its attestation says the tests were {_tests_of(run_by)}"
-        ]
+            f"but its attestation says the tests were {_tests_of(run_by)}",
+            "runner",
+        )]
     lines.append(f"[OK] {service}: tests run by {run_by}, as the seal states (measured by {measurer})")
     return []
 
@@ -1770,7 +1814,7 @@ def _whole(value: object) -> bool:
     return type(value) is int and 0 <= value <= _MAX_COUNT
 
 
-def _floor_problem(sealed: dict) -> str | None:
+def _floor_problem(sealed: dict) -> Failure | None:
     """Why one service of a seal-statement/5 does not state the grade floor
     it was sealed at and every test that failed, or ``None``: the floor is
     ``SEAL_FLOOR``, the grade (DevMatrix's, or the client's when the client
@@ -1778,37 +1822,37 @@ def _floor_problem(sealed: dict) -> str | None:
     once and in order; a build the client tested names exactly the tests
     that did not pass."""
     if sealed.get("seal_floor") != SEAL_FLOOR:
-        return f"does not state that it was sealed at grade {SEAL_FLOOR} or better"
+        return Failure(f"does not state that it was sealed at grade {SEAL_FLOOR} or better", "statement_version")
     failed = sealed.get("failed_tests")
     if not isinstance(failed, list) or not all(isinstance(name, str) and name for name in failed):
-        return "its failed tests are not names"
+        return Failure("its failed tests are not names", "statement_version")
     if failed != sorted(set(failed)):
-        return "its failed tests are not each named once, in order"
+        return Failure("its failed tests are not each named once, in order", "statement_version")
     measurer = sealed.get("verification")
     if measurer == "devmatrix":
         if sealed.get("self_attested_grade") is not None:
-            return "is measured by devmatrix and states a client grade"
+            return Failure("is measured by devmatrix and states a client grade", "basis_measurer")
         letter = sealed.get("grade")
     elif measurer == "self_attested":
         grade = sealed.get("self_attested_grade")
         if not isinstance(grade, dict):
-            return "is self-attested and states no client grade"
+            return Failure("is self-attested and states no client grade", "statement_version")
         if sealed.get("grade") is not None or sealed.get("qa_score_hundredths") is not None:
-            return "is self-attested and states a DevMatrix grade or score"
+            return Failure("is self-attested and states a DevMatrix grade or score", "basis_measurer")
         letter = grade.get("letter")
         passed, applicable = grade.get("passed"), grade.get("applicable")
         if not (_whole(passed) and _whole(applicable) and 0 < applicable and passed <= applicable):
-            return "is self-attested and its test counts do not hold"
+            return Failure("is self-attested and its test counts do not hold", "statement_version")
         if len(failed) != applicable - passed:
-            return "is self-attested and its failed tests are not every test that did not pass"
+            return Failure("is self-attested and its failed tests are not every test that did not pass", "statement_version")
     else:
-        return "does not state who measured the build"
+        return Failure("does not state who measured the build", "statement_version")
     if letter not in SEALABLE_GRADES:
-        return f"is graded {letter!r}, below the grade {SEAL_FLOOR} it was sealed at"
+        return Failure(f"is graded {letter!r}, below the grade {SEAL_FLOOR} it was sealed at", "grade_floor")
     return None
 
 
-def seal_floor_findings(statement: dict) -> tuple[list[str], list[str]]:
+def seal_floor_findings(statement: dict) -> tuple[list[str], list[Failure]]:
     """The lines and the failures of the grade floor of every service of a
     seal-statement/5: each service is graded at the floor or above and names
     every test that failed; both are printed. Earlier statements state no
@@ -1818,20 +1862,20 @@ def seal_floor_findings(statement: dict) -> tuple[list[str], list[str]]:
         return [], []
     services = statement.get("services")
     if not isinstance(services, list) or not services:
-        return [], ["the seal lists no sealed service"]
+        return [], [Failure("the seal lists no sealed service", "statement_version")]
     lines: list[str] = []
-    failures: list[str] = []
+    failures: list[Failure] = []
     if version == SEAL_STATEMENT_WITH_BASIS:
         if not all(isinstance(sealed, dict) for sealed in services):
-            return [], ["the signed statement lists a sealed service that is not one"]
+            return [], [Failure("the signed statement lists a sealed service that is not one", "statement_version")]
         mixture = _mixture_problem(statement)
         if mixture is not None:
-            return [], [f"the signed statement is refused by its content: it {mixture}"]
+            return [], [mixture.under("the signed statement is refused by its content: it ")]
     for index, sealed in enumerate(services):
         name = sealed.get("name") if isinstance(sealed, dict) else None
         label = name if isinstance(name, str) and name else f"services[{index}]"
         if not isinstance(sealed, dict):
-            failures.append(f"{label}: is not a sealed service")
+            failures.append(Failure(f"{label}: is not a sealed service", "statement_version"))
             continue
         problem = _floor_problem(sealed) or (
             _not_judged_problem(sealed) if version in SEAL_STATEMENTS_WITH_NOT_JUDGED else None
@@ -1839,8 +1883,8 @@ def seal_floor_findings(statement: dict) -> tuple[list[str], list[str]]:
             _basis_problem(sealed) if version == SEAL_STATEMENT_WITH_BASIS else None
         )
         if problem is not None:
-            failures.append(f"{label}: {problem}" if version != SEAL_STATEMENT_WITH_BASIS
-                            else f"{label}: the signed statement is refused by its content: it {problem}")
+            failures.append(problem.under(f"{label}: ") if version != SEAL_STATEMENT_WITH_BASIS
+                            else problem.under(f"{label}: the signed statement is refused by its content: it "))
             continue
         failed = sealed["failed_tests"]
         if sealed["verification"] == "devmatrix":
@@ -1862,31 +1906,31 @@ def seal_floor_findings(statement: dict) -> tuple[list[str], list[str]]:
     return lines, failures
 
 
-def _not_run_tiers_problem(tiers: object) -> str | None:
+def _not_run_tiers_problem(tiers: object) -> Failure | None:
     """Why the tiers not run a seal-statement/6 service declares are not each
     one group of its own tier with a whole count above zero, once, in order;
     or ``None``."""
     if not isinstance(tiers, list):
-        return "its tiers not run are not a list"
+        return Failure("its tiers not run are not a list", "statement_version")
     for tier in tiers:
         if not (isinstance(tier, dict) and set(tier) == {"group", "tier", "count"}):
-            return "a tier not run it declares is not a group, a tier and a count"
+            return Failure("a tier not run it declares is not a group, a tier and a count", "statement_version")
         group, name, count = tier["group"], tier["tier"], tier["count"]
         if not (
             isinstance(group, str) and isinstance(name, str) and name
             and group.endswith("::" + name + "::*") and group.count("::") == 2
             and not group.startswith("::")
         ):
-            return "a tier not run it declares is not a group of its own tier"
+            return Failure("a tier not run it declares is not a group of its own tier", "statement_version")
         if not (_whole(count) and count > 0):
-            return "a tier not run it declares has no whole count above zero"
+            return Failure("a tier not run it declares has no whole count above zero", "statement_version")
     groups = [tier["group"] for tier in tiers]
     if groups != sorted(set(groups)):
-        return "its tiers not run are not each declared once, in order"
+        return Failure("its tiers not run are not each declared once, in order", "statement_version")
     return None
 
 
-def _not_judged_problem(sealed: dict) -> str | None:
+def _not_judged_problem(sealed: dict) -> Failure | None:
     """Why one service of a seal-statement/6 does not state its tests not
     judged, or ``None``: each named once, in order, none of them also named
     failed, the total is the names plus every tier not run, and no grade of A+
@@ -1895,43 +1939,43 @@ def _not_judged_problem(sealed: dict) -> str | None:
     the count existed): it names none, totals none, and bears no A+."""
     names = sealed.get("not_judged_tests")
     if not (isinstance(names, list) and all(isinstance(name, str) and name for name in names)):
-        return "its tests not judged are not names"
+        return Failure("its tests not judged are not names", "not_judged")
     if names != sorted(set(names)):
-        return "its tests not judged are not each named once, in order"
+        return Failure("its tests not judged are not each named once, in order", "not_judged")
     if set(names) & set(sealed["failed_tests"]):
-        return "a test it names not judged is also named failed"
+        return Failure("a test it names not judged is also named failed", "not_judged")
     tiers = sealed.get("not_run_tiers")
     problem = _not_run_tiers_problem(tiers)
     if problem is not None:
         return problem
     if sealed["verification"] != "devmatrix":
         if tiers:
-            return "is self-attested and declares tiers not run"
+            return Failure("is self-attested and declares tiers not run", "not_judged")
         grade = sealed["self_attested_grade"]
         if "listed_not_judged" not in grade:
-            return "is self-attested and its grade does not state its count of tests not judged"
+            return Failure("is self-attested and its grade does not state its count of tests not judged", "not_judged")
         count = grade["listed_not_judged"]
         if count is None:
             if names:
-                return "is self-attested, states no count of tests not judged and names some"
+                return Failure("is self-attested, states no count of tests not judged and names some", "not_judged")
             if sealed.get("not_judged_count") is not None:
-                return "is self-attested, states no count of tests not judged and totals one"
+                return Failure("is self-attested, states no count of tests not judged and totals one", "not_judged")
             if grade["letter"] == "A+":
-                return "is graded A+ beside a count of tests not judged it does not state"
+                return Failure("is graded A+ beside a count of tests not judged it does not state", "not_judged")
             return None
         if not _whole(count):
-            return "is self-attested and its count of tests not judged is not a whole number"
+            return Failure("is self-attested and its count of tests not judged is not a whole number", "not_judged")
         if count != len(names):
-            return f"is self-attested and counts {count} tests not judged but names {len(names)}"
+            return Failure(f"is self-attested and counts {count} tests not judged but names {len(names)}", "not_judged")
     total = sealed.get("not_judged_count")
     if not _whole(total):
-        return "its count of tests not judged is not a whole number"
+        return Failure("its count of tests not judged is not a whole number", "not_judged")
     declared = len(names) + sum(tier["count"] for tier in tiers)
     if total != declared:
-        return f"counts {total} tests not judged but declares {declared}"
+        return Failure(f"counts {total} tests not judged but declares {declared}", "not_judged")
     letter = sealed["grade"] if sealed["verification"] == "devmatrix" else sealed["self_attested_grade"]["letter"]
     if total and letter == "A+":
-        return "is graded A+ beside tests not judged"
+        return Failure("is graded A+ beside tests not judged", "not_judged")
     return None
 
 
@@ -1966,40 +2010,40 @@ def _names_in_order(value: object) -> bool:
     )
 
 
-def _qa_run_problem(sealed: dict) -> str | None:
+def _qa_run_problem(sealed: dict) -> Failure | None:
     """Why the QA run a seal-statement/7 service rests on is not stated
     exactly, or ``None``: its run, attempt, report version and digest, when it
     finished, and the grade the statement carries (letter, score, counts), with
     the UTS reds named in ``failed_tests`` and the emitted suite's apart."""
     run = sealed.get("qa_run")
     if not (isinstance(run, dict) and set(run) == _QA_RUN_FIELDS):
-        return "rests on a QA run it does not state exactly"
+        return Failure("rests on a QA run it does not state exactly", "qa_run_binding")
     if not (isinstance(run["qa_run_id"], str) and _UUID.fullmatch(run["qa_run_id"])):
-        return "names no QA run by its id"
+        return Failure("names no QA run by its id", "qa_run_binding")
     if not (_whole(run["attempt"]) and run["attempt"] >= 1):
-        return "names no attempt of its QA run"
+        return Failure("names no attempt of its QA run", "qa_run_binding")
     if run["report_schema_id"] not in QA_RUN_REPORT_SCHEMAS:
-        return f"names a QA run report of an unknown version {run['report_schema_id']!r}"
+        return Failure(f"names a QA run report of an unknown version {run['report_schema_id']!r}", "qa_run_binding")
     if not (isinstance(run["report_sha256"], str) and _HEX64_ONLY.fullmatch(run["report_sha256"])):
-        return "states no digest of its QA run report"
+        return Failure("states no digest of its QA run report", "qa_run_binding")
     if not (isinstance(run["finished_at"], str) and run["finished_at"]):
-        return "states no time its QA run finished"
+        return Failure("states no time its QA run finished", "qa_run_binding")
     if run["letter"] != sealed.get("grade"):
-        return "states a grade that is not its QA run's"
+        return Failure("states a grade that is not its QA run's", "qa_run_binding")
     score, passed, applicable = run["score_percent"], run["passed"], run["applicable"]
     if not (_whole(score) and score <= 100 and _whole(passed) and _whole(applicable)
             and 0 < applicable and passed <= applicable):
-        return "states QA run counts that do not hold"
+        return Failure("states QA run counts that do not hold", "qa_run_binding")
     if sealed.get("qa_score_hundredths") != score * 100:
-        return "states a score that is not its QA run's"
+        return Failure("states a score that is not its QA run's", "qa_run_binding")
     if len(sealed["failed_tests"]) != applicable - passed:
-        return "does not name every test its QA run failed"
+        return Failure("does not name every test its QA run failed", "qa_run_binding")
     if not _names_in_order(run["emitted_failed_tests"]):
-        return "its emitted suite's failed tests are not each named once, in order"
+        return Failure("its emitted suite's failed tests are not each named once, in order", "qa_run_binding")
     return None
 
 
-def _proofs_problem(sealed: dict) -> str | None:
+def _proofs_problem(sealed: dict) -> Failure | None:
     """Why the tests proven not applicable a seal-statement/7 service states
     do not hold, or ``None``. A count is stated, or null only where the
     measurement predates proofs (a ``qa-run-report/1``, or a client run, whose
@@ -2013,41 +2057,41 @@ def _proofs_problem(sealed: dict) -> str | None:
     rows_digest = sealed.get("proof_rows_sha256")
     collected = sealed.get("collected_node_ids_sha256")
     if not isinstance(tests, list):
-        return "its tests proven not applicable are not a list"
+        return Failure("its tests proven not applicable are not a list", "proofs")
     if count is None:
         if basis == "qa_run" and sealed["qa_run"]["report_schema_id"] != QA_RUN_REPORT_WITHOUT_PROOFS:
-            return "rests on a QA run report that states proofs and states no count of them"
+            return Failure("rests on a QA run report that states proofs and states no count of them", "proofs")
         if tests or rows_digest is not None:
-            return "states no count of tests proven not applicable and names or digests some"
+            return Failure("states no count of tests proven not applicable and names or digests some", "proofs")
         if basis in ("compile", "qa_run") and collected is not None:
-            return "states no count of tests proven not applicable and digests the tests its run collected"
+            return Failure("states no count of tests proven not applicable and digests the tests its run collected", "proofs")
         return None
     if basis == "compile":
-        return "rests on the compile and states a count of tests proven not applicable"
+        return Failure("rests on the compile and states a count of tests proven not applicable", "proofs")
     if basis == "qa_run" and sealed["qa_run"]["report_schema_id"] == QA_RUN_REPORT_WITHOUT_PROOFS:
-        return "rests on a QA run report that predates proofs and states a count of them"
+        return Failure("rests on a QA run report that predates proofs and states a count of them", "proofs")
     if not _whole(count):
-        return "its count of tests proven not applicable is not a whole number"
+        return Failure("its count of tests proven not applicable is not a whole number", "proofs")
     if not (_names_in_order(tests) and all(_MODULE_TEST.fullmatch(name) for name in tests)):
-        return "its tests proven not applicable are not each named <module>::<test> once, in order"
+        return Failure("its tests proven not applicable are not each named <module>::<test> once, in order", "proofs")
     if count != len(tests):
-        return f"counts {count} tests proven not applicable but names {len(tests)}"
+        return Failure(f"counts {count} tests proven not applicable but names {len(tests)}", "proofs")
     if set(tests) & (set(sealed["failed_tests"]) | set(sealed["not_judged_tests"])):
-        return "a test it names proven not applicable is also named failed or not judged"
+        return Failure("a test it names proven not applicable is also named failed or not judged", "proofs")
     if not (isinstance(rows_digest, str) and _HEX64_ONLY.fullmatch(rows_digest)):
-        return "states no digest of its proof rows"
+        return Failure("states no digest of its proof rows", "proofs")
     if not (isinstance(collected, dict) and all(
         isinstance(module, str) and module and (digest is None or (isinstance(digest, str) and _HEX64_ONLY.fullmatch(digest)))
         for module, digest in collected.items()
     )):
-        return "its digests of the tests each module collected are not module digests"
+        return Failure("its digests of the tests each module collected are not module digests", "proofs")
     unproven = sorted({name.split("::", 1)[0] for name in tests if collected.get(name.split("::", 1)[0]) is None})
     if unproven:
-        return f"proves tests not applicable in modules whose collected tests it does not digest: {unproven}"
+        return Failure(f"proves tests not applicable in modules whose collected tests it does not digest: {unproven}", "proofs")
     return None
 
 
-def _basis_problem(sealed: dict) -> str | None:
+def _basis_problem(sealed: dict) -> Failure | None:
     """Why one service of a seal-statement/7 does not state what its grade
     rests on, or ``None``: the build it seals, a basis whose measurer is the
     one it states, the QA run exactly when it rests on one, and its tests
@@ -2055,42 +2099,42 @@ def _basis_problem(sealed: dict) -> str | None:
     does not state is refused like an A+ beside tests not judged."""
     compilation_id = sealed.get("compilation_id")
     if not (isinstance(compilation_id, str) and _UUID.fullmatch(compilation_id)):
-        return "names no build by its compilation id"
+        return Failure("names no build by its compilation id", "statement_version")
     basis = sealed.get("basis")
     if basis not in MEASURER_OF_BASIS:
-        return f"states an unknown basis {basis!r}"
+        return Failure(f"states an unknown basis {basis!r}", "statement_version")
     if MEASURER_OF_BASIS[basis] != sealed["verification"]:
-        return f"rests on {basis} but states it was measured by {sealed['verification']}"
+        return Failure(f"rests on {basis} but states it was measured by {sealed['verification']}", "basis_measurer")
     if basis == "qa_run":
         problem = _qa_run_problem(sealed)
         if problem is not None:
             return problem
     elif "qa_run" not in sealed:
-        return "does not state whether it rests on a QA run"
+        return Failure("does not state whether it rests on a QA run", "qa_run_binding")
     elif sealed["qa_run"] is not None:
-        return f"rests on {basis} and names a QA run"
+        return Failure(f"rests on {basis} and names a QA run", "qa_run_binding")
     problem = _proofs_problem(sealed)
     if problem is not None:
         return problem
     letter = sealed["grade"] if sealed["verification"] == "devmatrix" else sealed["self_attested_grade"]["letter"]
     if letter == "A+" and sealed["proven_not_applicable_count"] is None:
-        return "is graded A+ beside tests proven not applicable it does not state"
+        return Failure("is graded A+ beside tests proven not applicable it does not state", "not_judged")
     return None
 
 
-def _mixture_problem(statement: dict) -> str | None:
+def _mixture_problem(statement: dict) -> Failure | None:
     """Why a seal-statement/7 is not one measurer's seal, or ``None``: every
     service measured by DevMatrix (on the compile or a QA run), or exactly one
     build its client ran; the platform states the same measurer."""
     services = statement["services"]
     measurers = sorted({service.get("verification") for service in services}, key=str)
     if len(measurers) != 1:
-        return f"mixes builds measured by {measurers} in one seal"
+        return Failure(f"mixes builds measured by {measurers} in one seal", "mixture")
     platform = statement.get("platform")
     if not isinstance(platform, dict) or platform.get("verification") != measurers[0]:
-        return "states another measurer for the platform than for its builds"
+        return Failure("states another measurer for the platform than for its builds", "mixture")
     if measurers[0] == "self_attested" and len(services) != 1:
-        return f"is self-attested over {len(services)} builds; a self-attested seal is one build"
+        return Failure(f"is self-attested over {len(services)} builds; a self-attested seal is one build", "mixture")
     return None
 
 
@@ -2121,17 +2165,18 @@ def _basis_lines(label: str, sealed: dict) -> list[str]:
 
 def _published_failures(
     service: str, data: bytes, document: dict, published: dict, lines: list[str],
-) -> list[str]:
+) -> list[Failure]:
     try:
         expected = project_published(document, data)
     except BindingRefused as refused:
-        return [f"{service}: {refused}"]
+        return [refused.failure.under(f"{service}: ")]
     differing = sorted(key for key in set(expected) | set(published) if expected.get(key) != published.get(key))
     if differing:
-        return [
+        return [Failure(
             f"{service}: the published attestation is not what the delivered file publishes as; "
-            f"it differs in {differing}"
-        ]
+            f"it differs in {differing}",
+            "attestation_identity",
+        )]
     lines.append(
         f"[OK] {service}: the published attestation is exactly what the delivered file publishes as "
         f"(its digest, identity, tests run by {published['run_by']}, seal {published['seal_class']})"
@@ -2141,27 +2186,28 @@ def _published_failures(
 
 def _published_for_binding(
     path: Path, keys: list[dict], accept: str = PRODUCTION,
-) -> tuple[dict | None, list[str], list[str]]:
+) -> tuple[dict | None, list[str], list[Failure]]:
     """The published attestation to bind, the lines to report and the
     failures; ``None`` when it cannot be bound, so the rest still runs."""
     try:
         evidence = read_json(path)
-    except (OSError, ValueError) as exc:
-        return None, [], [f"published attestation: cannot read {path}: {exc}"]
+    except (OSError, ValueError, RecursionError) as exc:
+        return None, [], [Failure(f"published attestation: cannot read {path}: {exc}", "attestation_identity")]
     passed, lines = verify_signature(evidence, keys, accept)
     if not passed:
-        return None, [], ["published attestation: " + "; ".join(lines)]
+        return None, [], [Failure("published attestation: " + "; ".join(lines), "signature")]
     payload = signed_payload(evidence)
     try:
         lines += check_published_attestation(payload)
     except AttestationRefused as refusal:
-        return None, lines, [str(refusal)]
+        return None, lines, [Failure(str(refusal), "attestation_identity")]
     if payload.get("schema") != ATTESTATION_SCHEMA_V3:
-        return None, lines, [
+        return None, lines, [Failure(
             f"published attestation: {payload.get('schema')} names the attestation by the digest of a compact "
             "re-serialization, not of the delivered file, so it cannot be bound to the delivered file; "
-            f"republish the build's attestation (it is published as {ATTESTATION_SCHEMA_V3}) and verify again"
-        ]
+            f"republish the build's attestation (it is published as {ATTESTATION_SCHEMA_V3}) and verify again",
+            "attestation_digest",
+        )]
     return payload, lines, []
 
 
@@ -2296,46 +2342,46 @@ def _json_of(data: bytes) -> tuple[object, bool]:
         return None, False
 
 
-def _manifest_failures(held: dict[str, bytes], statement: dict, statement_bytes: bytes) -> tuple[list[str], dict]:
+def _manifest_failures(held: dict[str, bytes], statement: dict, statement_bytes: bytes) -> tuple[list[Failure], dict]:
     """The failures of the bundle's manifest against the files it holds,
     and the files it says are not held, by name: the manifest is of this seal,
     names every held file once with its digest and size, and names as absent
     only files it does not hold; the statement it holds is the one verified."""
     if EVIDENCE_MANIFEST not in held:
-        return [f"evidence: the bundle has no {EVIDENCE_MANIFEST}"], {}
+        return [Failure(f"evidence: the bundle has no {EVIDENCE_MANIFEST}", "evidence_tampered")], {}
     manifest, parsed = _json_of(held[EVIDENCE_MANIFEST])
     if not parsed:
-        return [f"evidence: {EVIDENCE_MANIFEST} is not JSON"], {}
+        return [Failure(f"evidence: {EVIDENCE_MANIFEST} is not JSON", "evidence_tampered")], {}
     if not (isinstance(manifest, dict) and set(manifest) == {"schema", "seal_hash", "files", "absent"}
             and manifest["schema"] == EVIDENCE_SCHEMA):
-        return [f"evidence: {EVIDENCE_MANIFEST} is not a {EVIDENCE_SCHEMA} manifest"], {}
-    failures: list[str] = []
+        return [Failure(f"evidence: {EVIDENCE_MANIFEST} is not a {EVIDENCE_SCHEMA} manifest", "evidence_tampered")], {}
+    failures: list[Failure] = []
     if manifest["seal_hash"] != statement.get("seal_hash"):
-        failures.append("evidence: the bundle is of another seal than the statement verified")
+        failures.append(Failure("evidence: the bundle is of another seal than the statement verified", "evidence_tampered"))
     files, absent = manifest["files"], manifest["absent"]
     if not (isinstance(files, list) and all(
         isinstance(e, dict) and set(e) == {"path", "sha256", "size_bytes"} and isinstance(e["path"], str)
         for e in files
     )):
-        return failures + ["evidence: the manifest's files are not each a path, a digest and a size"], {}
+        return failures + [Failure("evidence: the manifest's files are not each a path, a digest and a size", "evidence_tampered")], {}
     if not (isinstance(absent, list) and all(
         isinstance(e, dict) and set(e) == {"path", "state", "reason"} and isinstance(e["path"], str)
         and isinstance(e["state"], str) and (e["reason"] is None or isinstance(e["reason"], str))
         for e in absent
     )):
-        return failures + ["evidence: the manifest's absent files are not each a path, a state and a reason"], {}
+        return failures + [Failure("evidence: the manifest's absent files are not each a path, a state and a reason", "evidence_tampered")], {}
     listed = {entry["path"]: entry for entry in files}
     if len(listed) != len(files) or sorted(listed) != sorted(set(held) - {EVIDENCE_MANIFEST}):
-        failures.append("evidence: the manifest does not name exactly the files the bundle holds")
+        failures.append(Failure("evidence: the manifest does not name exactly the files the bundle holds", "evidence_tampered"))
     for name, entry in sorted(listed.items()):
         data = held.get(name)
         if data is not None and (entry["sha256"] != hashlib.sha256(data).hexdigest() or entry["size_bytes"] != len(data)):
-            failures.append(f"evidence: {_shown(name)} is not the file the manifest names")
+            failures.append(Failure(f"evidence: {_shown(name)} is not the file the manifest names", "evidence_tampered"))
     gone = {entry["path"]: entry for entry in absent}
     if len(gone) != len(absent) or set(gone) & set(held):
-        failures.append("evidence: the manifest names a file absent twice, or absent and held")
+        failures.append(Failure("evidence: the manifest names a file absent twice, or absent and held", "evidence_tampered"))
     if "seal-statement.json" in held and held["seal-statement.json"] != statement_bytes:
-        failures.append("evidence: the bundle's seal-statement.json is not the statement verified")
+        failures.append(Failure("evidence: the bundle's seal-statement.json is not the statement verified", "evidence_tampered"))
     return failures, gone
 
 
@@ -2348,7 +2394,7 @@ def _canonical_seal_bytes(document: object) -> bytes:
 _PROOF_ROW_FIELDS = frozenset({"module_id", "test_id", "witnesses", "witnessed"})
 
 
-def _proofs_failures(label: str, sealed: dict, data: bytes) -> list[str]:
+def _proofs_failures(label: str, sealed: dict, data: bytes) -> list[Failure]:
     """The failures of a service's proof rows file against what the seal
     signed: its digest, its exact serialization, rows sorted by (module,
     test), each once, with sorted distinct witnesses; the witnessed rows are
@@ -2356,12 +2402,12 @@ def _proofs_failures(label: str, sealed: dict, data: bytes) -> list[str]:
     whose collected tests the seal digests, and every other row's test is
     named not judged."""
     if hashlib.sha256(data).hexdigest() != sealed["proof_rows_sha256"]:
-        return [f"{label}: the proof rows file is not the one the seal signed (proof_rows_sha256)"]
+        return [Failure(f"{label}: the proof rows file is not the one the seal signed (proof_rows_sha256)", "evidence_tampered")]
     rows, parsed = _json_of(data)
     if not parsed:
-        return [f"{label}: the proof rows file is not JSON"]
+        return [Failure(f"{label}: the proof rows file is not JSON", "evidence_tampered")]
     if _canonical_seal_bytes(rows) != data:
-        return [f"{label}: the proof rows file is not written in the seal's serialization"]
+        return [Failure(f"{label}: the proof rows file is not written in the seal's serialization", "evidence_tampered")]
     if not (isinstance(rows, list) and all(
         isinstance(row, dict) and set(row) == _PROOF_ROW_FIELDS
         and isinstance(row["module_id"], str) and row["module_id"]
@@ -2369,33 +2415,33 @@ def _proofs_failures(label: str, sealed: dict, data: bytes) -> list[str]:
         and _names_in_order(row["witnesses"]) and isinstance(row["witnessed"], bool)
         for row in rows
     )):
-        return [f"{label}: the proof rows are not each a module, a test, sorted distinct witnesses and whether witnessed"]
+        return [Failure(f"{label}: the proof rows are not each a module, a test, sorted distinct witnesses and whether witnessed", "evidence_tampered")]
     keys = [(row["module_id"], row["test_id"]) for row in rows]
     if keys != sorted(set(keys)):
-        return [f"{label}: the proof rows are not each once, sorted by module and test"]
+        return [Failure(f"{label}: the proof rows are not each once, sorted by module and test", "evidence_tampered")]
     witnessed = [f"{row['module_id']}::{row['test_id']}" for row in rows if row["witnessed"]]
     shown_not = [f"{row['module_id']}::{row['test_id']}" for row in rows if not row["witnessed"]]
-    failures: list[str] = []
+    failures: list[Failure] = []
     if witnessed != sealed["proven_not_applicable_tests"]:
-        failures.append(f"{label}: the witnessed proof rows are not the tests the seal states proven not applicable")
+        failures.append(Failure(f"{label}: the witnessed proof rows are not the tests the seal states proven not applicable", "evidence_tampered"))
     missing = sorted(set(shown_not) - set(sealed["not_judged_tests"]))
     if missing:
-        failures.append(f"{label}: proofs not shown that the seal does not name not judged: {missing}")
+        failures.append(Failure(f"{label}: proofs not shown that the seal does not name not judged: {missing}", "evidence_tampered"))
     return failures
 
 
-def _report_failures(label: str, sealed: dict, data: bytes) -> list[str]:
+def _report_failures(label: str, sealed: dict, data: bytes) -> list[Failure]:
     """The failures of a service's QA run report against what the seal
     signed: its digest, its version, the run, attempt and build it names, a
     completed run, and the grade, score and counts."""
     run = sealed["qa_run"]
     if hashlib.sha256(data).hexdigest() != run["report_sha256"]:
-        return [f"{label}: the QA run report is not the one the seal signed (report_sha256)"]
+        return [Failure(f"{label}: the QA run report is not the one the seal signed (report_sha256)", "evidence_tampered")]
     report, parsed = _json_of(data)
     if not parsed:
-        return [f"{label}: the QA run report is not JSON"]
+        return [Failure(f"{label}: the QA run report is not JSON", "evidence_tampered")]
     if not isinstance(report, dict):
-        return [f"{label}: the QA run report is not a report"]
+        return [Failure(f"{label}: the QA run report is not a report", "evidence_tampered")]
     pairs = (
         ("version", report.get("schema_id"), run["report_schema_id"]),
         ("QA run", report.get("qa_run_id"), run["qa_run_id"]),
@@ -2408,7 +2454,7 @@ def _report_failures(label: str, sealed: dict, data: bytes) -> list[str]:
         ("tests applicable", report.get("applicable"), run["applicable"]),
     )
     failures = [
-        f"{label}: the QA run report states {what} {stated!r}, the seal {signed!r}"
+        Failure(f"{label}: the QA run report states {what} {stated!r}, the seal {signed!r}", "evidence_tampered")
         for what, stated, signed in pairs if stated != signed
     ]
     if failures:
@@ -2419,19 +2465,19 @@ def _report_failures(label: str, sealed: dict, data: bytes) -> list[str]:
     except ValueError:
         same_instant = False
     if not same_instant:
-        failures.append(f"{label}: the QA run report finished at {finished!r}, the seal says {run['finished_at']!r}")
+        failures.append(Failure(f"{label}: the QA run report finished at {finished!r}, the seal says {run['finished_at']!r}", "evidence_tampered"))
     reds = report.get("reds")
     suite = report.get("emitted_suite")
     if not isinstance(reds, list) or not all(isinstance(red, dict) and isinstance(red.get("name"), str) for red in reds):
-        return failures + [f"{label}: the QA run report names no reds"]
+        return failures + [Failure(f"{label}: the QA run report names no reds", "evidence_tampered")]
     if sorted(red["name"] for red in reds) != sealed["failed_tests"]:
-        failures.append(f"{label}: the seal's failed tests are not the QA run report's reds")
+        failures.append(Failure(f"{label}: the seal's failed tests are not the QA run report's reds", "evidence_tampered"))
     if suite is None:
         emitted_reds, not_tested, modules = [], [], None
     elif isinstance(suite, dict):
         emitted_reds, not_tested, modules = suite.get("reds"), suite.get("not_tested"), suite.get("modules")
     else:
-        return failures + [f"{label}: the QA run report's emitted suite is not one"]
+        return failures + [Failure(f"{label}: the QA run report's emitted suite is not one", "evidence_tampered")]
     def module_names(rows: object) -> list[str] | None:
         if not isinstance(rows, list) or not all(
             isinstance(row, dict) and isinstance(row.get("module_id"), str) and isinstance(row.get("name"), str)
@@ -2441,19 +2487,19 @@ def _report_failures(label: str, sealed: dict, data: bytes) -> list[str]:
         return sorted(f"{row['module_id']}::{row['name']}" for row in rows)
     emitted_names, not_tested_names = module_names(emitted_reds), module_names(not_tested)
     if emitted_names is None or not_tested_names is None:
-        return failures + [f"{label}: the QA run report's emitted suite does not name its reds and tests not run"]
+        return failures + [Failure(f"{label}: the QA run report's emitted suite does not name its reds and tests not run", "evidence_tampered")]
     if emitted_names != run["emitted_failed_tests"]:
-        failures.append(f"{label}: the seal's emitted suite failures are not the QA run report's")
+        failures.append(Failure(f"{label}: the seal's emitted suite failures are not the QA run report's", "evidence_tampered"))
     unnamed = sorted(set(not_tested_names) - set(sealed["not_judged_tests"]))
     if unnamed:
-        failures.append(f"{label}: tests the QA run did not test that the seal does not name not judged: {unnamed}")
+        failures.append(Failure(f"{label}: tests the QA run did not test that the seal does not name not judged: {unnamed}", "evidence_tampered"))
     if run["report_schema_id"] == QA_RUN_REPORT_WITHOUT_PROOFS:
         return failures
     failures += _report_proof_failures(label, sealed, modules)
     return failures
 
 
-def _report_proof_failures(label: str, sealed: dict, modules: object) -> list[str]:
+def _report_proof_failures(label: str, sealed: dict, modules: object) -> list[Failure]:
     """The failures of a qa-run-report/2's modules against the seal: the
     seal's collected digests are the report's, every module states its proof
     rows, and the proof rows file the seal digests is those rows, each with
@@ -2463,36 +2509,36 @@ def _report_proof_failures(label: str, sealed: dict, modules: object) -> list[st
         and set(module) == {"module_id", "collected_test_ids_sha256", "proven_not_applicable"}
         for module in modules
     )):
-        return [f"{label}: the QA run report does not state its modules' collected tests and proofs"]
+        return [Failure(f"{label}: the QA run report does not state its modules' collected tests and proofs", "evidence_tampered")]
     collected = {module["module_id"]: module["collected_test_ids_sha256"] for module in modules}
     if len(collected) != len(modules) or collected != sealed["collected_node_ids_sha256"]:
-        return [f"{label}: the seal's collected test digests are not the QA run report's"]
+        return [Failure(f"{label}: the seal's collected test digests are not the QA run report's", "evidence_tampered")]
     unstated = sorted(module["module_id"] for module in modules if module["proven_not_applicable"] is None)
     if unstated:
-        return [f"{label}: the QA run report states no proofs for {unstated}, and the seal states a count"]
+        return [Failure(f"{label}: the QA run report states no proofs for {unstated}, and the seal states a count", "evidence_tampered")]
     rows = []
     for module in modules:
         if not isinstance(module["proven_not_applicable"], list) or not all(
             isinstance(row, dict) for row in module["proven_not_applicable"]
         ):
-            return [f"{label}: the QA run report's proofs for {module['module_id']} are not rows"]
+            return [Failure(f"{label}: the QA run report's proofs for {module['module_id']} are not rows", "evidence_tampered")]
         rows += [dict(row, module_id=module["module_id"]) for row in module["proven_not_applicable"]]
     rows.sort(key=lambda row: (str(row.get("module_id")), str(row.get("test_id"))))
     if hashlib.sha256(_canonical_seal_bytes(rows)).hexdigest() != sealed["proof_rows_sha256"]:
-        return [f"{label}: the proof rows the seal digests are not the QA run report's"]
+        return [Failure(f"{label}: the proof rows the seal digests are not the QA run report's", "evidence_tampered")]
     return []
 
 
 def evidence_findings(
     root: Path, statement: dict, statement_bytes: bytes,
-) -> tuple[list[str], list[str]]:
+) -> tuple[list[str], list[Failure]]:
     """The lines and failures of checking the evidence bundle ``root``
     against a verified seal statement; every check is named in a line."""
     services = statement.get("services") if isinstance(statement.get("services"), list) else []
     try:
         held = read_evidence(root, len(services))
     except (EvidenceRefused, OSError) as refused:
-        return [], [f"evidence: {refused}"]
+        return [], [Failure(f"evidence: {refused}", "evidence_refused")]
     failures, gone = _manifest_failures(held, statement, statement_bytes)
     lines = [f"[OK] evidence: {len(held)} file(s) read from {_shown(str(root))}, none through a link, each within its bound"]
     if not failures:
@@ -2511,7 +2557,7 @@ def evidence_findings(
                 if name not in held:
                     entry = gone.get(name)
                     why = f" ({_shown(entry['state'])}: {_shown(entry['reason'])})" if entry else ""
-                    failures.append(f"{label}: the bundle does not hold its {what} {name}{why}")
+                    failures.append(Failure(f"{label}: the bundle does not hold its {what} {name}{why}", "evidence_tampered"))
                     continue
                 found = check(label, sealed, held[name])
                 failures += found
@@ -2520,7 +2566,7 @@ def evidence_findings(
     stray = sorted(name for name in held if (_QA_RUN_REPORT_FILE.fullmatch(name) or _PROOFS_FILE.fullmatch(name))
                    and name not in expected)
     if stray:
-        failures.append(f"evidence: files the seal does not rest on: {_shown(stray)}")
+        failures.append(Failure(f"evidence: files the seal does not rest on: {_shown(stray)}", "evidence_tampered"))
     return lines, failures
 
 
@@ -2539,17 +2585,26 @@ def unchecked_evidence_lines(statement: dict) -> list[str]:
 
 def verify_binding(
     bundle: Path, attestations: list[tuple[str, Path]], published_path: Path | None, keys: list[dict],
-    accept: str = PRODUCTION, evidence: Path | None = None,
+    accept: str = PRODUCTION, evidence: Path | None = None, failed: list[Failure] | None = None,
 ) -> bool:
     """Print the verdict of binding each delivered attestation to the seal
     (and the published attestation, when given); whether all of it held.
     Every check that can run does: the [OK] lines say what was verified and
-    the [FAIL] lines what was not."""
+    the [FAIL] lines what was not. The failures, with their classes, are
+    added to ``failed`` when given."""
     lines: list[str] = []
     try:
         statement, seal_lines, statement_bytes = read_signed_seal(bundle, keys, accept)
-    except (BindingRefused, OSError, ValueError) as refusal:
-        print(f"[FAIL] {refusal}")
+    except BindingRefused as refusal:
+        refused = [refusal.failure]
+    except (OSError, ValueError, RecursionError) as refusal:
+        refused = [Failure(str(refusal), "signature")]
+    else:
+        refused = []
+    if refused:
+        if failed is not None:
+            failed += refused
+        print(f"[FAIL] {refused[0].text}")
         return False
     lines += seal_lines
     floor_lines, failures = seal_floor_findings(statement)
@@ -2568,18 +2623,45 @@ def verify_binding(
         lines += published_lines
         failures += published_failures
     if published is not None and len(attestations) != 1:
-        failures.append("a published attestation is one build's: name exactly one --attestation with it")
+        failures.append(Failure(
+            "a published attestation is one build's: name exactly one --attestation with it", "attestation_identity",
+        ))
         published = None
     for service, path in attestations:
         try:
             failures += bind_attestation(service, path, statement, published, lines)
-        except (OSError, ValueError) as exc:
-            failures.append(f"{service}: cannot read {path}: {exc}")
+        except (OSError, ValueError, RecursionError) as exc:
+            failures.append(Failure(f"{service}: cannot read {path}: {exc}", "attestation_identity"))
     for line in lines:
         print(line)
     for failure in failures:
-        print(f"[FAIL] {failure}")
+        print(f"[FAIL] {failure.text}")
+    if failed is not None:
+        failed += failures
     return not failures
+
+
+#: What ``--verdict-json`` writes for a failure that carries no class: a
+#: name outside :data:`REASON_CLASSES`, so a harness comparing classes fails.
+UNCLASSIFIED = "unclassified"
+
+
+def verdict_document(passed: bool, failed: list[Failure], key_class: str) -> dict:
+    """The verdict of a binding as ``--verdict-json`` writes it: VERIFIED
+    exactly when no check failed, the sorted distinct reason classes of the
+    failures, and the class of the keys it was reached with. A failure that is
+    not a :class:`Failure` is written as ``unclassified``, never dropped."""
+    classes = sorted({failure.reason_class if isinstance(failure, Failure) else UNCLASSIFIED for failure in failed})
+    return {
+        "verdict": "VERIFIED" if passed and not failed else "FAILED",
+        "reason_classes": classes,
+        "key_class": key_class,
+    }
+
+
+def write_verdict_json(path: Path, passed: bool, failed: list[Failure], trusted: TrustedKeys) -> None:
+    path.write_text(json.dumps(verdict_document(passed, failed, trusted.key_class), sort_keys=True) + "\n",
+                    encoding="utf-8")
 
 
 def _attestation_argument(value: str) -> tuple[str, Path]:
@@ -2704,6 +2786,12 @@ Examples:
     )
 
     parser.add_argument(
+        "--verdict-json",
+        type=Path,
+        help="With --seal: also write the verdict, each failure's reason class and the keys' class to this JSON file"
+    )
+
+    parser.add_argument(
         "--published",
         type=Path,
         help="The published attestation of the same build (attestations/<job>.json)"
@@ -2711,17 +2799,22 @@ Examples:
 
     args = parser.parse_args()
 
-    if args.seal is not None or args.attestation or args.published is not None or args.evidence is not None:
+    if (args.seal is not None or args.attestation or args.published is not None or args.evidence is not None
+            or args.verdict_json is not None):
         if args.seal is None or not args.attestation or args.fingerprint is not None:
-            parser.error("--seal takes one or more --attestation SERVICE=FILE (and optionally --published and --evidence), without --fingerprint")
+            parser.error("--seal takes one or more --attestation SERVICE=FILE (and optionally --published, --evidence "
+                         "and --verdict-json), without --fingerprint")
         trusted = load_trusted_keys(args.keys)
         print("=" * 60)
         print("DevMatrix Seal and Attestation Verification")
         print("=" * 60)
         print(keys_line(trusted))
+        failed: list[Failure] = []
         passed = verify_binding(
-            args.seal, args.attestation, args.published, trusted.keys, trusted.key_class, args.evidence,
+            args.seal, args.attestation, args.published, trusted.keys, trusted.key_class, args.evidence, failed,
         )
+        if args.verdict_json is not None:
+            write_verdict_json(args.verdict_json, passed, failed, trusted)
         exit_with_verdict(passed, trusted, "At least one check above failed: see the [FAIL] lines.")
     if args.fingerprint is None:
         parser.error("name a --fingerprint, or a --seal with its --attestation files")
