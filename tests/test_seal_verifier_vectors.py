@@ -17,12 +17,14 @@ VECTORS_SCHEMA = "seal-verifier-vectors/2"
 #: sha256 over the set's files, as ``PIN.sha256`` states it: one line per
 #: file, ``<sha256>  <path>``, sorted by path, PIN.sha256 itself excluded.
 PINNED_SHA256 = "5df25674ce028ba40126c4626787019227f575f13653d81198bbb1ac89cc1ffc"
-VERDICTS = frozenset({"VERIFIED", "FAILED", "CONSISTENT_ORIGIN_NOT_CHECKED"})
+#: The bundled verdicts of a run with a keys file, and of one without.
+VERDICTS = frozenset({"VERIFIED", "FAILED"})
+VERDICTS_WITHOUT_KEYS = frozenset({"CONSISTENT_ORIGIN_NOT_CHECKED", "FAILED"})
 #: What this verifier gives a vector run without a keys file: it always
 #: checks origin, against the keys.json it ships, which publishes no fixture
 #: key; so the seal is refused on its key, never verified. The bundled
 #: verifier's verdict for such a run (origin not checked) is its own.
-WITHOUT_KEYS = {"verdict": "FAILED", "key_class": "production"}
+WITHOUT_KEYS = {"verdict": "FAILED", "reason_classes": ["key"], "key_class": "production"}
 
 
 def pin_lines(root: Path) -> list[str]:
@@ -64,13 +66,17 @@ class TheSharedVectors(unittest.TestCase):
     def _judge(self, copy: Path, vector: dict) -> None:
         """Run the public verifier over one vector of the temp copy ``copy``,
         its declared links made there, and compare its verdict."""
-        self.assertIn(vector["expect"], VERDICTS)
+        keys = vector["keys"]
+        if keys is None:
+            self.assertIn(vector["expect"], VERDICTS_WITHOUT_KEYS)
+            self.assertIsNone(vector["key_class"], "a vector run without keys states no key class")
+        else:
+            self.assertIn(vector["expect"], VERDICTS)
         for link, target in sorted(vector.get("links", {}).items()):
             self.assertFalse((copy / link).exists(), f"the set holds {link}, which the vector makes a link")
             self.assertTrue((copy / target).is_file(), f"link target {target} is not a file of the set")
             (copy / link).parent.mkdir(parents=True, exist_ok=True)
             (copy / link).symlink_to((copy / target).resolve())
-        keys = vector["keys"]
         if keys is not None:
             self.assertTrue((copy / keys).is_file(), f"keys file {keys} is not a file of the set")
         command = [sys.executable, str(ROOT / "verify_fingerprint.py"),
@@ -87,8 +93,7 @@ class TheSharedVectors(unittest.TestCase):
             self.assertTrue(out.is_file(), result.stdout + result.stderr)
             verdict = json.loads(out.read_text(encoding="utf-8"))
         if keys is None:
-            self.assertEqual({key: verdict[key] for key in WITHOUT_KEYS}, WITHOUT_KEYS, result.stdout)
-            self.assertIn("key", verdict["reason_classes"], result.stdout)
+            self.assertEqual(verdict, WITHOUT_KEYS, result.stdout)
             return
         self.assertEqual(
             verdict,
