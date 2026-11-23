@@ -441,6 +441,17 @@ class TheCommand(unittest.TestCase):
                     self.assertEqual(result.returncode, 1, result.stdout)
                     self.assertIn(f"[FAIL] {_SERVICE}: {reason}", result.stdout)
 
+    def test_a_delivered_attestation_1_says_what_to_do(self) -> None:
+        """MUT-RED: a /1 refused without saying to compile and seal again."""
+        build = OneBuild()
+        build.document["schema"] = "fingerprint-attestation/1"
+        build.statement = _statement(build.document)
+        build.published = None
+        result = self._run(build)
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("this build's attestation predates the format a seal can bind; compile again and seal again "
+                      "to verify offline", result.stdout)
+
     def test_a_verdict_that_names_no_runner(self) -> None:
         build = OneBuild()
         build.document["attested"]["platform_verdict"] = {"uts_disposition": "NOT_RUN"}

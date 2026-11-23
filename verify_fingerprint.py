@@ -1469,6 +1469,9 @@ def compare_fingerprints(fp1: dict, fp2: dict) -> list[tuple[str, bool, str]]:
 
 #: The fingerprint attestation a build's download carries.
 DELIVERED_ATTESTATION_SCHEMA = "fingerprint-attestation/2"
+#: The delivered attestation format before a seal could bind one: it states
+#: no platform verdict, so who ran the build's tests cannot be read from it.
+DELIVERED_ATTESTATION_SCHEMA_V1 = "fingerprint-attestation/1"
 #: The seal statements whose services state their fingerprint attestation.
 SEAL_STATEMENT_SCHEMAS = (
     "seal-statement/2", "seal-statement/3", "seal-statement/4", "seal-statement/5", "seal-statement/6",
@@ -1592,6 +1595,12 @@ def read_signed_seal(bundle: Path, keys: list[dict], accept: str = PRODUCTION) -
 def _delivered(path: Path) -> tuple[bytes, dict]:
     data = path.read_bytes()
     document, parsed = _json_of(data)
+    if parsed and isinstance(document, dict) and document.get("schema") == DELIVERED_ATTESTATION_SCHEMA_V1:
+        raise BindingRefused(
+            f"{path}: this build's attestation predates the format a seal can bind; compile again and seal again "
+            "to verify offline",
+            "attestation_identity",
+        )
     if not parsed or not isinstance(document, dict) or document.get("schema") != DELIVERED_ATTESTATION_SCHEMA:
         raise BindingRefused(f"{path} is not a {DELIVERED_ATTESTATION_SCHEMA} document", "attestation_identity")
     reproducible = document.get("reproducible")
