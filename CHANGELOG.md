@@ -24,7 +24,8 @@
   report and the proof rows against the digests and the grade the seal signed.
   The folder is read as untrusted (no link followed, only known names, each
   bounded). Without it, what was not checked is printed. A build sealed on a
-  QA run is not yet bound to its delivered attestation. `published-platform-seal/4`
+  QA run binds to its delivered attestation, which states its tests deferred
+  to that run; who ran the tests is checked against what the grade rests on. `published-platform-seal/4`
   carries each service's basis and its count of tests proven not applicable.
   `seal-statement/2` to `/6` and `published-platform-seal/1` to `/3` are read
   as before.

@@ -1576,6 +1576,10 @@ SEAL_STATEMENT_WITHOUT_MEASURER = "seal-statement/2"
 RAN_BY_DEVMATRIX = frozenset({"PASSED", "FAILED", "PARTIAL", "INCOMPLETE"})
 TESTS_NOT_RUN = "NOT_RUN"
 RUN_BY_CLIENT_CAUSE = "runtime_phase_run_by_client"
+#: Who ran a sealed build's tests, as its delivered attestation states it,
+#: for what a seal-statement/7 grade rests on: a build measured by a QA run
+#: was delivered with its tests deferred to that run (``DEFERRED_TO_QA_RUN_CAUSE``).
+DELIVERED_RUN_BY_OF_BASIS = {"compile": "devmatrix", "qa_run": "qa_run", "client_run": "client"}
 
 
 def _field(value: object, key: str) -> object:
@@ -1585,12 +1589,15 @@ def _field(value: object, key: str) -> object:
 def delivered_run_by(document: dict) -> str:
     """Who ran the build's tests, read from the delivered attestation's
     platform verdict: DevMatrix when it ran them, the client when they were
-    not run because the client runs them. Anything else is refused: tests run
-    by nobody are never said to be tested."""
+    not run because the client runs them, and ``qa_run`` when they were not
+    run because DevMatrix runs them later in a QA run. Anything else is
+    refused: tests run by nobody are never said to be tested."""
     verdict = _field(_field(document, "attested"), "platform_verdict")
     disposition = _field(verdict, "uts_disposition")
     if disposition == TESTS_NOT_RUN and _field(verdict, "uts_not_run_reason") == RUN_BY_CLIENT_CAUSE:
         return "client"
+    if disposition == TESTS_NOT_RUN and _field(verdict, "uts_not_run_reason") == DEFERRED_TO_QA_RUN_CAUSE:
+        return "qa_run"
     if isinstance(disposition, str) and disposition in RAN_BY_DEVMATRIX:
         return "devmatrix"
     raise BindingRefused("the delivered attestation's platform verdict does not state who ran the tests")
@@ -1611,6 +1618,11 @@ def project_published(document: dict, data: bytes) -> dict:
     modules = _field(reproducible, "modules")
     determinism = _field(attested, "modules")
     run_by = delivered_run_by(document)
+    if run_by not in SEAL_CLASS_OF_RUN_BY:
+        raise BindingRefused(
+            f"the delivered attestation says its tests are run by {run_by}, which no published attestation "
+            "version states; bind it to its seal without --published"
+        )
     return {
         "schema": ATTESTATION_SCHEMA_V3,
         "job_id": _field(document, "job_id"),
@@ -1716,16 +1728,20 @@ def _measurer_failures(
     measurer = sealed.get("verification")
     if measurer not in RUN_BY_OF_MEASURER:
         return [f"{service}: the seal does not state who measured the build"]
-    if statement.get("schema_id") == SEAL_STATEMENT_WITH_BASIS and sealed.get("basis") == "qa_run":
-        return [
-            f"{service}: the seal rests on a QA run, and what a build measured by a QA run states in its "
-            "delivered attestation is not published yet, so who ran its tests cannot be checked against "
-            "the seal; refused until this verifier knows it"
-        ]
     try:
         run_by = delivered_run_by(document)
     except BindingRefused as refused:
         return [f"{service}: {refused}"]
+    if statement.get("schema_id") == SEAL_STATEMENT_WITH_BASIS:
+        basis = sealed.get("basis")
+        expected = DELIVERED_RUN_BY_OF_BASIS.get(basis) if isinstance(basis, str) else None
+        if expected != run_by:
+            return [
+                f"{service}: the seal says its grade rests on {basis}, "
+                f"but its attestation says the tests were run by {run_by}"
+            ]
+        lines.append(f"[OK] {service}: tests run by {run_by}, as the seal states (rests on {basis})")
+        return []
     if RUN_BY_OF_MEASURER[measurer] != run_by:
         return [
             f"{service}: the seal says the build was measured by {measurer}, "

@@ -53,6 +53,13 @@ def _rows() -> list[dict]:
     ]
 
 
+def _deferred_to_its_qa_run(document: dict) -> None:
+    """The build was delivered with its tests deferred to a QA run."""
+    document["attested"]["platform_verdict"] = {
+        "uts_disposition": "NOT_RUN", "uts_not_run_reason": "runtime_phase_deferred_to_qa_run",
+    }
+
+
 def _proof_bytes(rows: list[dict]) -> bytes:
     return json.dumps(rows, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
 
@@ -229,23 +236,63 @@ class ASealOfStatement7(unittest.TestCase):
         self.assertIn(f"[OK] {_SERVICE}: proof rows proofs/{_BUILD}.json is the one the seal signed", result.stdout)
         self.assertNotIn("[NOT CHECKED]", result.stdout)
 
-    def test_a_qa_run_seal_reads_and_its_binding_is_refused_until_it_is_known(self) -> None:
-        """The QA run checks hold; who ran a QA-run build's tests is not yet
-        published for its delivered attestation, so binding is refused
-        (fail closed), with the rest still checked."""
+    def test_a_qa_run_seal_binds_to_its_deferred_build_with_its_evidence(self) -> None:
+        """A build measured by a QA run was delivered with its tests deferred
+        to that run; it binds to its seal like any other (contract §5 item 8)."""
         build = OneBuild()
+        _deferred_to_its_qa_run(build.document)
         build.statement = _on_the_qa_run(build.document)
+        build.published = None
         with tempfile.TemporaryDirectory() as tmp:
             folder = _evidence(Path(tmp) / "evidence", build.statement, _qa_files())
             result = build.run(Path(tmp), "--evidence", str(folder))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        for line in (
+            f"      {_SERVICE}: rests on QA run {_RUN} (attempt 1, qa-run-report/2",
+            f"[OK] {_SERVICE}: the delivered attestation is the sealed one",
+            f"[OK] {_SERVICE}: tests run by qa_run, as the seal states (rests on qa_run)",
+            f"[OK] {_SERVICE}: QA run report qa-runs/{_BUILD}/report.json is the one the seal signed",
+            "VERIFICATION PASSED",
+        ):
+            self.assertIn(line, result.stdout)
+
+    def test_a_basis_its_delivered_attestation_does_not_state(self) -> None:
+        """MUT-RED: the basis-runner binding removed."""
+        for deferred, statement_of, reason in (
+            (False, _on_the_qa_run, "the seal says its grade rests on qa_run, but its attestation says the tests "
+                                    "were run by devmatrix"),
+            (True, _on_the_compile, "the seal says its grade rests on compile, but its attestation says the tests "
+                                    "were run by qa_run"),
+        ):
+            with self.subTest(reason=reason):
+                build = OneBuild()
+                if deferred:
+                    _deferred_to_its_qa_run(build.document)
+                build.statement = statement_of(build.document)
+                build.published = None
+                result = self._run(build)
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                self.assertIn(f"[FAIL] {_SERVICE}: {reason}", result.stdout)
+
+    def test_a_deferred_build_before_statement_7_does_not_bind(self) -> None:
+        build = OneBuild()
+        _deferred_to_its_qa_run(build.document)
+        build.statement = _statement6(build.document)
+        build.published = None
+        result = self._run(build)
+        self.assertIn(f"[FAIL] {_SERVICE}: the seal says the build was measured by devmatrix, but its attestation "
+                      "says the tests were run by qa_run", result.stdout)
+
+    def test_a_deferred_build_has_no_published_attestation_to_bind(self) -> None:
+        """No published attestation version states a QA-run runner, so it is
+        refused by name, never projected as another runner."""
+        build = OneBuild()
+        _deferred_to_its_qa_run(build.document)
+        build.statement = _on_the_qa_run(build.document)
+        result = self._run(build)
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
-        self.assertIn(f"      {_SERVICE}: rests on QA run {_RUN} (attempt 1, qa-run-report/2", result.stdout)
-        self.assertIn(f"[OK] {_SERVICE}: QA run report qa-runs/{_BUILD}/report.json is the one the seal signed",
-                      result.stdout)
-        self.assertIn(f"[FAIL] {_SERVICE}: the seal rests on a QA run, and what a build measured by a QA run",
-                      result.stdout)
-        self.assertEqual([line for line in result.stdout.splitlines() if line.startswith("[FAIL]")],
-                         [line for line in result.stdout.splitlines() if line.startswith(f"[FAIL] {_SERVICE}: the seal rests")])
+        self.assertIn(f"[FAIL] {_SERVICE}: the delivered attestation says its tests are run by qa_run, which no "
+                      "published attestation version states; bind it to its seal without --published", result.stdout)
 
     def test_a_seal_that_mixes_measurers(self) -> None:
         """MUT-RED: the mixture check removed (§8a)."""
