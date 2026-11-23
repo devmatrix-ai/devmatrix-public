@@ -2353,10 +2353,11 @@ _CLIENT_RUN_FILE = re.compile(
 )
 _QA_RUN_REPORT_FILE = re.compile(rf"qa-runs/({_UUID_TEXT})/report\.json")
 _PROOFS_FILE = re.compile(rf"proofs/({_UUID_TEXT})\.json")
-#: Contract bounds: a QA run report (and the proof rows, a subset of it) is
-#: at most 4 MiB; every other file the bundle carried before is under 1 MiB
-#: together; so a bundle is at most 1 MiB plus 8 MiB per sealed service.
-EVIDENCE_REPORT_MAX_BYTES = 4 * 1024 * 1024
+#: Contract bounds: a QA run report or a proof rows file is at most 8 MiB
+#: (the proof rows name each row's module, so they can outgrow their report);
+#: every other file the bundle carried before is under 1 MiB together; so a
+#: bundle is at most 1 MiB plus 16 MiB per sealed service.
+EVIDENCE_REPORT_MAX_BYTES = 8 * 1024 * 1024
 EVIDENCE_OTHER_MAX_BYTES = 1024 * 1024
 EVIDENCE_MAX_FILES = 10_000
 

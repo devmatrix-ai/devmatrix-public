@@ -33,7 +33,7 @@ and the **tool to check it** without trusting DevMatrix:
 
 A platform seal bundle may carry its own `verify.py`: that is a quick check
 that the bundle is intact. Whether the seal comes from DevMatrix is checked
-with this verifier, against the keys in `keys.json`, with no flags needed.
+with this verifier, against the keys in `keys.json`, with no `--keys` needed.
 
 The compiler itself is proprietary and is not here.
 

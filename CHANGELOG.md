@@ -18,6 +18,8 @@
   client tested states a whole share from 1 to 100%, counts that hold, enough
   tests passed to meet that share, and every test that did not pass named once,
   in order; a seal below its share fails.
+- **A QA run report or proof rows file may be up to 8 MiB** (it was 4 MiB):
+  the proof rows name each row's module, so they can outgrow their report.
 - **Origin is checked against the keys this repository ships.** With no
   `--keys`, only the keys in `keys.json` are trusted, and a seal whose key it
   does not publish is not verified; `--keys` stays as an override. A seal

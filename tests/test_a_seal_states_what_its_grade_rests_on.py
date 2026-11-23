@@ -475,6 +475,21 @@ class TheEvidence(unittest.TestCase):
                 change(folder)
             return _texts(vf.evidence_findings(folder, statement, _statement_bytes(statement)))
 
+    def test_a_proof_rows_file_is_read_up_to_8_mib(self) -> None:
+        """MUT-RED: the bound at 4 MiB refuses a proof rows file larger than
+        a 4 MiB report; no bound reads a file over 8 MiB."""
+        name = f"proofs/{_BUILD}.json"
+        for size, refused in ((6 * 1024 * 1024, False), (8 * 1024 * 1024, False), (8 * 1024 * 1024 + 1, True)):
+            with self.subTest(size=size), tempfile.TemporaryDirectory() as tmp:
+                folder = Path(tmp) / "evidence"
+                (folder / "proofs").mkdir(parents=True)
+                (folder / name).write_bytes(b" " * size)
+                if refused:
+                    with self.assertRaisesRegex(vf.EvidenceRefused, "is over its bound of 8388608 bytes"):
+                        vf.read_evidence(folder, 1)
+                else:
+                    self.assertEqual(len(vf.read_evidence(folder, 1)[name]), size)
+
     def test_a_file_the_manifest_does_not_name_is_refused(self) -> None:
         """MUT-RED: an unlisted file of a name the bundle may hold passes, or
         fails as tampered rather than refused. The verifier's own files
