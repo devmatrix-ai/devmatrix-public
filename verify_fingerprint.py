@@ -1597,8 +1597,8 @@ def _delivered(path: Path) -> tuple[bytes, dict]:
     document, parsed = _json_of(data)
     if parsed and isinstance(document, dict) and document.get("schema") == DELIVERED_ATTESTATION_SCHEMA_V1:
         raise BindingRefused(
-            f"{path}: this build's attestation predates the format a seal can bind; compile again and seal again "
-            "to verify offline",
+            f"{path} is not a {DELIVERED_ATTESTATION_SCHEMA} document: this build's attestation predates the "
+            "format a seal can bind; compile again and seal again to verify offline",
             "attestation_identity",
         )
     if not parsed or not isinstance(document, dict) or document.get("schema") != DELIVERED_ATTESTATION_SCHEMA:

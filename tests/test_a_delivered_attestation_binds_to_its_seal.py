@@ -453,8 +453,8 @@ class TheCommand(unittest.TestCase):
         build.published = None
         result = self._run(build)
         self.assertEqual(result.returncode, 1, result.stdout)
-        self.assertIn("this build's attestation predates the format a seal can bind; compile again and seal again "
-                      "to verify offline", result.stdout)
+        self.assertIn(" is not a fingerprint-attestation/2 document: this build's attestation predates the format a "
+                      "seal can bind; compile again and seal again to verify offline", result.stdout)
 
     def test_a_verdict_that_names_no_runner(self) -> None:
         build = OneBuild()
