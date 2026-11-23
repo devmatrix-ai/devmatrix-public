@@ -92,6 +92,7 @@ def _report() -> dict:
         "applicable": 20,
         "passed": 19,
         "reds_total": 1,
+        "modules": [{"module_id": _SERVICE, "passed": 19, "applicable": 20}],
         "reds": [{"name": f"{_SERVICE}::uts::test_x", "module_id": _SERVICE, "tier": "uts",
                   "category": "other", "outcome": "failed"}],
         "advisory_reds": [],
@@ -163,7 +164,7 @@ def _on_the_qa_run(document: dict, report: dict | None = None) -> dict:
             "report_sha256": hashlib.sha256(_report_bytes(report)).hexdigest(),
             "finished_at": "2026-11-23T10:00:00.000000Z",
             "letter": "A", "score_percent": 95, "passed": 19, "applicable": 20,
-            "emitted_failed_tests": [f"{_SERVICE}::tests/test_e.py::test_e"],
+            "emitted_failed_tests": [f"{_SERVICE}::tests/test_e.py::test_e"], "modules": 1,
         },
     )
     _proofs(service, _rows())
@@ -424,6 +425,7 @@ class ASealOfStatement7(unittest.TestCase):
             ("passed", 18, "does not name every test its QA run failed"),
             ("report_schema_id", "qa-run-report/3", "names a QA run report of an unknown version 'qa-run-report/3'"),
             ("qa_run_id", "run-1", "names no QA run by its id"),
+            ("modules", 0, "states no count of the modules its QA run measured"),
             ("emitted_failed_tests", ["b", "a"], "its emitted suite's failed tests are not each named once, in order"),
         ):
             with self.subTest(field=field):
@@ -511,6 +513,8 @@ class TheEvidence(unittest.TestCase):
             (lambda r: r.update(attempt=2), f"{_SERVICE}: the QA run report states attempt 2, the seal 1"),
             (lambda r: r.update(compilation_id=_RUN), f"{_SERVICE}: the QA run report states build '{_RUN}', the seal '{_BUILD}'"),
             (lambda r: r.update(grade_letter="B"), f"{_SERVICE}: the QA run report states grade 'B', the seal 'A'"),
+            (lambda r: r["modules"].append({"module_id": "billing", "passed": 1, "applicable": 1}),
+             f"{_SERVICE}: the QA run report measured 2 modules, the seal 1"),
             (lambda r: r["reds"][0].update(name=f"{_SERVICE}::uts::test_y"),
              f"{_SERVICE}: the seal's failed tests are not the QA run report's reds"),
             (lambda r: r["emitted_suite"]["reds"][0].update(module_id="billing"),

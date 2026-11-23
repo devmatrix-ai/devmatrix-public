@@ -1998,7 +1998,7 @@ _UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 _MODULE_TEST = re.compile(r"[^:\s][^\s]*::[^\s].*")
 _QA_RUN_FIELDS = frozenset({
     "qa_run_id", "attempt", "report_schema_id", "report_sha256", "finished_at",
-    "letter", "score_percent", "passed", "applicable", "emitted_failed_tests",
+    "letter", "score_percent", "passed", "applicable", "emitted_failed_tests", "modules",
 })
 
 
@@ -2022,6 +2022,8 @@ def _qa_run_problem(sealed: dict) -> Failure | None:
         return Failure("names no QA run by its id", "qa_run_binding")
     if not (_whole(run["attempt"]) and run["attempt"] >= 1):
         return Failure("names no attempt of its QA run", "qa_run_binding")
+    if not (_whole(run["modules"]) and run["modules"] >= 1):
+        return Failure("states no count of the modules its QA run measured", "qa_run_binding")
     if run["report_schema_id"] not in QA_RUN_REPORT_SCHEMAS:
         return Failure(f"names a QA run report of an unknown version {run['report_schema_id']!r}", "qa_run_binding")
     if not (isinstance(run["report_sha256"], str) and _HEX64_ONLY.fullmatch(run["report_sha256"])):
@@ -2433,7 +2435,7 @@ def _proofs_failures(label: str, sealed: dict, data: bytes) -> list[Failure]:
 def _report_failures(label: str, sealed: dict, data: bytes) -> list[Failure]:
     """The failures of a service's QA run report against what the seal
     signed: its digest, its version, the run, attempt and build it names, a
-    completed run, and the grade, score and counts."""
+    completed run, the grade, score and counts, and the modules it measured."""
     run = sealed["qa_run"]
     if hashlib.sha256(data).hexdigest() != run["report_sha256"]:
         return [Failure(f"{label}: the QA run report is not the one the seal signed (report_sha256)", "evidence_tampered")]
@@ -2459,6 +2461,12 @@ def _report_failures(label: str, sealed: dict, data: bytes) -> list[Failure]:
     ]
     if failures:
         return failures
+    measured = report.get("modules")
+    if not isinstance(measured, list) or len(measured) != run["modules"]:
+        count = len(measured) if isinstance(measured, list) else None
+        failures.append(Failure(
+            f"{label}: the QA run report measured {count!r} modules, the seal {run['modules']!r}", "evidence_tampered",
+        ))
     finished = _field(report.get("provenance"), "finished_at")
     try:
         same_instant = _instant(finished, "report finished_at") == _instant(run["finished_at"], "seal finished_at")
