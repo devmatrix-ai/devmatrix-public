@@ -18,6 +18,10 @@
   client tested states a whole share from 1 to 100%, counts that hold, enough
   tests passed to meet that share, and every test that did not pass named once,
   in order; a seal below its share fails.
+- **Shared seal vectors.** `conformance/seal-verifier-vectors/` holds signed
+  seals with their downloads and evidence, each with the verdict, reason
+  classes and key class the bundled verifier gives it; the set's digest is
+  pinned and this verifier must give every vector the same verdict.
 - **Evidence and seal keys, as the bundled verifier reads them.** Proofs the
   seal states that the proof rows do not show fail as proofs; a manifest entry
   that is not a file named by its path, or a file the manifest does not name

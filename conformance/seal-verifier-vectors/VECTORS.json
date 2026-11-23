@@ -1,0 +1,358 @@
+{
+  "schema": "seal-verifier-vectors/1",
+  "vectors": [
+    {
+      "downloads": {
+        "app": "v7_compile_devmatrix/downloads/app.json"
+      },
+      "evidence": null,
+      "expect": "VERIFIED",
+      "id": "v7_compile_devmatrix",
+      "key_class": "fixture",
+      "reason_classes": [],
+      "seal": "v7_compile_devmatrix/seal"
+    },
+    {
+      "downloads": {
+        "app": "v7_qa_run_deferred/downloads/app.json"
+      },
+      "evidence": "v7_qa_run_deferred/evidence",
+      "expect": "VERIFIED",
+      "id": "v7_qa_run_deferred",
+      "key_class": "fixture",
+      "reason_classes": [],
+      "seal": "v7_qa_run_deferred/seal"
+    },
+    {
+      "downloads": {
+        "app": "v7_client_run_client/downloads/app.json"
+      },
+      "evidence": null,
+      "expect": "VERIFIED",
+      "id": "v7_client_run_client",
+      "key_class": "fixture",
+      "reason_classes": [],
+      "seal": "v7_client_run_client/seal"
+    },
+    {
+      "downloads": {
+        "app": "v7_client_run_deferred/downloads/app.json"
+      },
+      "evidence": null,
+      "expect": "VERIFIED",
+      "id": "v7_client_run_deferred",
+      "key_class": "fixture",
+      "reason_classes": [],
+      "seal": "v7_client_run_deferred/seal"
+    },
+    {
+      "downloads": {
+        "app": "v6_self_attested_client/downloads/app.json"
+      },
+      "evidence": null,
+      "expect": "VERIFIED",
+      "id": "v6_self_attested_client",
+      "key_class": "fixture",
+      "reason_classes": [],
+      "seal": "v6_self_attested_client/seal"
+    },
+    {
+      "downloads": {
+        "app": "v4_share_met/downloads/app.json"
+      },
+      "evidence": null,
+      "expect": "VERIFIED",
+      "id": "v4_share_met",
+      "key_class": "fixture",
+      "reason_classes": [],
+      "seal": "v4_share_met/seal"
+    },
+    {
+      "downloads": {
+        "app": "v4_share_exactly_met/downloads/app.json"
+      },
+      "evidence": null,
+      "expect": "VERIFIED",
+      "id": "v4_share_exactly_met",
+      "key_class": "fixture",
+      "reason_classes": [],
+      "seal": "v4_share_exactly_met/seal"
+    },
+    {
+      "downloads": {
+        "app": "v4_grade_states_a_field_of_no_v4/downloads/app.json"
+      },
+      "evidence": null,
+      "expect": "FAILED",
+      "id": "v4_grade_states_a_field_of_no_v4",
+      "key_class": "fixture",
+      "reason_classes": [
+        "statement_version"
+      ],
+      "seal": "v4_grade_states_a_field_of_no_v4/seal"
+    },
+    {
+      "downloads": {
+        "app": "v4_grade_names_no_run/downloads/app.json"
+      },
+      "evidence": null,
+      "expect": "FAILED",
+      "id": "v4_grade_names_no_run",
+      "key_class": "fixture",
+      "reason_classes": [
+        "statement_version"
+      ],
+      "seal": "v4_grade_names_no_run/seal"
+    },
+    {
+      "downloads": {
+        "app": "v4_self_attested_states_a_devmatrix_grade/downloads/app.json"
+      },
+      "evidence": null,
+      "expect": "FAILED",
+      "id": "v4_self_attested_states_a_devmatrix_grade",
+      "key_class": "fixture",
+      "reason_classes": [
+        "basis_measurer"
+      ],
+      "seal": "v4_self_attested_states_a_devmatrix_grade/seal"
+    },
+    {
+      "downloads": {
+        "app": "v4_share_not_met/downloads/app.json"
+      },
+      "evidence": null,
+      "expect": "FAILED",
+      "id": "v4_share_not_met",
+      "key_class": "fixture",
+      "reason_classes": [
+        "grade_floor"
+      ],
+      "seal": "v4_share_not_met/seal"
+    },
+    {
+      "downloads": {
+        "app": "v4_failed_list_inexact/downloads/app.json"
+      },
+      "evidence": null,
+      "expect": "FAILED",
+      "id": "v4_failed_list_inexact",
+      "key_class": "fixture",
+      "reason_classes": [
+        "statement_version"
+      ],
+      "seal": "v4_failed_list_inexact/seal"
+    },
+    {
+      "downloads": {
+        "app": "v7_compile_run_by_client/downloads/app.json"
+      },
+      "evidence": null,
+      "expect": "FAILED",
+      "id": "v7_compile_run_by_client",
+      "key_class": "fixture",
+      "reason_classes": [
+        "runner"
+      ],
+      "seal": "v7_compile_run_by_client/seal"
+    },
+    {
+      "downloads": {
+        "app": "v7_qa_run_run_by_devmatrix/downloads/app.json"
+      },
+      "evidence": "v7_qa_run_run_by_devmatrix/evidence",
+      "expect": "FAILED",
+      "id": "v7_qa_run_run_by_devmatrix",
+      "key_class": "fixture",
+      "reason_classes": [
+        "runner"
+      ],
+      "seal": "v7_qa_run_run_by_devmatrix/seal"
+    },
+    {
+      "downloads": {
+        "app": "v7_client_run_run_by_devmatrix/downloads/app.json"
+      },
+      "evidence": null,
+      "expect": "FAILED",
+      "id": "v7_client_run_run_by_devmatrix",
+      "key_class": "fixture",
+      "reason_classes": [
+        "runner"
+      ],
+      "seal": "v7_client_run_run_by_devmatrix/seal"
+    },
+    {
+      "downloads": {
+        "app": "v6_over_a_deferred_build/downloads/app.json"
+      },
+      "evidence": null,
+      "expect": "FAILED",
+      "id": "v6_over_a_deferred_build",
+      "key_class": "fixture",
+      "reason_classes": [
+        "runner"
+      ],
+      "seal": "v6_over_a_deferred_build/seal"
+    },
+    {
+      "downloads": {
+        "app": "v7_qa_run_report_tampered/downloads/app.json"
+      },
+      "evidence": "v7_qa_run_report_tampered/evidence",
+      "expect": "FAILED",
+      "id": "v7_qa_run_report_tampered",
+      "key_class": "fixture",
+      "reason_classes": [
+        "evidence_tampered"
+      ],
+      "seal": "v7_qa_run_report_tampered/seal"
+    },
+    {
+      "downloads": {
+        "app": "v7_qa_run_report_listed_absent/downloads/app.json"
+      },
+      "evidence": "v7_qa_run_report_listed_absent/evidence",
+      "expect": "FAILED",
+      "id": "v7_qa_run_report_listed_absent",
+      "key_class": "fixture",
+      "reason_classes": [
+        "evidence_absent"
+      ],
+      "seal": "v7_qa_run_report_listed_absent/seal"
+    },
+    {
+      "downloads": {
+        "app": "v7_qa_run_evidence_link/downloads/app.json"
+      },
+      "evidence": "v7_qa_run_evidence_link/evidence",
+      "expect": "FAILED",
+      "id": "v7_qa_run_evidence_link",
+      "key_class": "fixture",
+      "links": {
+        "v7_qa_run_evidence_link/evidence/qa-runs/00000000-0000-0000-0000-000000000013/report.json": "v7_qa_run_deferred/evidence/qa-runs/00000000-0000-0000-0000-000000000002/report.json"
+      },
+      "reason_classes": [
+        "evidence_refused"
+      ],
+      "seal": "v7_qa_run_evidence_link/seal"
+    },
+    {
+      "downloads": {
+        "app": "v7_attestation_states_another_reproducible_digest/downloads/app.json"
+      },
+      "evidence": null,
+      "expect": "FAILED",
+      "id": "v7_attestation_states_another_reproducible_digest",
+      "key_class": "fixture",
+      "reason_classes": [
+        "attestation_digest"
+      ],
+      "seal": "v7_attestation_states_another_reproducible_digest/seal"
+    },
+    {
+      "downloads": {
+        "app": "v7_seal_signs_another_reproducible_digest/downloads/app.json"
+      },
+      "evidence": null,
+      "expect": "FAILED",
+      "id": "v7_seal_signs_another_reproducible_digest",
+      "key_class": "fixture",
+      "reason_classes": [
+        "attestation_digest"
+      ],
+      "seal": "v7_seal_signs_another_reproducible_digest/seal"
+    },
+    {
+      "downloads": {
+        "app": "v7_qa_run_names_an_unwitnessed_proof/downloads/app.json"
+      },
+      "evidence": "v7_qa_run_names_an_unwitnessed_proof/evidence",
+      "expect": "FAILED",
+      "id": "v7_qa_run_names_an_unwitnessed_proof",
+      "key_class": "fixture",
+      "reason_classes": [
+        "proofs"
+      ],
+      "seal": "v7_qa_run_names_an_unwitnessed_proof/seal"
+    },
+    {
+      "downloads": {
+        "app": "v7_qa_run_states_another_collection/downloads/app.json"
+      },
+      "evidence": "v7_qa_run_states_another_collection/evidence",
+      "expect": "FAILED",
+      "id": "v7_qa_run_states_another_collection",
+      "key_class": "fixture",
+      "reason_classes": [
+        "evidence_tampered"
+      ],
+      "seal": "v7_qa_run_states_another_collection/seal"
+    },
+    {
+      "downloads": {
+        "app": "v7_qa_run_finished_at_another_time/downloads/app.json"
+      },
+      "evidence": "v7_qa_run_finished_at_another_time/evidence",
+      "expect": "FAILED",
+      "id": "v7_qa_run_finished_at_another_time",
+      "key_class": "fixture",
+      "reason_classes": [
+        "evidence_tampered"
+      ],
+      "seal": "v7_qa_run_finished_at_another_time/seal"
+    },
+    {
+      "downloads": {
+        "app": "v7_evidence_holds_an_unlisted_file/downloads/app.json"
+      },
+      "evidence": "v7_evidence_holds_an_unlisted_file/evidence",
+      "expect": "FAILED",
+      "id": "v7_evidence_holds_an_unlisted_file",
+      "key_class": "fixture",
+      "reason_classes": [
+        "evidence_refused"
+      ],
+      "seal": "v7_evidence_holds_an_unlisted_file/seal"
+    },
+    {
+      "downloads": {
+        "app": "v7_evidence_manifest_entry_not_a_path/downloads/app.json"
+      },
+      "evidence": "v7_evidence_manifest_entry_not_a_path/evidence",
+      "expect": "FAILED",
+      "id": "v7_evidence_manifest_entry_not_a_path",
+      "key_class": "fixture",
+      "reason_classes": [
+        "evidence_refused"
+      ],
+      "seal": "v7_evidence_manifest_entry_not_a_path/seal"
+    },
+    {
+      "downloads": {
+        "app": "v7_mixture/downloads/app.json"
+      },
+      "evidence": null,
+      "expect": "FAILED",
+      "id": "v7_mixture",
+      "key_class": "fixture",
+      "reason_classes": [
+        "mixture"
+      ],
+      "seal": "v7_mixture/seal"
+    },
+    {
+      "downloads": {
+        "app": "v8_unknown_version/downloads/app.json"
+      },
+      "evidence": null,
+      "expect": "FAILED",
+      "id": "v8_unknown_version",
+      "key_class": "fixture",
+      "reason_classes": [
+        "unknown_version"
+      ],
+      "seal": "v8_unknown_version/seal"
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "attested": {
+    "platform_verdict": {
+      "uts_disposition": "NOT_RUN",
+      "uts_not_run_reason": "runtime_phase_run_by_client"
+    }
+  },
+  "reproducible": {
+    "identity": {
+      "platform_spec_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "service_spec_hashes": {
+        "app": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    }
+  },
+  "reproducible_sha256": "sha256:71fab59706f6803f99ec69ceb90210759f9a292532c0afa1e43dbca0716215bd",
+  "schema": "fingerprint-attestation/2"
+}
