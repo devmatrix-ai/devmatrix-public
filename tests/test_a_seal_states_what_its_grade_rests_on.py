@@ -42,7 +42,8 @@ from test_a_delivered_attestation_binds_to_its_seal import (  # noqa: E402
 
 _BUILD = "5d0c1f7e-3a2b-4c6d-8e9f-0a1b2c3d4e5f"
 _RUN = "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d"
-_COLLECTED = _hex("7")
+_COLLECTED_IDS = ["tests/test_a.py::test_a", "tests/test_b.py::test_b"]
+_COLLECTED = vf.collected_test_ids_sha256(_COLLECTED_IDS)
 
 
 def _rows() -> list[dict]:
@@ -103,7 +104,8 @@ def _report() -> dict:
             "not_tested": [{"name": "tests/test_n.py::test_n", "module_id": _SERVICE, "category": "other",
                             "outcome": "not_tested", "reason": "skipped"}],
             "modules": [{
-                "module_id": _SERVICE, "collected_test_ids_sha256": _COLLECTED,
+                "module_id": _SERVICE, "collected_test_ids": list(_COLLECTED_IDS),
+                "collected_test_ids_sha256": _COLLECTED,
                 "proven_not_applicable": [{k: v for k, v in row.items() if k != "module_id"} for row in _rows()],
             }],
         },
@@ -524,8 +526,17 @@ class TheEvidence(unittest.TestCase):
              f"['{_SERVICE}::tests/test_m.py::test_m']"),
             (lambda r: r["provenance"].update(finished_at="2026-11-23T10:00:01Z"),
              f"{_SERVICE}: the QA run report finished at '2026-11-23T10:00:01Z', the seal says '2026-11-23T10:00:00.000000Z'"),
-            (lambda r: r["emitted_suite"]["modules"][0].update(collected_test_ids_sha256=_hex("6")),
+            (lambda r: r["emitted_suite"]["modules"][0].update(
+                collected_test_ids=["tests/test_c.py::test_c"],
+                collected_test_ids_sha256=vf.collected_test_ids_sha256(["tests/test_c.py::test_c"])),
              f"{_SERVICE}: the seal's collected test digests are not the QA run report's"),
+            (lambda r: r["emitted_suite"]["modules"][0].update(collected_test_ids_sha256=_hex("6")),
+             f"{_SERVICE}: the QA run report's collected test digest for {_SERVICE} is not the digest of the tests "
+             "it collected"),
+            (lambda r: r["emitted_suite"]["modules"][0].update(collected_test_ids=list(reversed(_COLLECTED_IDS))),
+             f"{_SERVICE}: the QA run report's collected tests for {_SERVICE} are not strictly ordered test ids"),
+            (lambda r: r["emitted_suite"]["modules"][0].pop("collected_test_ids"),
+             f"{_SERVICE}: the QA run report does not state its modules' collected tests and proofs"),
             (lambda r: r["emitted_suite"]["modules"][0]["proven_not_applicable"][1].update(witnesses=["x"]),
              f"{_SERVICE}: the proof rows the seal digests are not the QA run report's"),
             (lambda r: r["emitted_suite"]["modules"][0].update(proven_not_applicable=None),

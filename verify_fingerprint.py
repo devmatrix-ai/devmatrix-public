@@ -2619,6 +2619,18 @@ def _report_failures(label: str, sealed: dict, data: bytes) -> list[Failure]:
     return failures
 
 
+#: The fields of one module of a qa-run-report/2's emitted suite, exactly.
+REPORT_MODULE_FIELDS = frozenset({"module_id", "collected_test_ids", "collected_test_ids_sha256",
+                                  "proven_not_applicable"})
+
+
+def collected_test_ids_sha256(test_ids: list[str]) -> str:
+    """The hex sha256 of the tests a module collected: the JSON array of the
+    ids sorted by code point, no whitespace, UTF-8."""
+    text = json.dumps(sorted(test_ids), ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
 def _report_proof_failures(label: str, sealed: dict, modules: object) -> list[Failure]:
     """The failures of a qa-run-report/2's modules against the seal: the
     seal's collected digests are the report's, every module states its proof
@@ -2626,10 +2638,19 @@ def _report_proof_failures(label: str, sealed: dict, modules: object) -> list[Fa
     its module, rebuilt byte for byte."""
     if not (isinstance(modules, list) and all(
         isinstance(module, dict) and isinstance(module.get("module_id"), str)
-        and set(module) == {"module_id", "collected_test_ids_sha256", "proven_not_applicable"}
+        and set(module) == REPORT_MODULE_FIELDS
         for module in modules
     )):
         return [Failure(f"{label}: the QA run report does not state its modules' collected tests and proofs", "evidence_tampered")]
+    for module in modules:
+        ids = module["collected_test_ids"]
+        if ids is not None and not (isinstance(ids, list) and all(isinstance(i, str) for i in ids)
+                                    and ids == sorted(set(ids))):
+            return [Failure(f"{label}: the QA run report's collected tests for {module['module_id']} are not "
+                            "strictly ordered test ids", "evidence_tampered")]
+        if module["collected_test_ids_sha256"] != (None if ids is None else collected_test_ids_sha256(ids)):
+            return [Failure(f"{label}: the QA run report's collected test digest for {module['module_id']} is not "
+                            "the digest of the tests it collected", "evidence_tampered")]
     collected = {module["module_id"]: module["collected_test_ids_sha256"] for module in modules}
     if len(collected) != len(modules) or collected != sealed["collected_node_ids_sha256"]:
         return [Failure(f"{label}: the seal's collected test digests are not the QA run report's", "evidence_tampered")]
