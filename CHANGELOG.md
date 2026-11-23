@@ -19,7 +19,7 @@
   [...], "key_class": ...}`: every failed check names one class (signature,
   key, unknown_version, statement_version, basis_measurer, mixture, runner,
   qa_run_binding, proofs, grade_floor, not_judged, evidence_tampered,
-  evidence_refused, attestation_digest, attestation_identity,
+  evidence_refused, evidence_absent, attestation_digest, attestation_identity,
   published_deferred), so two verifiers can be compared over the same signed
   seals by verdict and class, never by wording. It is additive: the printed
   verdict and the exit status do not change. The file says FAILED from the

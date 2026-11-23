@@ -1483,7 +1483,7 @@ SEAL_FILES = ("seal-statement.json", "seal-statement.sig.b64", "seal-public-key.
 REASON_CLASSES = frozenset({
     "signature", "key", "unknown_version", "statement_version", "basis_measurer", "mixture", "runner",
     "qa_run_binding", "proofs", "grade_floor", "not_judged", "evidence_tampered", "evidence_refused",
-    "attestation_digest", "attestation_identity", "published_deferred",
+    "attestation_digest", "attestation_identity", "published_deferred", "evidence_absent",
 })
 
 
@@ -2570,10 +2570,14 @@ def evidence_findings(
                             "evidence_tampered",
                         ))
                     else:
-                        lines.append(
-                            f"[NOT CHECKED] {label}: {what} {name} not checked: the bundle lists it absent "
-                            f"({_shown(entry['state'])}: {_shown(entry['reason'])})"
-                        )
+                        # The manifest is not signed, and what the seal rests on is kept while the seal
+                        # exists: a file whose digest the statement signs listed absent is never a reason
+                        # to leave it unchecked.
+                        failures.append(Failure(
+                            f"{label}: the bundle lists its {what} {name} absent "
+                            f"({_shown(entry['state'])}: {_shown(entry['reason'])}), and the seal rests on it",
+                            "evidence_absent",
+                        ))
                     continue
                 found = check(label, sealed, held[name])
                 failures += found

@@ -568,16 +568,15 @@ class TheEvidence(unittest.TestCase):
         self.assertIn(f"{_SERVICE}: the bundle neither holds its QA run report qa-runs/{_BUILD}/report.json "
                       "nor lists it absent", failures)
 
-    def test_a_file_the_seal_rests_on_listed_absent_is_said_not_checked(self) -> None:
-        """MUT-RED: an absent file read as checked (no line) or as failed."""
+    def test_a_file_the_seal_rests_on_listed_absent_fails(self) -> None:
+        """MUT-RED: an absent file the statement signs the digest of left unchecked."""
         statement = _on_the_qa_run(OneBuild().document)
         files = _qa_files()
         del files[f"qa-runs/{_BUILD}/report.json"]
         absent = [{"path": f"qa-runs/{_BUILD}/report.json", "state": "not_found", "reason": "purged"}]
-        lines, failures = self._findings(statement, files, absent)
-        self.assertEqual(failures, [])
-        self.assertIn(f"[NOT CHECKED] {_SERVICE}: QA run report qa-runs/{_BUILD}/report.json not checked: the "
-                      "bundle lists it absent ('not_found': 'purged')", lines)
+        _, failures = self._findings(statement, files, absent)
+        self.assertEqual(failures, [f"{_SERVICE}: the bundle lists its QA run report qa-runs/{_BUILD}/report.json "
+                                    "absent ('not_found': 'purged'), and the seal rests on it"])
 
     def test_a_report_the_seal_does_not_rest_on(self) -> None:
         statement = _on_the_compile(OneBuild().document)
@@ -612,10 +611,9 @@ class TheEvidence(unittest.TestCase):
         files = _qa_files()
         del files[f"qa-runs/{_BUILD}/report.json"]
         absent = [{"path": f"qa-runs/{_BUILD}/report.json", "state": "gone", "reason": "x\n[OK] fine"}]
-        lines, failures = self._findings(statement, files, absent)
-        self.assertEqual(failures, [])
-        self.assertIn(f"[NOT CHECKED] {_SERVICE}: QA run report qa-runs/{_BUILD}/report.json not checked: the "
-                      "bundle lists it absent ('gone': 'x\\n[OK] fine')", lines)
+        _, failures = self._findings(statement, files, absent)
+        self.assertEqual(failures, [f"{_SERVICE}: the bundle lists its QA run report qa-runs/{_BUILD}/report.json "
+                                    "absent ('gone': 'x\\n[OK] fine'), and the seal rests on it"])
 
     def test_a_manifest_of_another_seal(self) -> None:
         statement = _on_the_qa_run(OneBuild().document)
@@ -867,7 +865,15 @@ class TheVerdictJson(unittest.TestCase):
             build.published = None
             return build, None
 
+        def evidence_absent() -> tuple[OneBuild, object]:
+            build = self._deferred_on_its_qa_run()
+            files = _qa_files()
+            del files[f"proofs/{_BUILD}.json"]
+            absent = [{"path": f"proofs/{_BUILD}.json", "state": "not_found", "reason": "purged"}]
+            return build, lambda tmp: _evidence(tmp / "evidence", build.statement, files, absent)
+
         for expected, make in (
+            ("evidence_absent", evidence_absent),
             ("attestation_identity", attestation_identity),
             ("runner", runner), ("mixture", mixture), ("unknown_version", unknown_version),
             ("signature", signature), ("attestation_digest", attestation_digest),
