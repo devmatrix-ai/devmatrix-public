@@ -1852,12 +1852,69 @@ def _floor_problem(sealed: dict) -> Failure | None:
     return None
 
 
+#: The seal statement whose client grade states the share of tests it was
+#: sealed at (``required_percent``) and names every failed test.
+SEAL_STATEMENT_WITH_SHARE = "seal-statement/4"
+
+
+def _share_problem(sealed: dict) -> Failure | None:
+    """Why a self-attested service of a seal-statement/4 does not state the
+    share it was sealed at and every failed test, or ``None``: the share is a
+    whole percent from 1 to 100 and met by the counts, and the failed tests
+    are the ones that did not pass, each named once, in order."""
+    grade = sealed.get("self_attested_grade")
+    if not isinstance(grade, dict) or not {"required_percent", "passed", "applicable", "failed_tests"} <= set(grade):
+        return Failure("is self-attested and its client grade does not state its share and failed tests",
+                       "statement_version")
+    required, passed, applicable = grade["required_percent"], grade["passed"], grade["applicable"]
+    if not (_whole(required) and 1 <= required <= 100):
+        return Failure("is self-attested and its required share is not a whole percent from 1 to 100",
+                       "statement_version")
+    if not (_whole(passed) and _whole(applicable) and passed <= applicable and applicable > 0):
+        return Failure("is self-attested and its test counts do not hold", "statement_version")
+    if passed * 100 < required * applicable:
+        return Failure(f"is self-attested and {passed}/{applicable} tests passed, below the {required}% it states",
+                       "grade_floor")
+    failed = grade["failed_tests"]
+    if not (isinstance(failed, list) and all(isinstance(name, str) and name for name in failed)):
+        return Failure("is self-attested and its failed tests are not names", "statement_version")
+    if failed != sorted(set(failed)) or len(failed) != applicable - passed:
+        return Failure("is self-attested and its failed tests are not every test that did not pass, once each",
+                       "statement_version")
+    return None
+
+
+def _share_findings(statement: dict) -> tuple[list[str], list[Failure]]:
+    """The lines and failures of the share every self-attested service of a
+    seal-statement/4 states (:func:`_share_problem`)."""
+    services = statement.get("services")
+    lines: list[str] = []
+    failures: list[Failure] = []
+    for index, sealed in enumerate(services if isinstance(services, list) else []):
+        if not isinstance(sealed, dict) or sealed.get("verification") != "self_attested":
+            continue
+        name = sealed.get("name")
+        label = name if isinstance(name, str) and name else f"services[{index}]"
+        problem = _share_problem(sealed)
+        if problem is not None:
+            failures.append(problem.under(f"{label}: "))
+            continue
+        grade = sealed["self_attested_grade"]
+        lines.append(
+            f"[OK] {label}: self-attested {grade['passed']}/{grade['applicable']} tests passed, at or above the "
+            f"{grade['required_percent']}% it was sealed at, {len(grade['failed_tests'])} failed test(s) named"
+        )
+    return lines, failures
+
+
 def seal_floor_findings(statement: dict) -> tuple[list[str], list[Failure]]:
     """The lines and the failures of the grade floor of every service of a
     seal-statement/5: each service is graded at the floor or above and names
     every test that failed; both are printed. Earlier statements state no
     floor, and nothing is read into them."""
     version = statement.get("schema_id")
+    if version == SEAL_STATEMENT_WITH_SHARE:
+        return _share_findings(statement)
     if version not in SEAL_STATEMENTS_WITH_FLOOR:
         return [], []
     services = statement.get("services")

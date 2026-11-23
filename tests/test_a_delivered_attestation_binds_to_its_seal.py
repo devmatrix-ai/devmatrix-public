@@ -146,6 +146,17 @@ def _statement(document: dict) -> dict:
     }
 
 
+def _share_grade(passed: int = 9, applicable: int = 10, required: int = 80,
+                 failed: tuple[str, ...] = ("test_z",)) -> dict:
+    """A seal-statement/4 client grade: the share it was sealed at and every
+    failed test."""
+    return {
+        "letter": "A", "score_percent": 90, "passed": passed, "applicable": applicable,
+        "listed_not_emitted": 0, "listed_declared_skips": 0, "run_ids": {_SERVICE: "run-1"},
+        "required_percent": required, "failed_tests": list(failed),
+    }
+
+
 def _published(document: dict, data: bytes | None = None) -> dict:
     return {
         "schema": vf.ATTESTATION_SCHEMA_V3,
@@ -395,12 +406,40 @@ class TheCommand(unittest.TestCase):
         build = OneBuild()
         _run_by_client(build.document)
         build.statement = _statement(build.document)
-        build.statement["services"][0]["verification"] = "self_attested"
+        build.statement["services"][0].update(verification="self_attested", self_attested_grade=_share_grade())
         build.published = dict(_published(build.document), run_by="client", seal_class="self_attested")
         result = self._run(build)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("tests run by client, as the seal states (measured by self_attested)", result.stdout)
         self.assertIn("tests run by client, seal self_attested)", result.stdout)
+
+    def test_a_self_attested_statement_4_states_its_share(self) -> None:
+        """MUT-RED: each /4 share rule removed in turn."""
+        for grade, reason in (
+            (_share_grade(), None),
+            (_share_grade(passed=7, failed=("a", "b", "c")),
+             "is self-attested and 7/10 tests passed, below the 80% it states"),
+            (_share_grade(failed=()), "is self-attested and its failed tests are not every test that did not "
+                                      "pass, once each"),
+            (_share_grade(required=0), "is self-attested and its required share is not a whole percent from 1 to 100"),
+            (_share_grade(passed=11), "is self-attested and its test counts do not hold"),
+            (_share_grade(failed=("b", "a")), "is self-attested and its failed tests are not every test that did "
+                                              "not pass, once each"),
+        ):
+            with self.subTest(reason=reason):
+                build = OneBuild()
+                _run_by_client(build.document)
+                build.statement = _statement(build.document)
+                build.statement["services"][0].update(verification="self_attested", self_attested_grade=grade)
+                build.published = None
+                result = self._run(build)
+                if reason is None:
+                    self.assertEqual(result.returncode, 0, result.stdout)
+                    self.assertIn(f"[OK] {_SERVICE}: self-attested 9/10 tests passed, at or above the 80% it was "
+                                  "sealed at, 1 failed test(s) named", result.stdout)
+                else:
+                    self.assertEqual(result.returncode, 1, result.stdout)
+                    self.assertIn(f"[FAIL] {_SERVICE}: {reason}", result.stdout)
 
     def test_a_verdict_that_names_no_runner(self) -> None:
         build = OneBuild()

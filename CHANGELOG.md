@@ -14,6 +14,10 @@
 
 ## Verifier
 
+- **A self-attested seal-statement/4 states its share.** Each service its
+  client tested states a whole share from 1 to 100%, counts that hold, enough
+  tests passed to meet that share, and every test that did not pass named once,
+  in order; a seal below its share fails.
 - **The verdict as a file, by reason class.** `--verdict-json <file>` (with
   `--seal`) also writes `{"verdict": "VERIFIED" | "FAILED", "reason_classes":
   [...], "key_class": ...}`: every failed check names one class (signature,
