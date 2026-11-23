@@ -1512,7 +1512,9 @@ def read_signed_seal(bundle: Path, keys: list[dict], accept: str = PRODUCTION) -
     if missing:
         raise BindingRefused(f"the seal bundle {bundle} lacks {missing}")
     statement_bytes = (bundle / "seal-statement.json").read_bytes()
-    statement = json.loads(statement_bytes)
+    statement, parsed = _json_of(statement_bytes)
+    if not parsed:
+        raise BindingRefused("the seal statement is not JSON")
     if not isinstance(statement, dict) or statement.get("schema_id") not in SEAL_STATEMENT_SCHEMAS:
         raise BindingRefused("the seal statement is not one that states its builds' attestations")
     try:
@@ -2255,7 +2257,7 @@ def read_evidence(root: Path, services: int) -> dict[str, bytes]:
 
 
 def _json_of(data: bytes) -> tuple[object, bool]:
-    """The JSON document ``data`` holds and whether it parsed: any parse
+    """The JSON document ``data`` holds and whether it parsed. Every parse
     failure, nesting too deep included, is a document that is not JSON."""
     try:
         return json.loads(data), True

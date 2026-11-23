@@ -362,6 +362,18 @@ class ASealOfStatement7(unittest.TestCase):
                 self.assertNotIn("[NOT CHECKED]", result.stdout)
 
 
+class AHostileSealStatement(unittest.TestCase):
+    def test_a_statement_nested_too_deep_is_refused_not_a_traceback(self) -> None:
+        """MUT-RED: the statement parsed without catching nesting too deep."""
+        build = OneBuild()
+        with tempfile.TemporaryDirectory() as tmp:
+            build.run(Path(tmp))
+            (Path(tmp) / "seal" / "seal-statement.json").write_bytes(b"[" * 100_000)
+            with self.assertRaises(vf.BindingRefused) as raised:
+                vf.read_seal(Path(tmp) / "seal", build.keys)
+        self.assertEqual(str(raised.exception), "the seal statement is not JSON")
+
+
 class TheEvidence(unittest.TestCase):
     """The evidence bundle checked against a verified seal-statement/7."""
 
@@ -484,6 +496,9 @@ class TheEvidence(unittest.TestCase):
             (json.dumps({"schema": vf.EVIDENCE_SCHEMA, "seal_hash": statement["seal_hash"], "files": [],
                          "absent": [{"path": "a", "state": {"x": 1}, "reason": None}]}).encode(),
              "evidence: the manifest's absent files are not each a path, a state and a reason"),
+            (json.dumps({"schema": vf.EVIDENCE_SCHEMA, "seal_hash": statement["seal_hash"], "files": [],
+                         "absent": [{"path": "a", "state": "gone", "reason": ["x"]}]}).encode(),
+             "evidence: the manifest's absent files are not each a path, a state and a reason"),
         ):
             with self.subTest(reason=reason):
                 def hostile(folder: Path, content: bytes = content) -> None:
@@ -549,14 +564,19 @@ class AnUntrustedEvidenceFolder(unittest.TestCase):
 
     def test_a_name_an_evidence_bundle_never_holds(self) -> None:
         """MUT-RED: the name check removed."""
-        for name in ("notes.txt", "qa-runs/not-a-uuid/report.json", "proofs/../x.json", f"proofs/{_BUILD}.json.bak",
-                     "client-runs/x/client-verification.json"):
+        for name, reason in (
+            ("notes.txt", "'notes.txt' is not a file an evidence bundle holds"),
+            ("qa-runs/not-a-uuid/report.json", "'qa-runs/not-a-uuid' is not a folder an evidence bundle holds"),
+            ("proofs/../x.json", "'x.json' is not a file an evidence bundle holds"),
+            (f"proofs/{_BUILD}.json.bak", f"'proofs/{_BUILD}.json.bak' is not a file an evidence bundle holds"),
+            ("client-runs/x/client-verification.json", "'client-runs/x' is not a folder an evidence bundle holds"),
+        ):
             with self.subTest(name=name):
                 def add(tmp: Path, folder: Path, name: str = name) -> None:
                     path = folder / name
                     path.parent.mkdir(parents=True, exist_ok=True)
                     path.write_text("{}")
-                self._refused(add, "an evidence bundle holds")
+                self._refused(add, reason)
 
     def test_a_file_over_its_bound(self) -> None:
         """MUT-RED: the per-file bound removed."""
@@ -569,18 +589,27 @@ class AnUntrustedEvidenceFolder(unittest.TestCase):
         self._refused(lambda tmp, folder: (folder / "extra").mkdir(), "'extra' is not a folder an evidence bundle holds")
 
     def test_a_folder_that_cannot_be_read(self) -> None:
-        """MUT-RED: unreadable folders skipped in silence."""
-        if os.geteuid() == 0:
-            self.skipTest("root reads every folder")
+        """MUT-RED: unreadable folders skipped in silence. As root, which
+        reads every folder, the walk's error is injected instead."""
+        locked: list[Path] = []
 
         def lock(tmp: Path, folder: Path) -> None:
             (folder / "client-runs").mkdir()
             os.chmod(folder / "client-runs", 0)
+            locked.append(folder / "client-runs")
+        walk = os.walk
+        if os.geteuid() == 0:
+            def failing_walk(top, onerror=None, followlinks=False):
+                onerror(PermissionError(13, "Permission denied", str(Path(top) / "client-runs")))
+                return iter(())
+            os.walk = failing_walk
         try:
             self._refused(lock, "a folder of the evidence bundle cannot be read")
         finally:
-            for path in Path(tempfile.gettempdir()).glob("*/evidence/client-runs"):
-                os.chmod(path, 0o700)
+            os.walk = walk
+            for path in locked:
+                if path.exists():
+                    os.chmod(path, 0o700)
 
     def test_a_fifo_is_not_read(self) -> None:
         """MUT-RED: the regular-file check removed (reading would block)."""
