@@ -18,6 +18,10 @@
   client tested states a whole share from 1 to 100%, counts that hold, enough
   tests passed to meet that share, and every test that did not pass named once,
   in order; a seal below its share fails.
+- **`refresh_keys.py` names itself.** It asks for the published keys as
+  `devmatrix-refresh-keys`, not the default Python client name the server
+  refuses; a 401 or 403 now says the server refused this client and to save
+  the document with a browser and run with `--from`.
 - **Proof rows that are not the rows the seal states fail as proofs.** Once
   the proof rows file matches its digest, a file that is not JSON, not in the
   seal's serialization, or not sorted distinct rows fails with the proofs

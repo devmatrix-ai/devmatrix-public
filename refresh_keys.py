@@ -115,11 +115,19 @@ def opener() -> urllib.request.OpenerDirector:
     )
 
 
+#: The name this tool gives itself on every request: generic, the same for
+#: everyone, naming no person and no version. The edge refuses the default
+#: Python client name.
+CLIENT_NAME = "devmatrix-refresh-keys"
+#: The statuses with which a server refuses a client rather than the document.
+REFUSED_CLIENT_STATUSES = frozenset({401, 403})
+
+
 def fetch(url: str, via: Opener | None = None) -> bytes:
     """The bytes published at the https ``url``, or :class:`RefreshRefused`."""
     if urlsplit(url).scheme != "https":
         raise RefreshRefused(f"{url} is not an https URL")
-    request = urllib.request.Request(url, headers={"Accept": "application/json"})
+    request = urllib.request.Request(url, headers={"Accept": "application/json", "User-Agent": CLIENT_NAME})
     deadline = time.monotonic() + FETCH_TIMEOUT_SECONDS
     try:
         with (via or opener()).open(request, timeout=FETCH_TIMEOUT_SECONDS) as response:
@@ -134,6 +142,11 @@ def fetch(url: str, via: Opener | None = None) -> bytes:
                     break
                 data += chunk
     except urllib.error.HTTPError as exc:
+        if exc.code in REFUSED_CLIENT_STATUSES:
+            raise RefreshRefused(
+                f"{url} answered {exc.code}: the server refused this client ({CLIENT_NAME}); "
+                "save the document with a browser and run with --from"
+            ) from exc
         raise RefreshRefused(f"{url} answered {exc.code}") from exc
     except urllib.error.URLError as exc:
         raise RefreshRefused(f"could not read {url}: {exc.reason}") from exc

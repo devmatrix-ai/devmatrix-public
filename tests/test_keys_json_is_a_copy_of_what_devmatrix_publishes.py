@@ -19,6 +19,7 @@ import ssl
 import sys
 import tempfile
 import unittest
+import urllib.error
 import urllib.request
 from contextlib import redirect_stderr, redirect_stdout
 from collections.abc import Callable
@@ -91,10 +92,22 @@ class _Served:
     def __init__(self, status: int, body: bytes, on_read: Callable[[], None] = lambda: None) -> None:
         self.answer = _Answer(status, body, on_read)
         self.timeouts: list[float] = []
+        self.requests: list[urllib.request.Request] = []
 
     def open(self, request: urllib.request.Request, timeout: float) -> _Answer:
         self.timeouts.append(timeout)
+        self.requests.append(request)
         return self.answer
+
+
+class _Refusing:
+    """An opener whose server answers every request with an HTTP error."""
+
+    def __init__(self, code: int) -> None:
+        self.code = code
+
+    def open(self, request: urllib.request.Request, timeout: float) -> _Answer:
+        raise urllib.error.HTTPError(request.full_url, self.code, "refused", Message(), None)
 
 
 class _Repo:
@@ -133,6 +146,24 @@ class TheRefresh(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("differs from what", err)
         self.assertEqual(repo.path.read_bytes(), before)
+
+    def test_the_fetch_names_this_tool_as_its_client(self) -> None:
+        """MUT-RED: the request goes out with the default Python client name."""
+        served = _Served(200, _bytes(_document(_RETIRED, _EVIDENCE, _SEAL)))
+        rk.fetch(_URL, served)
+        (request,) = served.requests
+        self.assertEqual(request.get_header("User-agent"), "devmatrix-refresh-keys")
+        self.assertEqual(request.get_header("Accept"), "application/json")
+
+    def test_a_server_that_refuses_the_client_says_so(self) -> None:
+        """MUT-RED: a 403 is reported as a bare status."""
+        for code in (401, 403):
+            with self.subTest(code=code), self.assertRaisesRegex(
+                rk.RefreshRefused, f"answered {code}: the server refused this client \\(devmatrix-refresh-keys\\)"
+            ):
+                rk.fetch(_URL, _Refusing(code))
+        with self.assertRaisesRegex(rk.RefreshRefused, r"answered 500$"):
+            rk.fetch(_URL, _Refusing(500))
 
     def test_the_fetch_is_bounded_in_time(self) -> None:
         served = _Served(200, _bytes(_document(_RETIRED, _EVIDENCE, _SEAL)))
