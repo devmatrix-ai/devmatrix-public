@@ -50,6 +50,29 @@ class AValidFingerprint(unittest.TestCase):
         self.assertEqual(vf.check_published_fingerprint(minimal), ["[OK] fingerprint: published-fingerprint/2"])
 
 
+class ABuildAwaitingItsQaRun(unittest.TestCase):
+    """A build delivered awaiting its QA run states its status and why it
+    states no tests; it is not sealable until the QA run grades it."""
+
+    def test_it_is_read_as_not_sealable(self) -> None:
+        document = dict(
+            _fingerprint(), compile_status="completed_awaiting_qa", passed=None, seal={"passed": None},
+            customer_checks=_projected_checks(tests=None, tests_absent_reason="runtime_phase_deferred_to_qa_run"),
+        )
+        self.assertEqual(
+            vf.check_published_fingerprint(document),
+            ["[OK] fingerprint: published-fingerprint/2",
+             "      fingerprint: awaiting its QA run: not sealable until it is graded"],
+        )
+
+    def test_a_passed_seal_is_refused(self) -> None:
+        """MUT-RED: the not-sealable check removed."""
+        document = dict(_fingerprint(), compile_status="completed_awaiting_qa")
+        with self.assertRaises(vf.AttestationRefused) as refused:
+            vf.check_published_fingerprint(document)
+        self.assertIn("a build awaiting its QA run is not sealable", str(refused.exception))
+
+
 class ARefusedFingerprint(unittest.TestCase):
     def _refused(self, document: dict, reason: str) -> None:
         with self.assertRaises(vf.AttestationRefused) as refused:

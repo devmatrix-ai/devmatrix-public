@@ -14,6 +14,16 @@
 
 ## Verifier
 
+- **A seal that states its tests not judged verifies.** `seal-statement/6`
+  is read: every sealed service names its tests not judged and counts them
+  with every tier the run did not reach; a grade of A+ beside one fails. A
+  grade given before that count existed states none, and the seal says «This
+  seal does not state how many tests were not judged.», never 0, with no A+.
+  `published-platform-seal/3`, its public record, carries the count only (the
+  signed statement names the tests). `seal-statement/2` to `/5` and
+  `published-platform-seal/1` and `/2` are read as before.
+- **A build awaiting its QA run is read as not sealable.** A published
+  fingerprint may state `completed_awaiting_qa`; a passed seal beside it fails.
 - **A seal taken at the grade floor verifies.** `seal-statement/5` is read:
   every sealed service states the lowest grade it was sealed at (`A`), a grade
   at it or above and every failed test by name, and each is printed. A grade

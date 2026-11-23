@@ -677,7 +677,7 @@ _MAX_IDENTITY = 256
 #: The compilation outcomes a published fingerprint may state.
 COMPILE_STATUSES = (
     "succeeded", "completed_incomplete", "completed_unverified", "completed_runtime_by_client",
-    "halted_with_gate_failures", "halted_task_exception", "refused_at_admission",
+    "completed_awaiting_qa", "halted_with_gate_failures", "halted_task_exception", "refused_at_admission",
     "halted_service_build_failure", "halted_with_test_failures", "halted_delivery_refused",
     "cancelled", "unknown",
 )
@@ -700,6 +700,12 @@ CUSTOMER_CHECKS_NOT_PROJECTED_REASONS = (
     "refused_at_admission", "cancelled",
 )
 RUN_BY_CLIENT_CAUSE = "runtime_phase_run_by_client"
+#: Why a build delivered awaiting its QA run states no tests: they run in the
+#: QA run, after the compile.
+DEFERRED_TO_QA_RUN_CAUSE = "runtime_phase_deferred_to_qa_run"
+#: The status of a build delivered awaiting its QA run: its tests have not run
+#: yet, so it is not sealable until the QA run grades it.
+AWAITING_QA_STATUS = "completed_awaiting_qa"
 PRE_NDA_TEST_KEYS = (
     "ran", "total", "planned", "not_reached", "pass_rate", "passed", "failed",
     "not_applicable", "did_not_run", "counted_in_another_tier",
@@ -847,7 +853,7 @@ def _customer_checks(value: object, where: str) -> None:
     _object({
         **common, "status": _one_of(("projected",)), "scopes": _any_list, "totals": _any_object,
         "tests": _or_null(_PRE_NDA_TESTS),
-        "tests_absent_reason": _or_null(_one_of((RUN_BY_CLIENT_CAUSE,))),
+        "tests_absent_reason": _or_null(_one_of((RUN_BY_CLIENT_CAUSE, DEFERRED_TO_QA_RUN_CAUSE))),
     })(value, where)
     if (value["tests"] is None) == (value["tests_absent_reason"] is None):
         raise AttestationRefused(f"{where}: states its tests or why it has none, exactly one")
@@ -927,6 +933,12 @@ def check_published_fingerprint(payload: dict) -> list[str]:
         raise AttestationRefused(f"fingerprint: lacks {missing}")
     for key, value in payload.items():
         PUBLISHED_FINGERPRINT_VALUES[key](value, f"fingerprint.{key}")
+    if payload.get("compile_status") == AWAITING_QA_STATUS:
+        if payload.get("seal", {}).get("passed") is True:
+            raise AttestationRefused(
+                "fingerprint.seal: a build awaiting its QA run is not sealable, and this one states a passed seal"
+            )
+        return [f"[OK] fingerprint: {schema}", "      fingerprint: awaiting its QA run: not sealable until it is graded"]
     return [f"[OK] fingerprint: {schema}"]
 
 
@@ -993,6 +1005,15 @@ def check_published_attestation(payload: dict) -> list[str]:
 #: The seal statement from which every sealed build states the lowest grade it
 #: could be sealed at (``seal_floor``) and every test that failed, by name.
 SEAL_STATEMENT_WITH_FLOOR = "seal-statement/5"
+#: The seal statement from which every sealed build also states how many of
+#: its tests were not judged (``not_judged_count``), naming them, and a
+#: self-attested grade its own count (``listed_not_judged``); null when the
+#: grade was given before that count existed: «not stated», never 0.
+SEAL_STATEMENT_WITH_NOT_JUDGED = "seal-statement/6"
+#: The statements that state the grade floor and every failed test.
+SEAL_STATEMENTS_WITH_FLOOR = (SEAL_STATEMENT_WITH_FLOOR, SEAL_STATEMENT_WITH_NOT_JUDGED)
+#: What a seal says when it does not state how many tests were not judged.
+NOT_JUDGED_NOT_STATED = "This seal does not state how many tests were not judged."
 #: The grades, best first; the lowest grade a build is sealed at from
 #: seal-statement/5 on, and the grades at or above it.
 GRADES = ("A+", "A", "B", "C", "D", "F")
@@ -1006,11 +1027,19 @@ PUBLISHED_PLATFORM_SEAL_V1 = "published-platform-seal/1"
 #: floor it was sealed at (``seal_floor``), its grade at or above it, and how
 #: many of its tests failed (``failed``); no share of tests.
 PUBLISHED_PLATFORM_SEAL_V2 = "published-platform-seal/2"
+#: The record of a seal-statement/6 seal: as /2, and every service states how
+#: many of its tests were not judged (``not_judged``), or null when its grade
+#: was given before that count existed. Only the count is published; the
+#: signed statement names the tests.
+PUBLISHED_PLATFORM_SEAL_V3 = "published-platform-seal/3"
 #: The seal statements each record version is published from.
 PLATFORM_SEAL_STATEMENTS = {
     PUBLISHED_PLATFORM_SEAL_V1: ("seal-statement/3", "seal-statement/4"),
     PUBLISHED_PLATFORM_SEAL_V2: (SEAL_STATEMENT_WITH_FLOOR,),
+    PUBLISHED_PLATFORM_SEAL_V3: (SEAL_STATEMENT_WITH_NOT_JUDGED,),
 }
+#: The record versions that state the grade floor and the failed count.
+PLATFORM_SEALS_WITH_FLOOR = (PUBLISHED_PLATFORM_SEAL_V2, PUBLISHED_PLATFORM_SEAL_V3)
 #: Who measured a sealed platform, as the record states it, and who ran its tests.
 VERIFICATION_OF_RUN_BY = {"devmatrix": "devmatrix", "self_attested": "client"}
 _HEX64_ONLY = re.compile(r"[0-9a-f]{64}")
@@ -1079,6 +1108,21 @@ _SEALED_SERVICE_V2 = _object({
     "seal_floor": _one_of((SEAL_FLOOR,)),
     "failed": _count,
 })
+_SEALED_SERVICE_V3 = _object({
+    **_SERVICE_COMMON,
+    "grade": _or_null(_one_of(SEALABLE_GRADES)),
+    "self_attested_grade": _or_null(_object({
+        "letter": _one_of(SEALABLE_GRADES),
+        "score_percent": _count_upto(100),
+        "passed": _count,
+        "applicable": _count,
+        "listed_not_emitted": _count,
+        "listed_declared_skips": _count,
+    })),
+    "seal_floor": _one_of((SEAL_FLOOR,)),
+    "failed": _count,
+    "not_judged": _or_null(_count),
+})
 
 
 def _platform_seal_record(schema: str, service: Check) -> Check:
@@ -1113,6 +1157,7 @@ def _platform_seal_record(schema: str, service: Check) -> Check:
 PLATFORM_SEAL_SCHEMAS: Mapping[str, Check] = {
     PUBLISHED_PLATFORM_SEAL_V1: _platform_seal_record(PUBLISHED_PLATFORM_SEAL_V1, _SEALED_SERVICE_V1),
     PUBLISHED_PLATFORM_SEAL_V2: _platform_seal_record(PUBLISHED_PLATFORM_SEAL_V2, _SEALED_SERVICE_V2),
+    PUBLISHED_PLATFORM_SEAL_V3: _platform_seal_record(PUBLISHED_PLATFORM_SEAL_V3, _SEALED_SERVICE_V3),
 }
 
 
@@ -1144,12 +1189,16 @@ def _measurer_refusal(record: dict) -> str | None:
             return f"{where}: is tested by DevMatrix and does not state exactly its score and grade"
         if not by_devmatrix and (devmatrix_account != (None, None) or client_grade is None):
             return f"{where}: is tested by its client and does not state exactly the client's grade"
-        if record["schema"] == PUBLISHED_PLATFORM_SEAL_V2 and client_grade is not None:
+        if record["schema"] in PLATFORM_SEALS_WITH_FLOOR and client_grade is not None:
             passed, applicable = client_grade["passed"], client_grade["applicable"]
             if not 0 < applicable or passed > applicable:
                 return f"{where}.self_attested_grade: its test counts do not hold"
             if service["failed"] != applicable - passed:
                 return f"{where}.failed: is not every test that did not pass"
+        if record["schema"] == PUBLISHED_PLATFORM_SEAL_V3:
+            letter = service["grade"] if client_grade is None else client_grade["letter"]
+            if letter == "A+" and service["not_judged"] != 0:
+                return f"{where}: is graded A+ beside tests not judged, or beside a count it does not state"
     return None
 
 
@@ -1199,7 +1248,7 @@ def check_published_platform_seal(payload: dict, keys: list[dict], accept: str =
         f"[OK] platform seal: seal key {key_id!r} ({entry.get('class')}), sealed {payload['sealed_at']}; "
         f"the seal statement's SHA-256 is {payload['statement_sha256']}",
     ]
-    if schema == PUBLISHED_PLATFORM_SEAL_V2:
+    if schema in PLATFORM_SEALS_WITH_FLOOR:
         for index, service in enumerate(services):
             grade = service["self_attested_grade"]
             letter = service["grade"] if grade is None else grade["letter"]
@@ -1207,7 +1256,19 @@ def check_published_platform_seal(payload: dict, keys: list[dict], accept: str =
                 f"[OK] platform seal: services[{index}] graded {letter}, sealed at grade "
                 f"{service['seal_floor']} or better, {service['failed']} failed test(s)"
             )
+            if schema == PUBLISHED_PLATFORM_SEAL_V3:
+                lines.append(f"      platform seal: services[{index}]: {_published_not_judged_line(service['not_judged'])}")
     return lines
+
+
+def _published_not_judged_line(count: int | None) -> str:
+    """What a published /3 record says of a service's tests not judged: the
+    count, with the signed statement as where they are named; or, for null,
+    that the seal does not state it, never 0."""
+    if count is None:
+        return NOT_JUDGED_NOT_STATED
+    noun = "test" if count == 1 else "tests"
+    return f"{count} {noun} not judged (the signed statement names them)"
 
 
 def check_attestation(label: str, evidence: dict, keys: list[dict], accept: str = PRODUCTION) -> bool:
@@ -1350,7 +1411,9 @@ def compare_fingerprints(fp1: dict, fp2: dict) -> list[tuple[str, bool, str]]:
 #: The fingerprint attestation a build's download carries.
 DELIVERED_ATTESTATION_SCHEMA = "fingerprint-attestation/2"
 #: The seal statements whose services state their fingerprint attestation.
-SEAL_STATEMENT_SCHEMAS = ("seal-statement/2", "seal-statement/3", "seal-statement/4", "seal-statement/5")
+SEAL_STATEMENT_SCHEMAS = (
+    "seal-statement/2", "seal-statement/3", "seal-statement/4", "seal-statement/5", "seal-statement/6",
+)
 SEAL_FILES = ("seal-statement.json", "seal-statement.sig.b64", "seal-public-key.pem")
 
 
@@ -1645,7 +1708,8 @@ def seal_floor_findings(statement: dict) -> tuple[list[str], list[str]]:
     seal-statement/5: each service is graded at the floor or above and names
     every test that failed; both are printed. Earlier statements state no
     floor, and nothing is read into them."""
-    if statement.get("schema_id") != SEAL_STATEMENT_WITH_FLOOR:
+    version = statement.get("schema_id")
+    if version not in SEAL_STATEMENTS_WITH_FLOOR:
         return [], []
     services = statement.get("services")
     if not isinstance(services, list) or not services:
@@ -1658,7 +1722,9 @@ def seal_floor_findings(statement: dict) -> tuple[list[str], list[str]]:
         if not isinstance(sealed, dict):
             failures.append(f"{label}: is not a sealed service")
             continue
-        problem = _floor_problem(sealed)
+        problem = _floor_problem(sealed) or (
+            _not_judged_problem(sealed) if version == SEAL_STATEMENT_WITH_NOT_JUDGED else None
+        )
         if problem is not None:
             failures.append(f"{label}: {problem}")
             continue
@@ -1675,7 +1741,96 @@ def seal_floor_findings(statement: dict) -> tuple[list[str], list[str]]:
             f"[OK] {label}: {account}; sealed at grade {SEAL_FLOOR} or better, {len(failed)} failed test(s)"
         )
         lines += [f"      {label}: failed {test}" for test in failed]
+        if version == SEAL_STATEMENT_WITH_NOT_JUDGED:
+            lines += _not_judged_lines(label, sealed)
     return lines, failures
+
+
+def _not_run_tiers_problem(tiers: object) -> str | None:
+    """Why the tiers not run a seal-statement/6 service declares are not each
+    one group of its own tier with a whole count above zero, once, in order;
+    or ``None``."""
+    if not isinstance(tiers, list):
+        return "its tiers not run are not a list"
+    for tier in tiers:
+        if not (isinstance(tier, dict) and set(tier) == {"group", "tier", "count"}):
+            return "a tier not run it declares is not a group, a tier and a count"
+        group, name, count = tier["group"], tier["tier"], tier["count"]
+        if not (
+            isinstance(group, str) and isinstance(name, str) and name
+            and group.endswith("::" + name + "::*") and group.count("::") == 2
+            and not group.startswith("::")
+        ):
+            return "a tier not run it declares is not a group of its own tier"
+        if not (_whole(count) and count > 0):
+            return "a tier not run it declares has no whole count above zero"
+    groups = [tier["group"] for tier in tiers]
+    if groups != sorted(set(groups)):
+        return "its tiers not run are not each declared once, in order"
+    return None
+
+
+def _not_judged_problem(sealed: dict) -> str | None:
+    """Why one service of a seal-statement/6 does not state its tests not
+    judged, or ``None``: each named once, in order, none of them also named
+    failed, the total is the names plus every tier not run, and no grade of A+
+    beside one. A self-attested grade counts its own (``listed_not_judged``)
+    and names as many; null is a count the grade does not state (given before
+    the count existed): it names none, totals none, and bears no A+."""
+    names = sealed.get("not_judged_tests")
+    if not (isinstance(names, list) and all(isinstance(name, str) and name for name in names)):
+        return "its tests not judged are not names"
+    if names != sorted(set(names)):
+        return "its tests not judged are not each named once, in order"
+    if set(names) & set(sealed["failed_tests"]):
+        return "a test it names not judged is also named failed"
+    tiers = sealed.get("not_run_tiers")
+    problem = _not_run_tiers_problem(tiers)
+    if problem is not None:
+        return problem
+    if sealed["verification"] != "devmatrix":
+        if tiers:
+            return "is self-attested and declares tiers not run"
+        grade = sealed["self_attested_grade"]
+        if "listed_not_judged" not in grade:
+            return "is self-attested and its grade does not state its count of tests not judged"
+        count = grade["listed_not_judged"]
+        if count is None:
+            if names:
+                return "is self-attested, states no count of tests not judged and names some"
+            if sealed.get("not_judged_count") is not None:
+                return "is self-attested, states no count of tests not judged and totals one"
+            if grade["letter"] == "A+":
+                return "is graded A+ beside a count of tests not judged it does not state"
+            return None
+        if not _whole(count):
+            return "is self-attested and its count of tests not judged is not a whole number"
+        if count != len(names):
+            return f"is self-attested and counts {count} tests not judged but names {len(names)}"
+    total = sealed.get("not_judged_count")
+    if not _whole(total):
+        return "its count of tests not judged is not a whole number"
+    declared = len(names) + sum(tier["count"] for tier in tiers)
+    if total != declared:
+        return f"counts {total} tests not judged but declares {declared}"
+    letter = sealed["grade"] if sealed["verification"] == "devmatrix" else sealed["self_attested_grade"]["letter"]
+    if total and letter == "A+":
+        return "is graded A+ beside tests not judged"
+    return None
+
+
+def _not_judged_lines(label: str, sealed: dict) -> list[str]:
+    """The lines a seal-statement/6 service prints of its tests not judged:
+    «not stated» for a grade given before the count existed, never 0; else
+    the total, each test by name and each tier not run by its count."""
+    if sealed["verification"] != "devmatrix" and sealed["self_attested_grade"]["listed_not_judged"] is None:
+        return [f"      {label}: {NOT_JUDGED_NOT_STATED}"]
+    total = sealed["not_judged_count"]
+    noun = "test" if total == 1 else "tests"
+    lines = [f"      {label}: {total} {noun} not judged (out of the score, never A+)"]
+    lines += [f"      {label}: not judged {test}" for test in sealed["not_judged_tests"]]
+    lines += [f"      {label}: {tier['tier']}: {tier['count']} not run" for tier in sealed["not_run_tiers"]]
+    return lines
 
 
 def _published_failures(

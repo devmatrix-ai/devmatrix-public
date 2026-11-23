@@ -592,6 +592,142 @@ class ASealAtTheGradeFloor(unittest.TestCase):
         self.assertNotIn("sealed at grade", result.stdout)
 
 
+def _statement6(document: dict, *not_judged: str, failed: tuple[str, ...] = ()) -> dict:
+    """A seal-statement/6 measured by DevMatrix: names its tests not judged
+    and counts them, with no tier not run."""
+    statement = _floor_statement(document, *failed)
+    statement["schema_id"] = "seal-statement/6"
+    statement["services"][0].update(
+        not_judged_tests=list(not_judged), not_run_tiers=[], not_judged_count=len(not_judged),
+    )
+    return statement
+
+
+def _client_statement6(document: dict, listed: int | None, *not_judged: str) -> dict:
+    """A seal-statement/6 of a build the client tested; ``listed`` is the
+    grade's own count, None when the grade was given before it existed."""
+    statement = _client_floor_statement(document)
+    statement["schema_id"] = "seal-statement/6"
+    statement["services"][0]["self_attested_grade"]["listed_not_judged"] = listed
+    statement["services"][0].update(
+        not_judged_tests=list(not_judged), not_run_tiers=[],
+        not_judged_count=None if listed is None else len(not_judged),
+    )
+    return statement
+
+
+class ASealOfStatement6(unittest.TestCase):
+    """From seal-statement/6 every build also counts and names its tests not
+    judged; a self-attested grade given before that count existed states
+    none: «not stated», never 0, and never A+."""
+
+    _run = TheCommand._run
+    _fails = TheCommand._fails
+
+    def test_a_build_names_and_counts_its_tests_not_judged(self) -> None:
+        build = OneBuild()
+        build.statement = _statement6(build.document, "test_a", "test_b", failed=("test_c",))
+        result = self._run(build)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        for line in (
+            "[OK] seal: seal-statement/6, key 'seal-test' (production)",
+            "      orders: 2 tests not judged (out of the score, never A+)",
+            "      orders: not judged test_a",
+            "      orders: not judged test_b",
+            "VERIFICATION PASSED",
+        ):
+            self.assertIn(line, result.stdout)
+
+    def test_a_tier_not_run_is_counted_in_the_total(self) -> None:
+        build = OneBuild()
+        build.statement = _statement6(build.document, "test_a")
+        build.statement["services"][0].update(
+            not_run_tiers=[{"group": "orders::load::*", "tier": "load", "count": 3}], not_judged_count=4,
+        )
+        result = self._run(build)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("      orders: load: 3 not run", result.stdout)
+
+    def test_a_total_that_is_not_what_it_declares(self) -> None:
+        """MUT-RED: the total check removed."""
+        build = OneBuild()
+        build.statement = _statement6(build.document, "test_a")
+        build.statement["services"][0]["not_judged_count"] = 0
+        self._fails(build, "orders: counts 0 tests not judged but declares 1")
+
+    def test_tests_not_judged_named_twice_or_also_failed(self) -> None:
+        """MUT-RED: the order or the overlap check removed."""
+        build = OneBuild()
+        build.statement = _statement6(build.document, "test_b", "test_a")
+        self._fails(build, "orders: its tests not judged are not each named once, in order")
+        build = OneBuild()
+        build.statement = _statement6(build.document, "test_a", failed=("test_a",))
+        self._fails(build, "orders: a test it names not judged is also named failed")
+
+    def test_an_a_plus_beside_tests_not_judged(self) -> None:
+        """MUT-RED: the A+ check removed."""
+        build = OneBuild()
+        build.statement = _statement6(build.document, "test_a")
+        build.statement["services"][0]["grade"] = "A+"
+        self._fails(build, "orders: is graded A+ beside tests not judged")
+
+    def test_a_client_grade_states_its_count_and_names_as_many(self) -> None:
+        build = OneBuild()
+        _run_by_client(build.document)
+        build.statement = _client_statement6(build.document, 1, "test_a")
+        build.published = dict(_published(build.document), run_by="client", seal_class="self_attested")
+        result = self._run(build)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("      orders: 1 test not judged (out of the score, never A+)", result.stdout)
+        build.statement = _client_statement6(build.document, 2, "test_a")
+        build.statement["services"][0]["not_judged_count"] = 2
+        self._fails(build, "orders: is self-attested and counts 2 tests not judged but names 1")
+
+    def test_a_count_not_stated_is_said_so_never_0(self) -> None:
+        """MUT-RED: null read as 0."""
+        build = OneBuild()
+        _run_by_client(build.document)
+        build.statement = _client_statement6(build.document, None)
+        build.published = dict(_published(build.document), run_by="client", seal_class="self_attested")
+        result = self._run(build)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("      orders: This seal does not state how many tests were not judged.", result.stdout)
+        self.assertNotIn("orders: 0 tests not judged", result.stdout)
+
+    def test_a_count_not_stated_beside_names_a_total_or_an_a_plus(self) -> None:
+        """MUT-RED: each null rule removed in turn."""
+        for change, reason in (
+            ({"not_judged_tests": ["test_a"]}, "states no count of tests not judged and names some"),
+            ({"not_judged_count": 0}, "states no count of tests not judged and totals one"),
+            ("A+", "is graded A+ beside a count of tests not judged it does not state"),
+        ):
+            with self.subTest(reason=reason):
+                build = OneBuild()
+                _run_by_client(build.document)
+                build.statement = _client_statement6(build.document, None)
+                build.published = None
+                service = build.statement["services"][0]
+                if change == "A+":
+                    service["self_attested_grade"]["letter"] = "A+"
+                else:
+                    service.update(change)
+                self._fails(build, "orders: is self-attested, " + reason if "states" in reason else "orders: " + reason)
+
+    def test_statement_5_is_read_as_before(self) -> None:
+        build = OneBuild()
+        build.statement = _floor_statement(build.document, "test_one")
+        result = self._run(build)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertNotIn("not judged", result.stdout)
+
+    def test_an_unknown_statement_version_is_refused(self) -> None:
+        build = OneBuild()
+        build.statement = _statement6(build.document)
+        build.statement["schema_id"] = "seal-statement/7"
+        result = self._run(build)
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+
+
 class APublishedV3(unittest.TestCase):
     def test_it_states_the_spec_identity(self) -> None:
         lines = vf.check_published_attestation(_published(_delivered()))

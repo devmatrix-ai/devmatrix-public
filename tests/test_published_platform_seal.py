@@ -254,8 +254,78 @@ class APublishedPlatformSeal(unittest.TestCase):
 
     def test_an_unknown_record_version(self) -> None:
         record = _record_v2()
-        record["schema"] = "published-platform-seal/3"
-        self._refused(record, "unknown platform seal schema 'published-platform-seal/3'")
+        record["schema"] = "published-platform-seal/4"
+        self._refused(record, "unknown platform seal schema 'published-platform-seal/4'")
+
+
+def _record_v3(*not_judged: int | None) -> dict:
+    """A published-platform-seal/3 of a seal-statement/6, measured by
+    DevMatrix: each service counts its tests not judged."""
+    record = _record_v2()
+    record.update(schema="published-platform-seal/3", statement_schema_id="seal-statement/6")
+    for service, count in zip(record["services"], not_judged or (0, 0)):
+        service["not_judged"] = count
+    return record
+
+
+class APublishedPlatformSealOfStatement6(unittest.TestCase):
+    """``published-platform-seal/3``: as /2, and every service counts its tests
+    not judged, or states null when its grade was given before that count
+    existed: «not stated», never 0. Only the count is published."""
+
+    _refused = APublishedPlatformSeal._refused
+
+    def test_a_count_is_said_with_where_the_tests_are_named(self) -> None:
+        lines = vf.check_published_platform_seal(_record_v3(3, 1), _keys())
+        self.assertIn("published-platform-seal/3 of a seal-statement/6", lines[0])
+        self.assertIn("services[0]: 3 tests not judged (the signed statement names them)", lines[3])
+        self.assertIn("services[1]: 1 test not judged (the signed statement names them)", lines[5])
+
+    def test_a_count_not_stated_is_said_so_and_never_as_0(self) -> None:
+        """MUT-RED: null printed as a count (or as 0)."""
+        lines = vf.check_published_platform_seal(_by_the_client(_record_v3(None, 0)), _keys())
+        self.assertIn("services[0] graded A,", lines[2])
+        self.assertIn("services[0]: This seal does not state how many tests were not judged.", lines[3])
+        self.assertIn("services[1]: 0 tests not judged (the signed statement names them)", lines[5])
+        self.assertNotIn("services[0]: 0 tests", "\n".join(lines))
+
+    def test_an_a_plus_beside_tests_not_judged_or_a_count_not_stated(self) -> None:
+        """MUT-RED: the A+ check of /3 removed, or reading only a count above 0."""
+        for count in (2, None):
+            with self.subTest(count=count):
+                record = _record_v3(count, 0)
+                record["services"][0]["grade"] = "A+"
+                self._refused(
+                    record,
+                    "platform seal.services[0]: is graded A+ beside tests not judged, or beside a count it does not state",
+                )
+        record = _record_v3(0, 0)
+        record["services"][0]["grade"] = "A+"
+        vf.check_published_platform_seal(record, _keys())
+
+    def test_a_count_that_is_not_a_count(self) -> None:
+        for value in (-1, "2", 1.5, True):
+            with self.subTest(value=value):
+                self._refused(_record_v3(value, 0), "platform seal.services[0].not_judged")
+
+    def test_a_record_without_its_count(self) -> None:
+        record = _record_v3()
+        del record["services"][0]["not_judged"]
+        self._refused(record, "platform seal.services[0]")
+
+    def test_a_count_in_a_record_of_an_earlier_statement(self) -> None:
+        """/2 is read as before: a count of tests not judged is not one of its keys."""
+        record = _record_v2()
+        record["services"][0]["not_judged"] = 0
+        self._refused(record, "platform seal.services[0]")
+
+    def test_a_record_of_statement_6_published_as_2(self) -> None:
+        record = _record_v3()
+        record["schema"] = "published-platform-seal/2"
+        self._refused(record, "platform seal")
+        record = _record_v2()
+        record["statement_schema_id"] = "seal-statement/6"
+        self._refused(record, "platform seal.statement_schema_id: is not one of its declared values")
 
 
 class TheCommandOnAPublishedPlatformSeal(unittest.TestCase):
