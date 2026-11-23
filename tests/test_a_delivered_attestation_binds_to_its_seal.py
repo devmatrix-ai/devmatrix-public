@@ -421,32 +421,55 @@ class TheCommand(unittest.TestCase):
         self.assertIn("[OK] orders: the delivered attestation is the sealed one", result.stdout)
         self.assertIn("[OK] orders: the attestation names the specs the seal names", result.stdout)
 
-    def test_a_real_published_2_is_refused_with_what_to_do_and_the_seal_still_binds(self) -> None:
+    def _a_real_published_2_is_refused_with_what_to_do_and_the_seal_still_binds(self, path: Path) -> None:
+        build = OneBuild()
+        build.published_file = path
+        build.keys = _keys() + vf.load_keys(vf.KEYS_FILE)
+        result = self._run(build)
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertIn("[OK] signature: Ed25519, key 'dm-prod-2026-01' (production)", result.stdout)
+        self.assertIn(
+            "[FAIL] published attestation: published-attestation/2 names the attestation by the digest "
+            "of a compact re-serialization, not of the delivered file, so it cannot be bound to the "
+            "delivered file; republish the build's attestation (it is published as "
+            "published-attestation/3) and verify again",
+            result.stdout,
+        )
+        for line in (
+            "[OK] orders: the delivered attestation is the sealed one",
+            "[OK] orders: the attestation names the specs the seal names",
+            "[OK] orders: tests run by devmatrix, as the seal states (measured by devmatrix)",
+        ):
+            self.assertIn(line, result.stdout)
+
+    def _a_real_published_3_is_taken_for_binding(self, path: Path) -> None:
+        payload, lines, failures = vf._published_for_binding(path, vf.load_keys(vf.KEYS_FILE))
+        self.assertEqual(failures, [])
+        self.assertIsNotNone(payload)
+        self.assertIn("[OK] signature: Ed25519, key 'dm-prod-2026-01' (production)", "\n".join(lines))
+
+    def test_every_real_published_attestation_is_read_by_its_own_version(self) -> None:
+        """Each file under attestations/ verifies; a /2 is refused for binding
+        with what to do and the seal still binds; a /3 is taken for binding.
+        A file of a version this test does not know fails it, so a new
+        version published there cannot go unread."""
+        by_version = {
+            vf.ATTESTATION_SCHEMA_V2: self._a_real_published_2_is_refused_with_what_to_do_and_the_seal_still_binds,
+            vf.ATTESTATION_SCHEMA_V3: self._a_real_published_3_is_taken_for_binding,
+        }
         real = sorted((ROOT / "attestations" / "attestation").glob("*.json"))
         self.assertTrue(real, "no published attestation in the repository to read")
         for path in real:
             with self.subTest(published=path.name):
-                payload = vf.signed_payload(vf.read_json(path))
-                self.assertEqual(payload["schema"], vf.ATTESTATION_SCHEMA_V2)
-                build = OneBuild()
-                build.published_file = path
-                build.keys = _keys() + vf.load_keys(vf.KEYS_FILE)
-                result = self._run(build)
-                self.assertNotEqual(result.returncode, 0, result.stdout)
-                self.assertIn("[OK] signature: Ed25519, key 'dm-prod-2026-01' (production)", result.stdout)
-                self.assertIn(
-                    "[FAIL] published attestation: published-attestation/2 names the attestation by the digest "
-                    "of a compact re-serialization, not of the delivered file, so it cannot be bound to the "
-                    "delivered file; republish the build's attestation (it is published as "
-                    "published-attestation/3) and verify again",
-                    result.stdout,
+                verified = subprocess.run(
+                    [sys.executable, str(ROOT / "verify_fingerprint.py"), "-f", str(path)],
+                    capture_output=True, text=True, check=False,
                 )
-                for line in (
-                    "[OK] orders: the delivered attestation is the sealed one",
-                    "[OK] orders: the attestation names the specs the seal names",
-                    "[OK] orders: tests run by devmatrix, as the seal states (measured by devmatrix)",
-                ):
-                    self.assertIn(line, result.stdout)
+                self.assertEqual(verified.returncode, 0, verified.stdout + verified.stderr)
+                schema = vf.signed_payload(vf.read_json(path))["schema"]
+                if schema not in by_version:
+                    self.fail(f"{path.name} is published as {schema!r}, a version this test does not read")
+                by_version[schema](path)
 
     def test_seal_takes_attestations_and_no_fingerprint(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
