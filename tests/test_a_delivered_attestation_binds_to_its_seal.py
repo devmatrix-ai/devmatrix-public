@@ -137,6 +137,8 @@ def _statement(document: dict) -> dict:
             "name": _SERVICE,
             "spec_hash": _hex("1"),
             "verification": "devmatrix",
+            "qa_score_hundredths": 9900,
+            "grade": "A+",
             "fingerprint_attestation": {
                 "document_sha256": _digest(_bytes(document)),
                 "reproducible_sha256": document["reproducible_sha256"],
@@ -406,7 +408,7 @@ class TheCommand(unittest.TestCase):
         build = OneBuild()
         _run_by_client(build.document)
         build.statement = _statement(build.document)
-        build.statement["services"][0].update(verification="self_attested", self_attested_grade=_share_grade())
+        build.statement["services"][0].update(verification="self_attested", qa_score_hundredths=None, grade=None, self_attested_grade=_share_grade())
         build.published = dict(_published(build.document), run_by="client", seal_class="self_attested")
         result = self._run(build)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -431,7 +433,7 @@ class TheCommand(unittest.TestCase):
                 build = OneBuild()
                 _run_by_client(build.document)
                 build.statement = _statement(build.document)
-                build.statement["services"][0].update(verification="self_attested", self_attested_grade=grade)
+                build.statement["services"][0].update(verification="self_attested", qa_score_hundredths=None, grade=None, self_attested_grade=grade)
                 build.published = None
                 result = self._run(build)
                 if reason is None:
@@ -813,6 +815,82 @@ class APublishedV3(unittest.TestCase):
         with self.assertRaises(vf.AttestationRefused) as raised:
             vf.check_published_attestation(document)
         self.assertIn("undeclared keys ['spec_hash']", str(raised.exception))
+
+
+class WhoMeasuredAStatement4(unittest.TestCase):
+    """A seal-statement/4 states who measured the platform and each service
+    coherently, the same rules the bundled verifier applies."""
+
+    def _service(self, **changes: object) -> dict:
+        return dict(_statement(_delivered())["services"][0], **changes)
+
+    def _self_attested(self, **grade_changes: object) -> dict:
+        grade = dict(_share_grade(), **grade_changes)
+        return self._service(verification="self_attested", qa_score_hundredths=None, grade=None,
+                             self_attested_grade=grade)
+
+    def test_each_measurer_rule_has_its_class(self) -> None:
+        """MUT-RED: each rule removed in turn."""
+        grade_without_runs = dict(_share_grade())
+        extra_field = dict(_share_grade(), listed_not_judged=0)
+        missing_field = {key: value for key, value in _share_grade().items() if key != "letter"}
+        for subject, is_service, reason, reason_class in (
+            (self._service(qa_score_hundredths=None), True, "is measured by DevMatrix and states no score",
+             "basis_measurer"),
+            (self._service(qa_score_hundredths=True), True, "is measured by DevMatrix and states no score",
+             "basis_measurer"),
+            (self._service(grade=None), True, "is measured by DevMatrix and states no grade", "basis_measurer"),
+            (self._service(self_attested_grade=_share_grade()), True,
+             "is measured by DevMatrix and states a client grade", "basis_measurer"),
+            ({"verification": "devmatrix"}, False, "is measured by DevMatrix and states no score", "basis_measurer"),
+            (self._service(verification="someone"), True, "does not state who measured it", "statement_version"),
+            (dict(self._self_attested(), qa_score_hundredths=9900), True,
+             "is self-attested and states a DevMatrix score", "basis_measurer"),
+            ({"verification": "self_attested", "qa_score_hundredths": 9900}, False,
+             "is self-attested and states a DevMatrix score", "basis_measurer"),
+            (dict(self._self_attested(), grade="A"), True, "is self-attested and states a DevMatrix grade",
+             "basis_measurer"),
+            (dict(self._self_attested(), self_attested_grade=extra_field), True,
+             "is self-attested and its client grade is not exactly ", "statement_version"),
+            (dict(self._self_attested(), self_attested_grade=missing_field), True,
+             "is self-attested and its client grade is not exactly ", "statement_version"),
+            (dict(self._self_attested(), self_attested_grade=dict(grade_without_runs, run_ids={})), True,
+             "is self-attested and names no client run", "statement_version"),
+            (dict(self._self_attested(), self_attested_grade=dict(grade_without_runs, run_ids=["run-1"])), True,
+             "is self-attested and names no client run", "statement_version"),
+        ):
+            with self.subTest(reason=reason, subject=sorted(subject)):
+                problem = vf._measurer_v4_problem(subject, is_service)
+                self.assertIsNotNone(problem)
+                assert problem is not None
+                self.assertTrue(problem.text.startswith(reason), problem.text)
+                self.assertEqual(problem.reason_class, reason_class)
+
+    def test_coherent_subjects_pass(self) -> None:
+        for subject, is_service in (
+            (self._service(), True),
+            (self._self_attested(), True),
+            ({"verification": "devmatrix", "qa_score_hundredths": 9900}, False),
+            ({"verification": "self_attested", "qa_score_hundredths": None}, False),
+        ):
+            with self.subTest(subject=sorted(subject)):
+                self.assertIsNone(vf._measurer_v4_problem(subject, is_service))
+
+    def _run(self, build: OneBuild) -> subprocess.CompletedProcess[str]:
+        with tempfile.TemporaryDirectory() as tmp:
+            return build.run(Path(tmp))
+
+    def test_the_command_fails_a_devmatrix_service_stating_no_grade(self) -> None:
+        build = OneBuild()
+        build.statement["services"][0]["grade"] = None
+        result = self._run(build)
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn(f"[FAIL] {_SERVICE}: is measured by DevMatrix and states no grade", result.stdout)
+        build.statement["services"][0]["grade"] = "A+"
+        build.statement["platform"]["qa_score_hundredths"] = None
+        result = self._run(build)
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("[FAIL] platform: is measured by DevMatrix and states no score", result.stdout)
 
 
 if __name__ == "__main__":

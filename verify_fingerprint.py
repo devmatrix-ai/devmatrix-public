@@ -1866,15 +1866,52 @@ def _floor_problem(sealed: dict) -> Failure | None:
 SEAL_STATEMENT_WITH_SHARE = "seal-statement/4"
 
 
+#: The fields of a seal-statement/4 client grade, exactly.
+SHARE_GRADE_FIELDS = frozenset({
+    "applicable", "letter", "listed_declared_skips", "listed_not_emitted", "passed", "run_ids",
+    "score_percent", "failed_tests", "required_percent",
+})
+
+
+def _measurer_v4_problem(subject: dict, is_service: bool) -> Failure | None:
+    """Why a seal-statement/4 subject (a service, or the platform) does not
+    state who measured it coherently, or ``None``: DevMatrix states its score
+    (and, for a service, its grade and no client grade); the client states no
+    DevMatrix score or grade, and a service its client grade, exactly its
+    fields and its runs, at its share (:func:`_share_problem`)."""
+    verification = subject.get("verification")
+    if verification == "devmatrix":
+        score = subject.get("qa_score_hundredths")
+        if not isinstance(score, int) or isinstance(score, bool):
+            return Failure("is measured by DevMatrix and states no score", "basis_measurer")
+        if is_service and not isinstance(subject.get("grade"), str):
+            return Failure("is measured by DevMatrix and states no grade", "basis_measurer")
+        if is_service and subject.get("self_attested_grade") is not None:
+            return Failure("is measured by DevMatrix and states a client grade", "basis_measurer")
+        return None
+    if verification != "self_attested":
+        return Failure("does not state who measured it", "statement_version")
+    if subject.get("qa_score_hundredths") is not None:
+        return Failure("is self-attested and states a DevMatrix score", "basis_measurer")
+    if not is_service:
+        return None
+    if subject.get("grade") is not None:
+        return Failure("is self-attested and states a DevMatrix grade", "basis_measurer")
+    grade = subject.get("self_attested_grade")
+    if not isinstance(grade, dict) or set(grade) != SHARE_GRADE_FIELDS:
+        return Failure("is self-attested and its client grade is not exactly " + ", ".join(sorted(SHARE_GRADE_FIELDS)),
+                       "statement_version")
+    if not (isinstance(grade["run_ids"], dict) and grade["run_ids"]):
+        return Failure("is self-attested and names no client run", "statement_version")
+    return _share_problem(subject)
+
+
 def _share_problem(sealed: dict) -> Failure | None:
     """Why a self-attested service of a seal-statement/4 does not state the
     share it was sealed at and every failed test, or ``None``: the share is a
     whole percent from 1 to 100 and met by the counts, and the failed tests
     are the ones that did not pass, each named once, in order."""
-    grade = sealed.get("self_attested_grade")
-    if not isinstance(grade, dict) or not {"required_percent", "passed", "applicable", "failed_tests"} <= set(grade):
-        return Failure("is self-attested and its client grade does not state its share and failed tests",
-                       "statement_version")
+    grade = sealed["self_attested_grade"]
     required, passed, applicable = grade["required_percent"], grade["passed"], grade["applicable"]
     if not (_whole(required) and 1 <= required <= 100):
         return Failure("is self-attested and its required share is not a whole percent from 1 to 100",
@@ -1894,19 +1931,28 @@ def _share_problem(sealed: dict) -> Failure | None:
 
 
 def _share_findings(statement: dict) -> tuple[list[str], list[Failure]]:
-    """The lines and failures of the share every self-attested service of a
-    seal-statement/4 states (:func:`_share_problem`)."""
+    """The lines and failures of who measured the platform and every service
+    of a seal-statement/4, and of the share every self-attested service
+    states (:func:`_measurer_v4_problem`)."""
     services = statement.get("services")
     lines: list[str] = []
     failures: list[Failure] = []
+    platform = statement.get("platform")
+    problem = _measurer_v4_problem(platform, False) if isinstance(platform, dict) else Failure(
+        "states no platform", "statement_version")
+    if problem is not None:
+        failures.append(problem.under("platform: "))
     for index, sealed in enumerate(services if isinstance(services, list) else []):
-        if not isinstance(sealed, dict) or sealed.get("verification") != "self_attested":
-            continue
-        name = sealed.get("name")
+        name = sealed.get("name") if isinstance(sealed, dict) else None
         label = name if isinstance(name, str) and name else f"services[{index}]"
-        problem = _share_problem(sealed)
+        if not isinstance(sealed, dict):
+            failures.append(Failure(f"{label}: is not a sealed service", "statement_version"))
+            continue
+        problem = _measurer_v4_problem(sealed, True)
         if problem is not None:
             failures.append(problem.under(f"{label}: "))
+            continue
+        if sealed["verification"] != "self_attested":
             continue
         grade = sealed["self_attested_grade"]
         lines.append(

@@ -18,6 +18,10 @@
   client tested states a whole share from 1 to 100%, counts that hold, enough
   tests passed to meet that share, and every test that did not pass named once,
   in order; a seal below its share fails.
+- **A seal-statement/4 states who measured it coherently.** What DevMatrix
+  measured states its score, and each such service its grade and no client
+  grade; what the client measured states no DevMatrix score or grade, and each
+  such service exactly the fields of its client grade and at least one run.
 - **The verdict as a file, by reason class.** `--verdict-json <file>` (with
   `--seal`) also writes `{"verdict": "VERIFIED" | "FAILED", "reason_classes":
   [...], "key_class": ...}`: every failed check names one class (signature,
