@@ -568,6 +568,24 @@ class TheEvidence(unittest.TestCase):
         self.assertIn(f"{_SERVICE}: the bundle neither holds its QA run report qa-runs/{_BUILD}/report.json "
                       "nor lists it absent", failures)
 
+    def test_the_proofs_of_a_client_run_are_checked_too(self) -> None:
+        """Proof rows carry a signed digest whatever the basis: a client run
+        that states proofs has them checked, absent or flipped fails."""
+        build = OneBuild()
+        _run_by_client(build.document)
+        statement = _on_the_client_run(build.document)
+        name = f"proofs/{_BUILD}.json"
+        rows = _proof_bytes(_rows())
+        lines, failures = self._findings(statement, {name: rows})
+        self.assertEqual(failures, [])
+        self.assertIn(f"[OK] {_SERVICE}: proof rows {name} is the one the seal signed, and agrees with it", lines)
+        flipped = rows[:-2] + bytes([rows[-2] ^ 1]) + rows[-1:]
+        _, failures = self._findings(statement, {name: flipped})
+        self.assertEqual(failures, [f"{_SERVICE}: the proof rows file is not the one the seal signed (proof_rows_sha256)"])
+        _, failures = self._findings(statement, {}, [{"path": name, "state": "not_found", "reason": "purged"}])
+        self.assertEqual(failures, [f"{_SERVICE}: the bundle lists its proof rows {name} absent ('not_found': "
+                                    "'purged'), and the seal rests on it"])
+
     def test_a_file_the_seal_rests_on_listed_absent_fails(self) -> None:
         """MUT-RED: an absent file the statement signs the digest of left unchecked."""
         statement = _on_the_qa_run(OneBuild().document)
