@@ -14,6 +14,20 @@
 
 ## Verifier
 
+- **A seal states what its grade rests on.** `seal-statement/7` is read:
+  every sealed service names its build, rests on its compile, a QA run on
+  DevMatrix (named by its run and its report's SHA-256) or the client's run,
+  and states its tests proven not applicable, or prints «This seal does not
+  state its tests proven not applicable.» A seal that mixes builds measured by
+  DevMatrix with self-attested ones, or is self-attested over more than one
+  build, fails. `--evidence` checks the seal's evidence bundle: the QA run
+  report and the proof rows against the digests and the grade the seal signed.
+  The folder is read as untrusted (no link followed, only known names, each
+  bounded). Without it, what was not checked is printed. A build sealed on a
+  QA run is not yet bound to its delivered attestation. `published-platform-seal/4`
+  carries each service's basis and its count of tests proven not applicable.
+  `seal-statement/2` to `/6` and `published-platform-seal/1` to `/3` are read
+  as before.
 - **A seal that states its tests not judged verifies.** `seal-statement/6`
   is read: every sealed service names its tests not judged and counts them
   with every tier the run did not reach; a grade of A+ beside one fails. A

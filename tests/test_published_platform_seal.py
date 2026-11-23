@@ -254,8 +254,8 @@ class APublishedPlatformSeal(unittest.TestCase):
 
     def test_an_unknown_record_version(self) -> None:
         record = _record_v2()
-        record["schema"] = "published-platform-seal/4"
-        self._refused(record, "unknown platform seal schema 'published-platform-seal/4'")
+        record["schema"] = "published-platform-seal/5"
+        self._refused(record, "unknown platform seal schema 'published-platform-seal/5'")
 
 
 def _record_v3(*not_judged: int | None) -> dict:
@@ -325,6 +325,63 @@ class APublishedPlatformSealOfStatement6(unittest.TestCase):
         self._refused(record, "platform seal")
         record = _record_v2()
         record["statement_schema_id"] = "seal-statement/6"
+        self._refused(record, "platform seal.statement_schema_id: is not one of its declared values")
+
+
+def _record_v4(*bases: tuple[str, int | None]) -> dict:
+    """A published-platform-seal/4 of a seal-statement/7, measured by
+    DevMatrix: each service states what its grade rests on and its count of
+    tests proven not applicable."""
+    record = _record_v3()
+    record.update(schema="published-platform-seal/4", statement_schema_id="seal-statement/7")
+    for service, (basis, proven) in zip(record["services"], bases or (("qa_run", 2), ("compile", None))):
+        service.update(basis=basis, proven_not_applicable=proven)
+    return record
+
+
+class APublishedPlatformSealOfStatement7(unittest.TestCase):
+    """``published-platform-seal/4``: as /3, and every service states its
+    basis and its count of tests proven not applicable, or null: «not
+    stated», never 0. A seal never mixes measurers."""
+
+    _refused = APublishedPlatformSeal._refused
+
+    def test_each_service_says_its_basis_and_its_proofs(self) -> None:
+        lines = vf.check_published_platform_seal(_record_v4(), _keys())
+        self.assertIn("published-platform-seal/4 of a seal-statement/7", lines[0])
+        self.assertIn("services[0]: rests on qa_run; 2 tests proven not applicable (the signed statement names them)", lines[4])
+        self.assertIn("services[1]: rests on compile; This seal does not state its tests proven not applicable.", lines[7])
+
+    def test_a_client_run_seal_is_one_build(self) -> None:
+        record = _by_the_client(_record_v4(("client_run", 1), ("client_run", 1)))
+        self._refused(record, "platform seal.services: a self-attested seal is one build")
+        record["services"] = record["services"][:1]
+        vf.check_published_platform_seal(record, _keys())
+
+    def test_a_basis_its_measurer_does_not_measure(self) -> None:
+        """MUT-RED: the basis-measurer check removed."""
+        self._refused(_record_v4(("client_run", 1), ("compile", None)),
+                      "platform seal.services[0].basis: rests on client_run, which devmatrix does not measure")
+        self._refused(_by_the_client(_record_v4(("qa_run", 1), ("qa_run", 1))), "platform seal.services")
+
+    def test_a_compile_that_states_proofs(self) -> None:
+        """MUT-RED: the compile-count check removed."""
+        self._refused(_record_v4(("qa_run", 2), ("compile", 0)),
+                      "platform seal.services[1].proven_not_applicable: rests on the compile and states a count of proofs")
+
+    def test_an_a_plus_beside_proofs_not_stated(self) -> None:
+        """MUT-RED: the A+ check of /4 removed."""
+        record = _record_v4(("compile", None), ("qa_run", 0))
+        record["services"][0]["grade"] = "A+"
+        self._refused(record, "platform seal.services[0]: is graded A+ beside tests proven not applicable it does not state")
+
+    def test_an_unknown_basis_or_a_record_published_as_3(self) -> None:
+        self._refused(_record_v4(("devmatrix", 1), ("compile", None)), "platform seal.services[0].basis")
+        record = _record_v4()
+        record["schema"] = "published-platform-seal/3"
+        self._refused(record, "platform seal")
+        record = _record_v3()
+        record["statement_schema_id"] = "seal-statement/7"
         self._refused(record, "platform seal.statement_schema_id: is not one of its declared values")
 
 
