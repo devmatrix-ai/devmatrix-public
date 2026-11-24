@@ -797,7 +797,7 @@ class ASealOfStatement6(unittest.TestCase):
     def test_an_unknown_statement_version_is_refused(self) -> None:
         build = OneBuild()
         build.statement = _statement6(build.document)
-        build.statement["schema_id"] = "seal-statement/8"
+        build.statement["schema_id"] = "seal-statement/9"
         result = self._run(build)
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
 

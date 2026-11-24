@@ -1119,10 +1119,42 @@ SEAL_STATEMENT_WITH_NOT_JUDGED = "seal-statement/6"
 #: tests proven not applicable, with the digests of the evidence files that
 #: show them.
 SEAL_STATEMENT_WITH_BASIS = "seal-statement/7"
+#: The seal statement from which every test a sealed build names is a typed
+#: reference, never a name the build was tested under: a UTS test by its
+#: module, its tier's tenant name, the tier's family and an opaque id; a test
+#: of the delivered suite by its module and node id. The statement names the
+#: key the ids were derived under (``test_id_key``): ids compare only within
+#: one key, and the verifier never needs it. A QA run it rests on is bound
+#: through the sealed projection of its report (``qa-run-report-sealed/1``).
+SEAL_STATEMENT_WITH_TEST_IDS = "seal-statement/8"
+#: The statements that state what every grade rests on.
+SEAL_STATEMENTS_WITH_BASIS = (SEAL_STATEMENT_WITH_BASIS, SEAL_STATEMENT_WITH_TEST_IDS)
 #: The statements that state the grade floor and every failed test.
-SEAL_STATEMENTS_WITH_FLOOR = (SEAL_STATEMENT_WITH_FLOOR, SEAL_STATEMENT_WITH_NOT_JUDGED, SEAL_STATEMENT_WITH_BASIS)
+SEAL_STATEMENTS_WITH_FLOOR = (SEAL_STATEMENT_WITH_FLOOR, SEAL_STATEMENT_WITH_NOT_JUDGED, *SEAL_STATEMENTS_WITH_BASIS)
 #: The statements that count and name their tests not judged.
-SEAL_STATEMENTS_WITH_NOT_JUDGED = (SEAL_STATEMENT_WITH_NOT_JUDGED, SEAL_STATEMENT_WITH_BASIS)
+SEAL_STATEMENTS_WITH_NOT_JUDGED = (SEAL_STATEMENT_WITH_NOT_JUDGED, *SEAL_STATEMENTS_WITH_BASIS)
+#: The fields of a seal-statement/8, exactly: what an earlier one states and
+#: the key its test ids were derived under.
+SEAL_STATEMENT_8_FIELDS = frozenset({"key_id", "platform", "schema_id", "seal_hash", "sealed_at", "services",
+                                     "test_id_key"})
+#: A key id of the key test ids are derived under: a name, never key material.
+_TEST_ID_KEY = re.compile(r"[a-z0-9][a-z0-9.-]{2,62}")
+#: A UTS test's opaque id.
+_TEST_ID = re.compile(r"t[0-9a-f]{32}")
+#: The families a UTS tier belongs to, as the tenant reads them.
+UTS_FAMILIES = frozenset({"contracts", "behavior", "security", "enterprise"})
+#: The fields of a typed test reference, by kind, exactly.
+TEST_REF_FIELDS = {
+    "uts": frozenset({"kind", "module_id", "tier", "tier_category", "id"}),
+    "suite": frozenset({"kind", "module_id", "node_id"}),
+}
+#: The fields of a tier not run of a seal-statement/8 service, exactly.
+NOT_RUN_TIER_8_FIELDS = frozenset({"module_id", "tier", "tier_category", "count"})
+#: The sealed projection of a QA run report a seal-statement/8 binds: the
+#: stored report with each red named by its test reference instead of its name.
+QA_RUN_REPORT_SEALED = "qa-run-report-sealed/1"
+#: The fields of one red of a sealed QA run report, exactly.
+SEALED_RED_FIELDS = frozenset({"module_id", "tier", "tier_category", "id", "category", "outcome"})
 #: What a seal-statement/7 grade rests on, and who measured the build then.
 MEASURER_OF_BASIS = {"compile": "devmatrix", "qa_run": "devmatrix", "client_run": "self_attested"}
 #: The QA run reports a seal-statement/7 names, and the one that predates
@@ -1160,7 +1192,7 @@ PLATFORM_SEAL_STATEMENTS = {
     PUBLISHED_PLATFORM_SEAL_V1: ("seal-statement/3", "seal-statement/4"),
     PUBLISHED_PLATFORM_SEAL_V2: (SEAL_STATEMENT_WITH_FLOOR,),
     PUBLISHED_PLATFORM_SEAL_V3: (SEAL_STATEMENT_WITH_NOT_JUDGED,),
-    PUBLISHED_PLATFORM_SEAL_V4: (SEAL_STATEMENT_WITH_BASIS,),
+    PUBLISHED_PLATFORM_SEAL_V4: SEAL_STATEMENTS_WITH_BASIS,
 }
 #: The record versions that state the grade floor and the failed count.
 PLATFORM_SEALS_WITH_FLOOR = (PUBLISHED_PLATFORM_SEAL_V2, PUBLISHED_PLATFORM_SEAL_V3, PUBLISHED_PLATFORM_SEAL_V4)
@@ -2118,7 +2150,7 @@ DELIVERED_ATTESTATION_SCHEMA_V1 = "fingerprint-attestation/1"
 #: The seal statements whose services state their fingerprint attestation.
 SEAL_STATEMENT_SCHEMAS = (
     "seal-statement/2", "seal-statement/3", "seal-statement/4", "seal-statement/5", "seal-statement/6",
-    SEAL_STATEMENT_WITH_BASIS,
+    *SEAL_STATEMENTS_WITH_BASIS,
 )
 SEAL_FILES = ("seal-statement.json", "seal-statement.sig.b64", "seal-public-key.pem")
 
@@ -2606,7 +2638,7 @@ def _measurer_failures(
         run_by = delivered_run_by(document)
     except BindingRefused as refused:
         return [refused.failure.under(f"{service}: ")]
-    if statement.get("schema_id") == SEAL_STATEMENT_WITH_BASIS:
+    if statement.get("schema_id") in SEAL_STATEMENTS_WITH_BASIS:
         basis = sealed.get("basis")
         allowed = DELIVERED_RUN_BY_OF_BASIS.get(basis, frozenset()) if isinstance(basis, str) else frozenset()
         if run_by not in allowed:
@@ -2631,7 +2663,7 @@ def _whole(value: object) -> bool:
     return type(value) is int and 0 <= value <= _MAX_COUNT
 
 
-def _floor_problem(sealed: dict) -> Failure | None:
+def _floor_problem(sealed: dict, version: str) -> Failure | None:
     """Why one service of a seal-statement/5 does not state the grade floor
     it was sealed at and every test that failed, or ``None``: the floor is
     ``SEAL_FLOOR``, the grade (DevMatrix's, or the client's when the client
@@ -2641,9 +2673,14 @@ def _floor_problem(sealed: dict) -> Failure | None:
     if sealed.get("seal_floor") != SEAL_FLOOR:
         return Failure(f"does not state that it was sealed at grade {SEAL_FLOOR} or better", "statement_version")
     failed = sealed.get("failed_tests")
-    if not isinstance(failed, list) or not all(isinstance(name, str) and name for name in failed):
+    if version == SEAL_STATEMENT_WITH_TEST_IDS:
+        kinds = ("suite",) if sealed.get("verification") == "self_attested" else ("uts",)
+        problem = _test_refs_problem(failed, kinds)
+        if problem is not None:
+            return Failure(f"its failed tests {problem}", "statement_version")
+    elif not isinstance(failed, list) or not all(isinstance(name, str) and name for name in failed):
         return Failure("its failed tests are not names", "statement_version")
-    if failed != sorted(set(failed)):
+    elif failed != sorted(set(failed)):
         return Failure("its failed tests are not each named once, in order", "statement_version")
     measurer = sealed.get("verification")
     if measurer == "devmatrix":
@@ -2785,7 +2822,13 @@ def seal_floor_findings(statement: dict) -> tuple[list[str], list[Failure]]:
         return [], [Failure("the seal lists no sealed service", "statement_version")]
     lines: list[str] = []
     failures: list[Failure] = []
-    if version == SEAL_STATEMENT_WITH_BASIS:
+    if version == SEAL_STATEMENT_WITH_TEST_IDS:
+        problem = _test_id_key_problem(statement)
+        if problem is not None:
+            return [], [problem.under("the signed statement is refused by its content: it ")]
+        lines.append(f"[OK] seal: test ids derived under key {statement['test_id_key']}; "
+                     "they compare only with ids under the same key")
+    if version in SEAL_STATEMENTS_WITH_BASIS:
         if not all(isinstance(sealed, dict) for sealed in services):
             return [], [Failure("the signed statement lists a sealed service that is not one", "statement_version")]
         mixture = _mixture_problem(statement)
@@ -2797,13 +2840,13 @@ def seal_floor_findings(statement: dict) -> tuple[list[str], list[Failure]]:
         if not isinstance(sealed, dict):
             failures.append(Failure(f"{label}: is not a sealed service", "statement_version"))
             continue
-        problem = _floor_problem(sealed) or (
-            _not_judged_problem(sealed) if version in SEAL_STATEMENTS_WITH_NOT_JUDGED else None
+        problem = _floor_problem(sealed, version) or (
+            _not_judged_problem(sealed, version) if version in SEAL_STATEMENTS_WITH_NOT_JUDGED else None
         ) or (
-            _basis_problem(sealed) if version == SEAL_STATEMENT_WITH_BASIS else None
+            _basis_problem(sealed, version) if version in SEAL_STATEMENTS_WITH_BASIS else None
         )
         if problem is not None:
-            failures.append(problem.under(f"{label}: ") if version != SEAL_STATEMENT_WITH_BASIS
+            failures.append(problem.under(f"{label}: ") if version not in SEAL_STATEMENTS_WITH_BASIS
                             else problem.under(f"{label}: the signed statement is refused by its content: it "))
             continue
         failed = sealed["failed_tests"]
@@ -2818,10 +2861,10 @@ def seal_floor_findings(statement: dict) -> tuple[list[str], list[Failure]]:
         lines.append(
             f"[OK] {label}: {account}; sealed at grade {SEAL_FLOOR} or better, {len(failed)} failed test(s)"
         )
-        lines += [f"      {label}: failed {test}" for test in failed]
+        lines += [f"      {label}: failed {_test_text(test)}" for test in failed]
         if version in SEAL_STATEMENTS_WITH_NOT_JUDGED:
-            lines += _not_judged_lines(label, sealed)
-        if version == SEAL_STATEMENT_WITH_BASIS:
+            lines += _not_judged_lines(label, sealed, version)
+        if version in SEAL_STATEMENTS_WITH_BASIS:
             lines += _basis_lines(label, sealed)
     return lines, failures
 
@@ -2850,7 +2893,112 @@ def _not_run_tiers_problem(tiers: object) -> Failure | None:
     return None
 
 
-def _not_judged_problem(sealed: dict) -> Failure | None:
+def _test_ref_bytes(ref: dict) -> bytes:
+    """A test reference's canonical JSON bytes: what orders references and
+    tells two apart."""
+    return json.dumps(ref, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+
+
+def _test_ref_problem(ref: object, kinds: tuple[str, ...]) -> str | None:
+    """Why ``ref`` is not a test reference of one of ``kinds``, or ``None``.
+    The text never repeats the reference: what it holds is not printed."""
+    if not isinstance(ref, dict):
+        return "is not a test reference"
+    kind = ref.get("kind")
+    if kind not in kinds:
+        return "is not a reference of the kind its basis names"
+    if set(ref) != TEST_REF_FIELDS[kind]:
+        return "is not exactly the fields of its kind"
+    texts = [ref[field] for field in TEST_REF_FIELDS[kind] if field != "kind"]
+    if not all(isinstance(text, str) and text and text.isprintable() for text in texts):
+        return "holds a field that is not printable text"
+    if kind == "uts":
+        if ref["tier_category"] not in UTS_FAMILIES:
+            return "names a family that is not a UTS tier family"
+        if not _TEST_ID.fullmatch(ref["id"]):
+            return "has no opaque test id"
+    return None
+
+
+def _test_refs_problem(refs: object, kinds: tuple[str, ...]) -> str | None:
+    """Why ``refs`` are not test references of ``kinds``, each once, in the
+    order of their canonical bytes, no UTS id twice; or ``None``. Completes
+    "its <tests> ..."."""
+    if not isinstance(refs, list):
+        return "are not a list of test references"
+    for ref in refs:
+        problem = _test_ref_problem(ref, kinds)
+        if problem is not None:
+            return "list one that " + problem
+    keys = [_test_ref_bytes(ref) for ref in refs]
+    if keys != sorted(set(keys)):
+        return "are not each referenced once, in order"
+    ids = [ref["id"] for ref in refs if ref["kind"] == "uts"]
+    if len(ids) != len(set(ids)):
+        return "name one UTS test id twice"
+    return None
+
+
+def _test_text(test: object) -> str:
+    """How a failed or not judged test is printed: a name as it is signed; a
+    UTS reference as module · tier (family) · id; a suite one as module ·
+    node id."""
+    if not isinstance(test, dict):
+        return str(test)
+    if test["kind"] == "uts":
+        return f"{test['module_id']} · {test['tier']} ({test['tier_category']}) · {test['id']}"
+    return f"{test['module_id']} · {test['node_id']}"
+
+
+def _suite_names(refs: list) -> set[str]:
+    """``<module>::<node id>`` of every test a list names: a name of an
+    earlier statement as it is, a suite reference of a seal-statement/8 by its
+    module and node id. A UTS reference names no delivered test."""
+    names: set[str] = set()
+    for ref in refs:
+        if isinstance(ref, str):
+            names.add(ref)
+        elif ref["kind"] == "suite":
+            names.add(f"{ref['module_id']}::{ref['node_id']}")
+    return names
+
+
+def _test_id_key_problem(statement: dict) -> Failure | None:
+    """Why a seal-statement/8 does not state exactly its fields and a key id
+    of the key its test ids were derived under, or ``None``. Anything else
+    in its place, key material included, is refused unread."""
+    if set(statement) != SEAL_STATEMENT_8_FIELDS:
+        return Failure("does not state exactly the fields of a seal-statement/8", "statement_version")
+    key = statement["test_id_key"]
+    if not (isinstance(key, str) and _TEST_ID_KEY.fullmatch(key)):
+        return Failure("does not name the key its test ids were derived under by a key id", "statement_version")
+    return None
+
+
+def _not_run_tiers_8_problem(tiers: object) -> Failure | None:
+    """Why the tiers not run a seal-statement/8 service declares are not each
+    a module, a tier's tenant name, its family and a whole count above zero,
+    once per module and tier, in order; or ``None``."""
+    if not isinstance(tiers, list):
+        return Failure("its tiers not run are not a list", "statement_version")
+    for tier in tiers:
+        if not (isinstance(tier, dict) and set(tier) == NOT_RUN_TIER_8_FIELDS):
+            return Failure("a tier not run it declares is not a module, a tier, a family and a count",
+                           "statement_version")
+        if not all(isinstance(tier[f], str) and tier[f] and tier[f].isprintable() for f in ("module_id", "tier")):
+            return Failure("a tier not run it declares does not name its module and tier", "statement_version")
+        if tier["tier_category"] not in UTS_FAMILIES:
+            return Failure("a tier not run it declares names a family that is not a UTS tier family",
+                           "statement_version")
+        if not (_whole(tier["count"]) and tier["count"] > 0):
+            return Failure("a tier not run it declares has no whole count above zero", "statement_version")
+    keys = [(tier["module_id"], tier["tier"]) for tier in tiers]
+    if keys != sorted(set(keys)):
+        return Failure("its tiers not run are not each declared once, in order", "statement_version")
+    return None
+
+
+def _not_judged_problem(sealed: dict, version: str) -> Failure | None:
     """Why one service of a seal-statement/6 does not state its tests not
     judged, or ``None``: each named once, in order, none of them also named
     failed, the total is the names plus every tier not run, and no grade of A+
@@ -2858,14 +3006,26 @@ def _not_judged_problem(sealed: dict) -> Failure | None:
     and names as many; null is a count the grade does not state (given before
     the count existed): it names none, totals none, and bears no A+."""
     names = sealed.get("not_judged_tests")
-    if not (isinstance(names, list) and all(isinstance(name, str) and name for name in names)):
-        return Failure("its tests not judged are not names", "not_judged")
-    if names != sorted(set(names)):
-        return Failure("its tests not judged are not each named once, in order", "not_judged")
-    if set(names) & set(sealed["failed_tests"]):
-        return Failure("a test it names not judged is also named failed", "not_judged")
+    if version == SEAL_STATEMENT_WITH_TEST_IDS:
+        kinds = ("suite",) if sealed["verification"] == "self_attested" else ("uts", "suite")
+        problem = _test_refs_problem(names, kinds)
+        if problem is not None:
+            return Failure(f"its tests not judged {problem}", "not_judged")
+        if {_test_ref_bytes(ref) for ref in names} & {_test_ref_bytes(ref) for ref in sealed["failed_tests"]}:
+            return Failure("a test it names not judged is also named failed", "not_judged")
+        failed_ids = {ref["id"] for ref in sealed["failed_tests"] if ref["kind"] == "uts"}
+        if failed_ids & {ref["id"] for ref in names if ref["kind"] == "uts"}:
+            return Failure("a UTS test id it names not judged is also named failed", "not_judged")
+    else:
+        if not (isinstance(names, list) and all(isinstance(name, str) and name for name in names)):
+            return Failure("its tests not judged are not names", "not_judged")
+        if names != sorted(set(names)):
+            return Failure("its tests not judged are not each named once, in order", "not_judged")
+        if set(names) & set(sealed["failed_tests"]):
+            return Failure("a test it names not judged is also named failed", "not_judged")
     tiers = sealed.get("not_run_tiers")
-    problem = _not_run_tiers_problem(tiers)
+    problem = (_not_run_tiers_8_problem(tiers) if version == SEAL_STATEMENT_WITH_TEST_IDS
+               else _not_run_tiers_problem(tiers))
     if problem is not None:
         return problem
     if sealed["verification"] != "devmatrix":
@@ -2899,15 +3059,22 @@ def _not_judged_problem(sealed: dict) -> Failure | None:
     return None
 
 
-def _not_judged_lines(label: str, sealed: dict) -> list[str]:
+def _not_judged_lines(label: str, sealed: dict, version: str) -> list[str]:
     """The lines a seal-statement/6 service prints of its tests not judged:
     «not stated» for a grade given before the count existed, never 0; else
-    the total, each test by name and each tier not run by its count."""
+    the total, each test by name and each tier not run by its count. From
+    seal-statement/8 each test is printed by its reference and each tier by
+    its module and tenant name."""
     if sealed["verification"] != "devmatrix" and sealed["self_attested_grade"]["listed_not_judged"] is None:
         return [f"      {label}: {NOT_JUDGED_NOT_STATED}"]
     total = sealed["not_judged_count"]
     noun = "test" if total == 1 else "tests"
     lines = [f"      {label}: {total} {noun} not judged (out of the score, never A+)"]
+    if version == SEAL_STATEMENT_WITH_TEST_IDS:
+        lines += [f"      {label}: not measured {_test_text(test)}" for test in sealed["not_judged_tests"]]
+        lines += [f"      {label}: {tier['module_id']} · {tier['tier']}: {tier['count']} checks not run"
+                  for tier in sealed["not_run_tiers"]]
+        return lines
     lines += [f"      {label}: not judged {test}" for test in sealed["not_judged_tests"]]
     lines += [f"      {label}: {tier['tier']}: {tier['count']} not run" for tier in sealed["not_run_tiers"]]
     return lines
@@ -2920,6 +3087,17 @@ _QA_RUN_FIELDS = frozenset({
     "qa_run_id", "attempt", "report_schema_id", "report_sha256", "finished_at",
     "letter", "score_percent", "passed", "applicable", "emitted_failed_tests", "modules",
 })
+#: The QA run of a seal-statement/8 service, exactly: as /7, and the version
+#: of the stored report its sealed projection was made from.
+_QA_RUN_8_FIELDS = _QA_RUN_FIELDS | {"source_schema_id"}
+
+
+def _report_predates_proofs(sealed: dict) -> bool:
+    """Whether the QA run report a service rests on predates proofs: its
+    version (seal-statement/7), or the version its sealed projection was made
+    from (seal-statement/8)."""
+    run = sealed["qa_run"]
+    return run.get("source_schema_id", run["report_schema_id"]) == QA_RUN_REPORT_WITHOUT_PROOFS
 
 
 def _names_in_order(value: object) -> bool:
@@ -2930,13 +3108,14 @@ def _names_in_order(value: object) -> bool:
     )
 
 
-def _qa_run_problem(sealed: dict) -> Failure | None:
+def _qa_run_problem(sealed: dict, version: str) -> Failure | None:
     """Why the QA run a seal-statement/7 service rests on is not stated
     exactly, or ``None``: its run, attempt, report version and digest, when it
     finished, and the grade the statement carries (letter, score, counts), with
     the UTS reds named in ``failed_tests`` and the emitted suite's apart."""
     run = sealed.get("qa_run")
-    if not (isinstance(run, dict) and set(run) == _QA_RUN_FIELDS):
+    fields = _QA_RUN_8_FIELDS if version == SEAL_STATEMENT_WITH_TEST_IDS else _QA_RUN_FIELDS
+    if not (isinstance(run, dict) and set(run) == fields):
         return Failure("rests on a QA run it does not state exactly", "qa_run_binding")
     if not (isinstance(run["qa_run_id"], str) and _UUID.fullmatch(run["qa_run_id"])):
         return Failure("names no QA run by its id", "qa_run_binding")
@@ -2944,7 +3123,12 @@ def _qa_run_problem(sealed: dict) -> Failure | None:
         return Failure("names no attempt of its QA run", "qa_run_binding")
     if not (_whole(run["modules"]) and run["modules"] >= 1):
         return Failure("states no count of the modules its QA run measured", "qa_run_binding")
-    if run["report_schema_id"] not in QA_RUN_REPORT_SCHEMAS:
+    if version == SEAL_STATEMENT_WITH_TEST_IDS:
+        if run["report_schema_id"] != QA_RUN_REPORT_SEALED:
+            return Failure(f"names a QA run report that is not a {QA_RUN_REPORT_SEALED}", "qa_run_binding")
+        if run["source_schema_id"] not in QA_RUN_REPORT_SCHEMAS:
+            return Failure("names a QA run report projected from an unknown version", "qa_run_binding")
+    elif run["report_schema_id"] not in QA_RUN_REPORT_SCHEMAS:
         return Failure(f"names a QA run report of an unknown version {run['report_schema_id']!r}", "qa_run_binding")
     if not (isinstance(run["report_sha256"], str) and _HEX64_ONLY.fullmatch(run["report_sha256"])):
         return Failure("states no digest of its QA run report", "qa_run_binding")
@@ -2981,7 +3165,7 @@ def _proofs_problem(sealed: dict) -> Failure | None:
     if not isinstance(tests, list):
         return Failure("its tests proven not applicable are not a list", "proofs")
     if count is None:
-        if basis == "qa_run" and sealed["qa_run"]["report_schema_id"] != QA_RUN_REPORT_WITHOUT_PROOFS:
+        if basis == "qa_run" and not _report_predates_proofs(sealed):
             return Failure("rests on a QA run report that states proofs and states no count of them", "proofs")
         if tests or rows_digest is not None:
             return Failure("states no count of tests proven not applicable and names or digests some", "proofs")
@@ -2990,7 +3174,7 @@ def _proofs_problem(sealed: dict) -> Failure | None:
         return None
     if basis == "compile":
         return Failure("rests on the compile and states a count of tests proven not applicable", "proofs")
-    if basis == "qa_run" and sealed["qa_run"]["report_schema_id"] == QA_RUN_REPORT_WITHOUT_PROOFS:
+    if basis == "qa_run" and _report_predates_proofs(sealed):
         return Failure("rests on a QA run report that predates proofs and states a count of them", "proofs")
     if not _whole(count):
         return Failure("its count of tests proven not applicable is not a whole number", "proofs")
@@ -2998,7 +3182,7 @@ def _proofs_problem(sealed: dict) -> Failure | None:
         return Failure("its tests proven not applicable are not each named <module>::<test> once, in order", "proofs")
     if count != len(tests):
         return Failure(f"counts {count} tests proven not applicable but names {len(tests)}", "proofs")
-    if set(tests) & (set(sealed["failed_tests"]) | set(sealed["not_judged_tests"])):
+    if set(tests) & (_suite_names(sealed["failed_tests"]) | _suite_names(sealed["not_judged_tests"])):
         return Failure("a test it names proven not applicable is also named failed or not judged", "proofs")
     if not (isinstance(rows_digest, str) and _HEX64_ONLY.fullmatch(rows_digest)):
         return Failure("states no digest of its proof rows", "proofs")
@@ -3013,7 +3197,7 @@ def _proofs_problem(sealed: dict) -> Failure | None:
     return None
 
 
-def _basis_problem(sealed: dict) -> Failure | None:
+def _basis_problem(sealed: dict, version: str) -> Failure | None:
     """Why one service of a seal-statement/7 does not state what its grade
     rests on, or ``None``: the build it seals, a basis whose measurer is the
     one it states, the QA run exactly when it rests on one, and its tests
@@ -3028,7 +3212,7 @@ def _basis_problem(sealed: dict) -> Failure | None:
     if MEASURER_OF_BASIS[basis] != sealed["verification"]:
         return Failure(f"rests on {basis} but states it was measured by {sealed['verification']}", "basis_measurer")
     if basis == "qa_run":
-        problem = _qa_run_problem(sealed)
+        problem = _qa_run_problem(sealed, version)
         if problem is not None:
             return problem
     elif "qa_run" not in sealed:
@@ -3365,7 +3549,7 @@ def _proofs_failures(label: str, sealed: dict, data: bytes) -> list[Failure]:
     failures: list[Failure] = []
     if witnessed != sealed["proven_not_applicable_tests"]:
         failures.append(Failure(f"{label}: the witnessed proof rows are not the tests the seal states proven not applicable", "proofs"))
-    missing = sorted(set(shown_not) - set(sealed["not_judged_tests"]))
+    missing = sorted(set(shown_not) - _suite_names(sealed["not_judged_tests"]))
     if missing:
         failures.append(Failure(f"{label}: proofs not shown that the seal does not name not judged: {missing}", "proofs"))
     return failures
@@ -3393,6 +3577,8 @@ def _report_failures(label: str, sealed: dict, data: bytes) -> list[Failure]:
         ("score", report.get("score_percent"), run["score_percent"]),
         ("tests passed", report.get("passed"), run["passed"]),
         ("tests applicable", report.get("applicable"), run["applicable"]),
+        *((("source version", report.get("source_schema_id"), run["source_schema_id"]),)
+          if "source_schema_id" in run else ()),
     )
     failures = [
         Failure(f"{label}: the QA run report states {what} {stated!r}, the seal {signed!r}", "evidence_tampered")
@@ -3415,9 +3601,13 @@ def _report_failures(label: str, sealed: dict, data: bytes) -> list[Failure]:
         failures.append(Failure(f"{label}: the QA run report finished at {finished!r}, the seal says {run['finished_at']!r}", "evidence_tampered"))
     reds = report.get("reds")
     suite = report.get("emitted_suite")
-    if not isinstance(reds, list) or not all(isinstance(red, dict) and isinstance(red.get("name"), str) for red in reds):
+    if run["report_schema_id"] == QA_RUN_REPORT_SEALED:
+        problem = _sealed_reds_problem(report, sealed["failed_tests"])
+        if problem is not None:
+            return failures + [Failure(f"{label}: {problem}", "evidence_tampered")]
+    elif not isinstance(reds, list) or not all(isinstance(red, dict) and isinstance(red.get("name"), str) for red in reds):
         return failures + [Failure(f"{label}: the QA run report names no reds", "evidence_tampered")]
-    if sorted(red["name"] for red in reds) != sealed["failed_tests"]:
+    elif sorted(red["name"] for red in reds) != sealed["failed_tests"]:
         failures.append(Failure(f"{label}: the seal's failed tests are not the QA run report's reds", "evidence_tampered"))
     if suite is None:
         emitted_reds, not_tested, modules = [], [], None
@@ -3437,13 +3627,41 @@ def _report_failures(label: str, sealed: dict, data: bytes) -> list[Failure]:
         return failures + [Failure(f"{label}: the QA run report's emitted suite does not name its reds and tests not run", "evidence_tampered")]
     if emitted_names != run["emitted_failed_tests"]:
         failures.append(Failure(f"{label}: the seal's emitted suite failures are not the QA run report's", "evidence_tampered"))
-    unnamed = sorted(set(not_tested_names) - set(sealed["not_judged_tests"]))
+    unnamed = sorted(set(not_tested_names) - _suite_names(sealed["not_judged_tests"]))
     if unnamed:
         failures.append(Failure(f"{label}: tests the QA run did not test that the seal does not name not judged: {unnamed}", "evidence_tampered"))
-    if run["report_schema_id"] == QA_RUN_REPORT_WITHOUT_PROOFS:
+    if _report_predates_proofs(sealed):
         return failures
     failures += _report_proof_failures(label, sealed, modules)
     return failures
+
+
+def _sealed_reds_problem(report: dict, failed: list) -> str | None:
+    """Why the reds of a sealed QA run report are not the UTS tests the seal
+    names failed, or ``None``: each red (and each advisory red) is exactly a
+    module, a tier's tenant name, its family, an opaque id, a category and an
+    outcome, in the order of their canonical bytes, no id twice; the ids of
+    the reds are the ids the seal names failed, each with the same module,
+    tier and family. Nothing the report holds is repeated in the text."""
+    lists = {"reds": report.get("reds"), "advisory reds": report.get("advisory_reds")}
+    for what, rows in lists.items():
+        if not (isinstance(rows, list) and all(
+            isinstance(row, dict) and set(row) == SEALED_RED_FIELDS
+            and all(isinstance(row[f], str) and row[f] for f in SEALED_RED_FIELDS)
+            and row["tier_category"] in UTS_FAMILIES and _TEST_ID.fullmatch(row["id"])
+            for row in rows
+        )):
+            return f"the sealed QA run report's {what} are not each a test reference with its category and outcome"
+        keys = [_test_ref_bytes(row) for row in rows]
+        if keys != sorted(set(keys)) or len({row["id"] for row in rows}) != len(rows):
+            return f"the sealed QA run report's {what} are not each once, in order"
+    reds = {row["id"]: (row["module_id"], row["tier"], row["tier_category"]) for row in lists["reds"]}
+    named = {ref["id"]: (ref["module_id"], ref["tier"], ref["tier_category"]) for ref in failed if ref["kind"] == "uts"}
+    if set(reds) != set(named):
+        return "the seal's failed tests are not the sealed QA run report's reds, by id"
+    if reds != named:
+        return "a failed test the seal names has another module, tier or family than its red in the sealed QA run report"
+    return None
 
 
 #: The fields of one module of a qa-run-report/2's emitted suite, exactly.
@@ -3512,7 +3730,7 @@ def evidence_findings(
     if not failures:
         lines.append("[OK] evidence: the manifest names exactly the files held, each by its digest and size")
     expected: set[str] = set()
-    if statement.get("schema_id") == SEAL_STATEMENT_WITH_BASIS:
+    if statement.get("schema_id") in SEAL_STATEMENTS_WITH_BASIS:
         for index, sealed in enumerate(services):
             label = sealed.get("name", f"services[{index}]")
             checks = []
@@ -3553,7 +3771,7 @@ def evidence_findings(
 def unchecked_evidence_lines(statement: dict) -> list[str]:
     """What a seal-statement/7 rests on that was not checked because no
     evidence bundle was given: said plainly, never left to a bare OK."""
-    if statement.get("schema_id") != SEAL_STATEMENT_WITH_BASIS:
+    if statement.get("schema_id") not in SEAL_STATEMENTS_WITH_BASIS:
         return []
     return [
         f"[NOT CHECKED] {sealed.get('name', f'services[{index}]')}: QA run report and proof rows not checked: "

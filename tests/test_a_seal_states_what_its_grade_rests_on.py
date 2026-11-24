@@ -897,7 +897,7 @@ class TheVerdictJson(unittest.TestCase):
 
         def unknown_version() -> tuple[OneBuild, object]:
             build = OneBuild()
-            build.statement["schema_id"] = "seal-statement/8"
+            build.statement["schema_id"] = "seal-statement/9"
             return build, None
 
         def signature() -> tuple[OneBuild, object]:
