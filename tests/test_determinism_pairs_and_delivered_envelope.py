@@ -530,10 +530,6 @@ class TheCommandLine(unittest.TestCase):
                       result.stdout)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class TheBuildInputsOfV4(unittest.TestCase):
     """``published-attestation/4`` and the ``fingerprint-attestation/3`` it
     publishes state the language the build emitted for (``java``, ``python``
@@ -624,3 +620,7 @@ class TheBuildInputsOfV4(unittest.TestCase):
         other = copy.deepcopy(first)
         other["reproducible"]["identity"][vf.TARGET_LANGUAGE] = "java"
         self.assertFalse(vf.compare_fingerprints(first, _sealed(other)).passed)
+
+
+if __name__ == "__main__":
+    unittest.main()
