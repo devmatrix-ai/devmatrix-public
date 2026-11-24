@@ -24,6 +24,18 @@
       "status_since": null,
       "created_at": "2026-09-16T11:01:14.147675+00:00",
       "expires_at": null
+    },
+    {
+      "kid": "sha256:f2307580e513d64e3f16ecab8ff40bf19579179102e5d0845f324c3899bea069",
+      "key_id": "seal-prod-2026-11",
+      "purpose": "seal-signing",
+      "class": "production",
+      "algorithm": "Ed25519",
+      "public_key": "aWJ7VVB9tLN5AvHfvJ8ytckzMd9sMuVaQZxpOzzuObw=",
+      "status": "active",
+      "status_since": null,
+      "created_at": "2026-11-11T12:50:29.577856+00:00",
+      "expires_at": null
     }
   ]
 }

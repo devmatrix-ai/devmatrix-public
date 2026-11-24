@@ -19,6 +19,8 @@ jobs:
           python-version: "3.12"
       - name: Install the verifier's dependency
         run: python -m pip install "cryptography==46.0.3"
+      - name: keys.json is what DevMatrix publishes
+        run: python refresh_keys.py --check
       - name: Run the tests
         run: python -m unittest discover -s tests -v
       - name: Verify every production evidence file

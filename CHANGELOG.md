@@ -14,6 +14,18 @@
 
 ## Verifier
 
+- **A key that verifies states when it started signing.** Reading
+  `keys.json`, or a published keys document with `refresh_keys.py`, refuses
+  an active or retired key whose `created_at` is not an ISO 8601 instant
+  with a time zone, naming the key. A revoked key needs none.
+- **`keys.json` publishes the seal key.** `seal-prod-2026-11` signs platform
+  seals. Its start, `2026-11-11T12:50:29.577856+00:00`, is its first recorded
+  use (the first seal recorded as signed with it), not the instant the key
+  was made. The workflow now checks on every
+  push that `keys.json` is what DevMatrix publishes (`refresh_keys.py
+  --check`), and a test verifies every published file with the shipped
+  `keys.json` and requires one active key with its start for every purpose
+  a documented recipe checks.
 - **`--compare` compares every field of the schema, lists included.** Two
   documents are compared by a table declared for their schema: every field is
   compared or named as not compared with its reason (only when the run

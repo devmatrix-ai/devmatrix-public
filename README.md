@@ -128,10 +128,16 @@ including attestations and every failure case, is
 
 ## Keys
 
-| Key | Class | Status |
-|-----|-------|--------|
-| `dm-prod-2026-01` (`iKkD…`) | production | current |
-| `dm-prod-2026-01` (`d3K5…`) | production | retired, window closed |
+| Key | Purpose | Class | Status | Start (`created_at`) |
+|-----|---------|-------|--------|----------------------|
+| `seal-prod-2026-11` (`aWJ7…`) | seal-signing | production | current | 2026-11-11T12:50:29.577856+00:00, its first recorded use |
+| `dm-prod-2026-01` (`iKkD…`) | evidence-signing | production | current | 2026-09-16T11:01:14.147675+00:00 |
+| `dm-prod-2026-01` (`d3K5…`) | evidence-signing | production | retired, window closed | 2026-02-21T15:12:37.090851+00:00 |
+
+Every key that verifies states the instant it started signing; a keys file
+with an active or retired key that states none is refused when it is read.
+The start of `seal-prod-2026-11` is the instant of the first seal recorded
+as signed with it, not the instant the key was made.
 
 Only evidence signed by a production key is accepted. A signature by a key of
 any other class is refused, and no option accepts it.
