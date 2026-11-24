@@ -1481,7 +1481,7 @@ def signed_payload(evidence: dict) -> dict:
 #: The fingerprint attestation a build's download carries.
 DELIVERED_ATTESTATION_SCHEMA = "fingerprint-attestation/2"
 #: ``/3`` is ``/2`` with the runtime key in the reproducible identity and the
-#: determinism reference the build ran with in its attested block.
+#: regression baseline its gates ruled against in its attested block.
 DELIVERED_ATTESTATION_SCHEMA_V3 = "fingerprint-attestation/3"
 DELIVERED_ATTESTATION_SCHEMAS = (DELIVERED_ATTESTATION_SCHEMA, DELIVERED_ATTESTATION_SCHEMA_V3)
 #: The published attestation each delivered attestation is published as.
@@ -2294,6 +2294,13 @@ def check_delivered_attestation(document: dict, keys: list[dict], accept: str = 
     problems = shape_problems(COMPARISON_TABLES[schema].rules, document, "")
     if unsigned:
         problems = [problem for problem in problems if problem != "the document: lacks ['signature']"]
+    baseline = _at(document, ("attested", REGRESSION_BASELINE))
+    if schema == DELIVERED_ATTESTATION_SCHEMA_V3 and baseline is not _ABSENT:
+        # Not compared, so the table does not check it: its value is checked here.
+        try:
+            _REGRESSION_BASELINE(baseline, f"attested.{REGRESSION_BASELINE}")
+        except AttestationRefused as exc:
+            problems.append(str(exc))
     if problems:
         shown = "; ".join(problems[:5]) + (f"; and {len(problems) - 5} more" if len(problems) > 5 else "")
         return False, f"{schema} is not exactly its schema: {shown}"

@@ -87,7 +87,7 @@ def _v3(document: dict, baseline: "dict | None" = None) -> dict:
     document = copy.deepcopy(document)
     document["schema"] = vf.DELIVERED_ATTESTATION_SCHEMA_V3
     document["reproducible"]["identity"][vf.RUNTIME_KEY] = _RUNTIME_KEY
-    document["attested"][vf.REGRESSION_BASELINE] = baseline or _baseline()
+    document["attested"][vf.REGRESSION_BASELINE] = baseline if baseline is not None else _baseline()
     document["reproducible_sha256"] = vf.reproducible_sha256(document["reproducible"])
     return document
 
@@ -96,7 +96,7 @@ def _published_v4(published: dict, baseline: "dict | None" = None) -> dict:
     published = copy.deepcopy(published)
     published["schema"] = vf.ATTESTATION_SCHEMA_V4
     published["identity"][vf.RUNTIME_KEY] = _RUNTIME_KEY
-    published[vf.REGRESSION_BASELINE] = baseline or _baseline()
+    published[vf.REGRESSION_BASELINE] = baseline if baseline is not None else _baseline()
     return published
 
 
@@ -307,7 +307,7 @@ class ADeterminismPair(unittest.TestCase):
         second["not_tested_count"] = 3
         self.assertFalse(vf.compare_fingerprints(first, second).passed)
 
-    def test_documents_that_predate_the_reference_state_say_so(self) -> None:
+    def test_documents_that_predate_the_regression_baseline_say_so(self) -> None:
         """MUT-RED: an attested difference is read as a determinism break, or
         the determinism verdict is taken from every field."""
         first = compare._delivered()
@@ -412,6 +412,24 @@ class TheDeliveredEnvelope(unittest.TestCase):
             "fingerprint-attestation/2 is not exactly its schema: attested: carries undeclared keys ['source']; "
             "coverage: lacks ['covered']",
         )
+
+    def test_a_delivered_v3_baseline_that_is_not_its_form(self) -> None:
+        """The baseline is not compared, so -f checks its value apart.
+        MUT-RED: a delivered /3 baseline is accepted in any form."""
+        for baseline in ({}, "x", _baseline(digest="sha256:" + "a" * 64), _baseline(prior_builds=-1),
+                         _baseline(state="promoted"), dict(_baseline(), since="2026-11-24")):
+            with self.subTest(baseline=baseline):
+                document = _sealed(_v3(compare._delivered(), baseline))
+                passed, line = vf.check_delivered_attestation(document, _keys())
+                self.assertFalse(passed, line)
+                self.assertIn("is not exactly its schema: attested.regression_baseline", line)
+        passed, line = vf.check_delivered_attestation(_sealed(_v3(compare._delivered())), _keys())
+        self.assertTrue(passed, line)
+        document = _sealed(_v3(compare._delivered()))
+        del document["attested"][vf.REGRESSION_BASELINE]
+        passed, line = vf.check_delivered_attestation(_sealed(document), _keys())
+        self.assertFalse(passed, line)
+        self.assertIn("regression_baseline", line)
 
     def test_a_reproducible_digest_that_is_not_its_blocks(self) -> None:
         document = _sealed(compare._delivered())
