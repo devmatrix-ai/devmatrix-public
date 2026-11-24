@@ -101,14 +101,16 @@ key). Otherwise the comparison is refused with `not a determinism pair`,
 naming every input that differs. Whether two builds reproduced is decided by
 their reproducible block alone (identity, Merkle commitment, modules and its
 digest), printed as its own `determinism` line. The fields a run attests
-(determinism statuses, gate verdict, counts, who ran the tests) depend on the
-build's history: from `/4` and `/3` on, each document states the determinism
-reference state it ran from (`absent`, `candidate` or `promoted`), and those
-fields are compared only when both state the same one; otherwise they are
-listed as `not comparable`. Documents of earlier versions state no reference
-state: their attested fields are still compared, and when only those differ
-the output says the documents predate the reference state, so the difference
-is not evidence of a determinism break.
+(determinism statuses, gate verdict, counts, who ran the tests) may depend on
+the build's history. From `/4` and `/3` on, each document states its
+`regression_baseline`, the input its regression gate ruled against, with the
+SHA-256 of that input (`digest`). The gate verdict is compared only when both
+documents state the same digest; otherwise it is listed as `not comparable:
+the builds ruled against different baselines`, and the builds are still a
+determinism pair. The rest of the attested fields are compared. Documents of
+earlier versions state no baseline: their attested fields are compared, and
+when only those differ the output says the documents predate the regression
+baseline, so the difference is not evidence of a determinism break.
 
 A delivered attestation checked with `-f` is checked against its own table and
 its own signature: the SHA-256 of its JSON (keys sorted, default separators)

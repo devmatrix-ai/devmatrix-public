@@ -44,15 +44,20 @@
   toolchain or (from `/4` and `/3` on) runtime differ are refused with `not a
   determinism pair`, naming every input that differs. Whether they reproduced
   is decided by the reproducible block alone, printed as its own
-  `determinism` line. The fields a run attests are compared only when both
-  documents ran from the same determinism reference state; otherwise they are
-  listed as not comparable. Documents that state no reference state predate
-  it: when only their attested fields differ, the output says so, and that
-  this is not evidence of a determinism break.
+  `determinism` line. The fields a run attests are compared, except the gate
+  verdict (`terminal_gate_verdict_hash`), which is compared only when both
+  documents state the same regression baseline (equal `digest`); otherwise it
+  is listed as `not comparable: the builds ruled against different
+  baselines`, and the two builds are still a determinism pair. Documents that
+  state no baseline predate it: when only their attested fields differ, the
+  output says so, and that this is not evidence of a determinism break.
 - **`published-attestation/4` and `fingerprint-attestation/3`.** Both state
-  the runtime key the build ran for and its determinism reference state
-  (`absent`, `candidate`, `promoted`). A delivered `/3` is published as `/4`
-  and binds to its seal as `/2` did to `/3`.
+  the runtime key the build ran for and its `regression_baseline`, the input
+  its regression gate ruled against: `state` (`declared`, `absent` for a
+  first build, or `unreadable`), `prior_builds` (a count, or null) and
+  `digest` (the SHA-256 of that input, 64 lower-case hex characters). A
+  delivered `/3` is published as `/4` and binds to its seal as `/2` did to
+  `/3`.
 - **A delivered attestation is checked by its own signature.** With `-f`, a
   `fingerprint-attestation/2` or `/3` is checked against its closed table, its
   reproducible digest and its Ed25519 signature by a published production

@@ -28,7 +28,7 @@ import re
 import stat
 import sys
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 
@@ -673,15 +673,30 @@ ATTESTATION_SCHEMA_V4 = "published-attestation/4"
 #: identifier in it, of 20 lower-case hex characters.
 _RUNTIME_KEY = re.compile(r"[0-9a-f]{20}")
 RUNTIME_KEY = "platform_runtime_key"
-#: Whether the build had a determinism reference when it ran: none yet, a
-#: first candidate, or one promoted by a byte-equal rebuild. A build's
-#: gates that rule against a baseline apply only once one exists, so two
-#: builds' attested verdicts are comparable only from the same state.
-DETERMINISM_REFERENCE = "determinism_reference"
-DETERMINISM_REFERENCE_STATES = ("absent", "candidate", "promoted")
-_DETERMINISM_REFERENCE = _object({"state": _one_of(DETERMINISM_REFERENCE_STATES)})
-#: ``/4`` is ``/3`` with the runtime key in the identity and the determinism
-#: reference the build ran with.
+#: The frozen input the build's regression gate ruled against: whether the
+#: platform declared one (``declared``), had none yet (``absent``, a first
+#: build) or had one that could not be read (``unreadable``); how many prior
+#: builds DevMatrix declared (a count, or null when it declared none), and
+#: ``digest``, the SHA-256 (64 lower-case hex characters, no prefix) of that
+#: input. Two builds' gate verdicts are comparable only when they ruled
+#: against the same input: equal digests.
+REGRESSION_BASELINE = "regression_baseline"
+REGRESSION_BASELINE_STATES = ("declared", "absent", "unreadable")
+_HEX_DIGEST = re.compile(r"[0-9a-f]{64}")
+
+
+def _prior_builds(value: object, where: str) -> None:
+    if value is not None:
+        _count(value, where)
+
+
+_REGRESSION_BASELINE = _object({
+    "state": _one_of(REGRESSION_BASELINE_STATES),
+    "prior_builds": _prior_builds,
+    "digest": _pattern(_HEX_DIGEST),
+})
+#: ``/4`` is ``/3`` with the runtime key in the identity and the regression
+#: baseline the build's gates ruled against.
 _V4_FIELDS: dict = dict(
     _V3_FIELDS,
     schema=_one_of((ATTESTATION_SCHEMA_V4,)),
@@ -690,7 +705,7 @@ _V4_FIELDS: dict = dict(
         RUNTIME_KEY: _pattern(_RUNTIME_KEY),
         SERVICE_SPEC_HASHES: _module_map,
     }),
-    **{DETERMINISM_REFERENCE: _DETERMINISM_REFERENCE},
+    **{REGRESSION_BASELINE: _REGRESSION_BASELINE},
 )
 ATTESTATION_SCHEMAS: Mapping[str, Check] = {
     ATTESTATION_SCHEMA_V1: _object(_V1_FIELDS),
@@ -1646,6 +1661,14 @@ _DELIVERED_ATTESTATION_RULES: "dict[str, FieldRule]" = {
         ))),
     }),
 }
+#: The baseline is the input the gate verdict depends on, not a result: it
+#: decides whether the verdicts are compared and is not compared itself.
+BASELINE_EXCLUDED = Excluded(
+    "the input the regression gate ruled against: terminal_gate_verdict_hash is compared only when "
+    "both documents state the same baseline digest"
+)
+#: Why two verdicts ruled against different baselines are not compared.
+DIFFERENT_BASELINES = "not comparable: the builds ruled against different baselines"
 _DELIVERED_ATTESTATION_V3_RULES: "dict[str, FieldRule]" = {
     **_DELIVERED_ATTESTATION_RULES,
     "reproducible": Fields({
@@ -1656,13 +1679,13 @@ _DELIVERED_ATTESTATION_V3_RULES: "dict[str, FieldRule]" = {
     }),
     "attested": Fields({
         **_DELIVERED_ATTESTATION_RULES["attested"].fields,
-        DETERMINISM_REFERENCE: Fields(_all_compared(("state",))),
+        REGRESSION_BASELINE: BASELINE_EXCLUDED,
     }),
 }
 _ATTESTATION_V4_RULES: "dict[str, FieldRule]" = {
     **_ATTESTATION_V3_RULES,
     "identity": Fields({**_all_compared(IDENTITY_LINKS_V3), RUNTIME_KEY: COMPARED, SERVICE_SPEC_HASHES: Named(COMPARED)}),
-    DETERMINISM_REFERENCE: Fields(_all_compared(("state",))),
+    REGRESSION_BASELINE: BASELINE_EXCLUDED,
 }
 #: The build fingerprints published before documents named their schema.
 #: The two runs of one specification under ``fingerprints/`` differ in the
@@ -1719,15 +1742,18 @@ class ComparisonTable:
     fields of the reproducible block: they alone decide whether two builds
     are deterministic. ``attested`` names the fields the run attests, which
     may depend on the build's history. ``inputs`` are the identity inputs two
-    builds must share to be a determinism pair at all, and ``reference`` the
-    path of the determinism reference state, when the schema states one.
+    builds must share to be a determinism pair at all. ``baseline`` is the
+    path of the digest of the regression baseline, when the schema states
+    one, and ``verdict`` the path of the gate verdict it rules: the verdict is
+    compared only when both digests are equal.
     """
 
     rules: Fields
     reproducible: "frozenset[str]" = frozenset()
     attested: "frozenset[str]" = frozenset()
     inputs: "tuple[tuple[str, ...], ...]" = ()
-    reference: "tuple[str, ...]" = ()
+    baseline: "tuple[str, ...]" = ()
+    verdict: "tuple[str, ...]" = ()
 
 
 _PUBLISHED_REPRODUCIBLE = frozenset({"identity", "merkle", "modules", "reproducible_sha256"})
@@ -1754,8 +1780,9 @@ COMPARISON_TABLES: "Mapping[str, ComparisonTable]" = {
         Fields(_ATTESTATION_V3_RULES), _PUBLISHED_REPRODUCIBLE, _PUBLISHED_ATTESTED_V2, _SPEC_INPUTS_V3,
     ),
     ATTESTATION_SCHEMA_V4: ComparisonTable(
-        Fields(_ATTESTATION_V4_RULES), _PUBLISHED_REPRODUCIBLE, _PUBLISHED_ATTESTED_V2 | {DETERMINISM_REFERENCE},
-        (("identity", RUNTIME_KEY), *_SPEC_INPUTS_V3), (DETERMINISM_REFERENCE, "state"),
+        Fields(_ATTESTATION_V4_RULES), _PUBLISHED_REPRODUCIBLE, _PUBLISHED_ATTESTED_V2 | {REGRESSION_BASELINE},
+        (("identity", RUNTIME_KEY), *_SPEC_INPUTS_V3), (REGRESSION_BASELINE, "digest"),
+        ("terminal_gate_verdict_hash",),
     ),
     PUBLISHED_FINGERPRINT_SCHEMA_V2: ComparisonTable(
         Fields(_PUBLISHED_FINGERPRINT_V2_RULES), inputs=(("spec_hash",),),
@@ -1766,7 +1793,7 @@ COMPARISON_TABLES: "Mapping[str, ComparisonTable]" = {
     DELIVERED_ATTESTATION_SCHEMA_V3: ComparisonTable(
         Fields(_DELIVERED_ATTESTATION_V3_RULES), _DELIVERED_REPRODUCIBLE, _DELIVERED_ATTESTED,
         (("reproducible", "identity", RUNTIME_KEY), *_DELIVERED_INPUTS),
-        ("attested", DETERMINISM_REFERENCE, "state"),
+        ("attested", REGRESSION_BASELINE, "digest"), ("attested", "terminal_gate_verdict_hash"),
     ),
     UNVERSIONED_FINGERPRINT: ComparisonTable(
         Fields(_UNVERSIONED_FINGERPRINT_RULES), inputs=(("spec_hash",), ("compiler_version",)),
@@ -1802,8 +1829,10 @@ class Comparison:
     jobs: "tuple[str, str]" = ("", "")
     reproducible_keys: "frozenset[str]" = frozenset()
     attested_keys: "frozenset[str]" = frozenset()
-    #: The determinism reference state each document states, or ``None``.
-    reference_states: "tuple[str | None, str | None]" = (None, None)
+    #: Whether the schema states a regression baseline, and whether the two
+    #: documents state the same one (equal digests).
+    states_baseline: bool = False
+    same_baseline: bool = False
     compared: int = 0
     identical: int = 0
     reproducible_compared: int = 0
@@ -1977,8 +2006,15 @@ def _same_input(first: object, second: object) -> bool:
     return _canonical(first) == _canonical(second)
 
 
-def _stated_state(value: object) -> "str | None":
-    return value if isinstance(value, str) else None
+def _with_rule(rules: Fields, path: "tuple[str, ...]", rule: "FieldRule") -> Fields:
+    """``rules`` with the field at ``path`` ruled by ``rule``."""
+    head, rest = path[0], path[1:]
+    inner = rules.fields[head]
+    if not rest:
+        return replace(rules, fields={**rules.fields, head: rule})
+    if not isinstance(inner, Fields):
+        raise ComparisonRefused(f"the comparison table does not rule {'.'.join(path)}: {UPDATE_THE_VERIFIER}")
+    return replace(rules, fields={**rules.fields, head: _with_rule(inner, rest, rule)})
 
 
 def compare_fingerprints(fp1: dict, fp2: dict) -> Comparison:
@@ -1989,9 +2025,10 @@ def compare_fingerprints(fp1: dict, fp2: dict) -> Comparison:
     and every differing input is named) are refused. Otherwise every field
     the table compares is compared at any depth, lists included; a field
     recorded by one document only fails; a field the table does not name
-    fails; comparing nothing fails. The fields a run attests are not
-    compared when the two documents state different determinism reference
-    states: they are not comparable, and are named so.
+    fails; comparing nothing fails. The gate verdict is compared only when
+    the two documents state the same regression baseline (equal digests):
+    otherwise it is not comparable, and is named so. Different baselines do
+    not stop two builds being a determinism pair.
     """
     first, second = comparison_schema(fp1), comparison_schema(fp2)
     if first != second:
@@ -2002,23 +2039,15 @@ def compare_fingerprints(fp1: dict, fp2: dict) -> Comparison:
     differing = [".".join(path) for path in table.inputs if not _same_input(_at(fp1, path), _at(fp2, path))]
     if differing:
         raise ComparisonRefused("not a determinism pair: " + "; ".join(f"{path} differs" for path in differing))
-    states = (
-        (_stated_state(_at(fp1, table.reference)), _stated_state(_at(fp2, table.reference)))
-        if table.reference else (None, None)
-    )
     rules = table.rules
-    if None not in states and states[0] != states[1]:
-        not_comparable = Excluded(
-            f"not comparable: {DETERMINISM_REFERENCE} differs ({states[0]} vs {states[1]}): "
-            "the run's attested results depend on it"
-        )
-        rules = Fields({
-            **rules.fields, **{key: not_comparable for key in table.attested if key in rules.fields},
-        })
+    digests = (_at(fp1, table.baseline), _at(fp2, table.baseline)) if table.baseline else (None, None)
+    same_baseline = isinstance(digests[0], str) and digests[0] == digests[1]
+    if table.baseline and not same_baseline:
+        rules = _with_rule(rules, table.verdict, Excluded(DIFFERENT_BASELINES))
     jobs = tuple(job if isinstance(job, str) else "" for job in (fp1.get("job_id"), fp2.get("job_id")))
     out = Comparison(
         schema=first, jobs=(jobs[0], jobs[1]), reproducible_keys=table.reproducible,
-        attested_keys=table.attested, reference_states=states,
+        attested_keys=table.attested, states_baseline=bool(table.baseline), same_baseline=same_baseline,
     )
     _walk(rules, fp1, fp2, "", out)
     return out
@@ -2383,11 +2412,11 @@ def project_published(document: dict, data: bytes) -> dict:
             "published_deferred",
         )
     schema = PUBLISHED_SCHEMA_OF_DELIVERED[document["schema"]]
-    stated_reference = (
-        {DETERMINISM_REFERENCE: _field(attested, DETERMINISM_REFERENCE)} if schema == ATTESTATION_SCHEMA_V4 else {}
+    stated_baseline = (
+        {REGRESSION_BASELINE: _field(attested, REGRESSION_BASELINE)} if schema == ATTESTATION_SCHEMA_V4 else {}
     )
     return {
-        **stated_reference,
+        **stated_baseline,
         "schema": schema,
         "job_id": _field(document, "job_id"),
         "attestation_sha256": _sha256_prefixed(data),
@@ -3602,17 +3631,18 @@ def determinism_lines(comparison: Comparison) -> list[str]:
         if comparison.reproducible_identical
         else "[FAIL] determinism: the reproducible block differs: these builds did not reproduce"
     ]
+    if comparison.states_baseline and not comparison.same_baseline:
+        lines.append(f"[NOTE] terminal_gate_verdict_hash {DIFFERENT_BASELINES}")
     if comparison.only_attested_differ:
-        if comparison.reference_states == (None, None):
+        if not comparison.states_baseline:
             lines.append(
-                "[NOTE] attested fields differ; these documents predate the reference state, "
+                "[NOTE] attested fields differ; these documents predate the regression baseline, "
                 "so this is not evidence of a determinism break"
             )
+        elif comparison.same_baseline:
+            lines.append("[NOTE] attested fields differ under the same regression baseline")
         else:
-            lines.append(
-                "[NOTE] attested fields differ under the same determinism reference state "
-                f"({comparison.reference_states[0]})"
-            )
+            lines.append("[NOTE] attested fields differ; the builds ruled against different baselines")
     return lines
 
 

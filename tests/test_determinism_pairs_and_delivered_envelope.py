@@ -5,14 +5,15 @@ Two builds are a determinism pair only when they share their identity inputs
 (specification, toolchain and, from the documents that state it, runtime); a
 pair that does not is refused, naming every input that differs. Whether two
 builds reproduced is decided by their reproducible block alone. The fields a
-run attests are compared only when both documents ran from the same
-determinism reference state; documents that state no reference state predate
-it, and a difference in their attested fields is said not to be evidence of a
-determinism break.
+run attests are compared, except the gate verdict, which is compared only
+when both documents state the same regression baseline (equal digests): two
+builds that ruled against different baselines are still a determinism pair.
+Documents that state no baseline predate it, and a difference in their
+attested fields is said not to be evidence of a determinism break.
 
 ``published-attestation/4`` and ``fingerprint-attestation/3`` state the
-runtime key and the determinism reference state; a /3 delivered file is
-published as /4.
+runtime key and the regression baseline; a /3 delivered file is published as
+/4.
 
 A delivered attestation checked with ``-f`` is checked against its own table
 and its own signature; compared with ``--compare``, the comparison decides and
@@ -77,21 +78,25 @@ def _sealed(document: dict) -> dict:
     return document
 
 
-def _v3(document: dict, state: str = "promoted") -> dict:
-    """A delivered /2 written as /3: the runtime key and the reference state."""
+def _baseline(state: str = "declared", prior_builds: "int | None" = 3, digest: str = "a" * 64) -> dict:
+    return {"state": state, "prior_builds": prior_builds, "digest": digest}
+
+
+def _v3(document: dict, baseline: "dict | None" = None) -> dict:
+    """A delivered /2 written as /3: the runtime key and the regression baseline."""
     document = copy.deepcopy(document)
     document["schema"] = vf.DELIVERED_ATTESTATION_SCHEMA_V3
     document["reproducible"]["identity"][vf.RUNTIME_KEY] = _RUNTIME_KEY
-    document["attested"][vf.DETERMINISM_REFERENCE] = {"state": state}
+    document["attested"][vf.REGRESSION_BASELINE] = baseline or _baseline()
     document["reproducible_sha256"] = vf.reproducible_sha256(document["reproducible"])
     return document
 
 
-def _published_v4(published: dict, state: str = "promoted") -> dict:
+def _published_v4(published: dict, baseline: "dict | None" = None) -> dict:
     published = copy.deepcopy(published)
     published["schema"] = vf.ATTESTATION_SCHEMA_V4
     published["identity"][vf.RUNTIME_KEY] = _RUNTIME_KEY
-    published[vf.DETERMINISM_REFERENCE] = {"state": state}
+    published[vf.REGRESSION_BASELINE] = baseline or _baseline()
     return published
 
 
@@ -111,7 +116,7 @@ def _keys_file(tmp: Path, key_class: str = "production") -> str:
 
 
 class APublishedV4(unittest.TestCase):
-    def test_it_states_the_runtime_and_the_reference_state(self) -> None:
+    def test_it_states_the_runtime_and_the_regression_baseline(self) -> None:
         lines = vf.check_published_attestation(_published_v4(bind._published(bind._delivered())))
         self.assertIn("tests run by devmatrix, seal sealed", lines[0])
         self.assertIn("2 module spec hashes", lines[1])
@@ -129,15 +134,37 @@ class APublishedV4(unittest.TestCase):
                 document["identity"][vf.RUNTIME_KEY] = key
                 self._refused(document, f"identity.{vf.RUNTIME_KEY}")
 
-    def test_a_reference_state_outside_its_set_or_with_more_than_its_state(self) -> None:
-        document = _published_v4(bind._published(bind._delivered()), state="baseline")
-        self._refused(document, "determinism_reference.state")
+    def test_a_baseline_is_its_three_keys_of_their_form(self) -> None:
+        """MUT-RED: a state outside its set, a prior count that is not a count,
+        or a digest that is not 64 lower-case hex characters is accepted."""
+        cases = {
+            "regression_baseline.state": [_baseline(state="promoted"), _baseline(state=None)],
+            "regression_baseline.prior_builds": [_baseline(prior_builds=-1), _baseline(prior_builds="3"),
+                                                 _baseline(prior_builds=True)],
+            "regression_baseline.digest": [_baseline(digest="sha256:" + "a" * 64), _baseline(digest="A" * 64),
+                                           _baseline(digest="a" * 63), _baseline(digest=None)],
+        }
+        for reason, baselines in cases.items():
+            for baseline in baselines:
+                with self.subTest(baseline=baseline):
+                    self._refused(_published_v4(bind._published(bind._delivered()), baseline), reason)
         document = _published_v4(bind._published(bind._delivered()))
-        document[vf.DETERMINISM_REFERENCE]["since"] = "2026-11-24"
+        document[vf.REGRESSION_BASELINE]["since"] = "2026-11-24"
         self._refused(document, "undeclared keys ['since']")
         document = _published_v4(bind._published(bind._delivered()))
-        del document[vf.DETERMINISM_REFERENCE]
-        self._refused(document, "lacks ['determinism_reference']")
+        del document[vf.REGRESSION_BASELINE]
+        self._refused(document, "lacks ['regression_baseline']")
+        document = _published_v4(bind._published(bind._delivered()))
+        del document[vf.REGRESSION_BASELINE]["prior_builds"]
+        self._refused(document, "prior_builds")
+
+    def test_a_first_build_and_a_count_of_any_state_are_its_form(self) -> None:
+        """A first build reads absent and 0; the count is independent of the
+        state (declared with 0, unreadable with a count, any with null)."""
+        for baseline in (_baseline("absent", 0), _baseline("declared", 0), _baseline("unreadable", 7),
+                         _baseline("declared", None), _baseline("unreadable", None)):
+            with self.subTest(baseline=baseline):
+                vf.check_published_attestation(_published_v4(bind._published(bind._delivered()), baseline))
 
     def test_a_module_map_its_digest_does_not_name(self) -> None:
         """MUT-RED: the module map is checked for /3 only."""
@@ -147,12 +174,12 @@ class APublishedV4(unittest.TestCase):
 
 
 class ADeliveredV3(unittest.TestCase):
-    def _build(self, published_state: str = "promoted", delivered_v3: bool = True) -> bind.OneBuild:
+    def _build(self, published_baseline: "dict | None" = None, delivered_v3: bool = True) -> bind.OneBuild:
         build = bind.OneBuild()
         if delivered_v3:
             build.document = _v3(build.document)
         build.statement = bind._statement(build.document)
-        build.published = _published_v4(bind._published(build.document), published_state)
+        build.published = _published_v4(bind._published(build.document), published_baseline)
         return build
 
     def _result(self, build: bind.OneBuild) -> subprocess.CompletedProcess[str]:
@@ -166,15 +193,16 @@ class ADeliveredV3(unittest.TestCase):
         self.assertIn("[OK] orders: the published attestation is exactly what the delivered file publishes as",
                       result.stdout)
 
-    def test_a_published_v4_of_another_reference_state(self) -> None:
-        result = self._result(self._build(published_state="candidate"))
+    def test_a_published_v4_of_another_baseline(self) -> None:
+        """MUT-RED: the baseline is not projected into what a /3 publishes as."""
+        result = self._result(self._build(published_baseline=_baseline(digest="b" * 64)))
         self.assertNotEqual(result.returncode, 0, result.stdout)
-        self.assertIn("it differs in ['determinism_reference']", result.stdout)
+        self.assertIn("it differs in ['regression_baseline']", result.stdout)
 
     def test_a_published_v4_is_not_what_a_v2_delivered_file_publishes_as(self) -> None:
         result = self._result(self._build(delivered_v3=False))
         self.assertNotEqual(result.returncode, 0, result.stdout)
-        self.assertIn("it differs in ['determinism_reference', 'identity', 'schema']", result.stdout)
+        self.assertIn("it differs in ['identity', 'regression_baseline', 'schema']", result.stdout)
 
     def test_a_v1_delivered_file_still_says_what_to_do(self) -> None:
         build = self._build()
@@ -226,49 +254,58 @@ class ADeterminismPair(unittest.TestCase):
             vf.compare_fingerprints(first, second)
         self.assertIn("reproducible.identity.platform_spec_hash differs", str(refused.exception))
 
-    def test_attested_fields_of_different_reference_states_are_not_compared(self) -> None:
-        """MUT-RED: the attested fields are compared whatever the reference state."""
-        first = _v3(compare._delivered(), state="candidate")
-        second = _v3(compare._delivered_rerun(first), state="promoted")
-        second["attested"]["not_tested_count"] = 4
+    def test_verdicts_ruled_against_different_baselines_are_not_compared(self) -> None:
+        """Only the verdict: the rest of the attested block is compared, and
+        the two builds are still a determinism pair. MUT-RED: the verdict is
+        compared whatever the baselines, or more than the verdict is left out."""
+        first = _v3(compare._delivered(), _baseline("absent", 0, "c" * 64))
+        second = _v3(compare._delivered_rerun(first), _baseline("declared", 1, "d" * 64))
+        second["attested"]["terminal_gate_verdict_hash"] = "sha256:" + "7" * 64
         comparison = vf.compare_fingerprints(first, second)
         self.assertTrue(comparison.passed, comparison.differences)
-        self.assertEqual(
-            comparison.excluded["attested"],
-            "not comparable: determinism_reference differs (candidate vs promoted): "
-            "the run's attested results depend on it",
-        )
+        self.assertEqual(comparison.excluded["attested.terminal_gate_verdict_hash"], vf.DIFFERENT_BASELINES)
         self.assertTrue(comparison.reproducible_identical)
-
-    def test_a_reference_state_one_document_does_not_state_is_a_difference_not_a_state(self) -> None:
-        """MUT-RED: a missing reference state switches off the attested comparison."""
-        first = _v3(compare._delivered())
-        second = _v3(compare._delivered_rerun(first))
-        del second["attested"][vf.DETERMINISM_REFERENCE]
-        comparison = vf.compare_fingerprints(first, second)
-        self.assertFalse(comparison.passed)
-        self.assertEqual(comparison.differences, ["attested.determinism_reference: recorded only in the first document"])
-        self.assertNotIn("attested", comparison.excluded)
-
-    def test_attested_fields_of_one_reference_state_are_compared(self) -> None:
-        first = _v3(compare._delivered())
-        second = _v3(compare._delivered_rerun(first))
+        self.assertEqual(vf.determinism_lines(comparison), [
+            f"[OK] determinism: the reproducible block is identical ({comparison.reproducible_compared} values)",
+            "[NOTE] terminal_gate_verdict_hash not comparable: the builds ruled against different baselines",
+        ])
         second["attested"]["not_tested_count"] = 4
         comparison = vf.compare_fingerprints(first, second)
         self.assertEqual(comparison.differences, ["attested.not_tested_count: DIFFERENT (0 vs 4)"])
+        self.assertIn("[NOTE] attested fields differ; the builds ruled against different baselines",
+                      vf.determinism_lines(comparison))
+
+    def test_a_baseline_one_document_does_not_state_does_not_compare_the_verdict(self) -> None:
+        """MUT-RED: a missing digest is read as the same baseline."""
+        first = _v3(compare._delivered())
+        second = _v3(compare._delivered_rerun(first))
+        del second["attested"][vf.REGRESSION_BASELINE]
+        second["attested"]["terminal_gate_verdict_hash"] = "sha256:" + "7" * 64
+        comparison = vf.compare_fingerprints(first, second)
+        self.assertEqual(comparison.excluded["attested.terminal_gate_verdict_hash"], vf.DIFFERENT_BASELINES)
+
+    def test_verdicts_ruled_against_the_same_baseline_are_compared(self) -> None:
+        """MUT-RED: the verdict is never compared."""
+        first = _v3(compare._delivered())
+        second = _v3(compare._delivered_rerun(first))
+        second["attested"]["terminal_gate_verdict_hash"] = "sha256:" + "7" * 64
+        comparison = vf.compare_fingerprints(first, second)
+        self.assertEqual(len(comparison.differences), 1)
+        self.assertTrue(comparison.differences[0].startswith("attested.terminal_gate_verdict_hash: DIFFERENT"))
         self.assertEqual(vf.determinism_lines(comparison), [
             f"[OK] determinism: the reproducible block is identical ({comparison.reproducible_compared} values)",
-            "[NOTE] attested fields differ under the same determinism reference state (promoted)",
+            "[NOTE] attested fields differ under the same regression baseline",
         ])
 
-    def test_published_v4_documents_of_different_reference_states(self) -> None:
-        first = _published_v4(bind._published(bind._delivered()), state="absent")
-        second = _published_v4(bind._published(bind._delivered()), state="promoted")
-        second["not_tested_count"] = 3
+    def test_published_v4_documents_of_different_baselines(self) -> None:
+        first = _published_v4(bind._published(bind._delivered()), _baseline("absent", 0, "c" * 64))
+        second = _published_v4(bind._published(bind._delivered()), _baseline("declared", 2, "d" * 64))
+        second["terminal_gate_verdict_hash"] = "sha256:" + "7" * 64
         comparison = vf.compare_fingerprints(first, second)
         self.assertTrue(comparison.passed, comparison.differences)
-        self.assertIn("not comparable: determinism_reference differs (absent vs promoted)",
-                      comparison.excluded["not_tested_count"])
+        self.assertEqual(comparison.excluded["terminal_gate_verdict_hash"], vf.DIFFERENT_BASELINES)
+        second["not_tested_count"] = 3
+        self.assertFalse(vf.compare_fingerprints(first, second).passed)
 
     def test_documents_that_predate_the_reference_state_say_so(self) -> None:
         """MUT-RED: an attested difference is read as a determinism break, or
@@ -280,7 +317,7 @@ class ADeterminismPair(unittest.TestCase):
         self.assertFalse(comparison.passed)
         self.assertEqual(vf.determinism_lines(comparison), [
             f"[OK] determinism: the reproducible block is identical ({comparison.reproducible_compared} values)",
-            "[NOTE] attested fields differ; these documents predate the reference state, "
+            "[NOTE] attested fields differ; these documents predate the regression baseline, "
             "so this is not evidence of a determinism break",
         ])
 
@@ -452,7 +489,7 @@ class TheCommandLine(unittest.TestCase):
                           "--keys", _keys_file(Path(tmp)), "--allow-unsigned")
         self.assertEqual(result.returncode, 1, result.stdout)
         self.assertIn("[FAIL] attested.not_tested_count: DIFFERENT (0 vs 5)", result.stdout)
-        self.assertIn("[NOTE] attested fields differ; these documents predate the reference state", result.stdout)
+        self.assertIn("[NOTE] attested fields differ; these documents predate the regression baseline", result.stdout)
 
     def test_a_pair_of_different_inputs_is_refused(self) -> None:
         first = _sealed(compare._delivered())

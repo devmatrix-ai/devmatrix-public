@@ -564,13 +564,16 @@ class TheComparison(unittest.TestCase):
             vf.ATTESTATION_SCHEMA_V1: {"job_id", "attestation_sha256"},
             vf.ATTESTATION_SCHEMA_V2: {"job_id", "attestation_sha256"},
             vf.ATTESTATION_SCHEMA_V3: {"job_id", "attestation_sha256"},
-            vf.ATTESTATION_SCHEMA_V4: {"job_id", "attestation_sha256"},
+            # The baseline is the input the gate verdict was ruled against: it
+            # decides whether the verdict is compared, and is not a result.
+            vf.ATTESTATION_SCHEMA_V4: {"job_id", "attestation_sha256", vf.REGRESSION_BASELINE},
             vf.PUBLISHED_FINGERPRINT_SCHEMA_V2: {"job_id"},
             vf.DELIVERED_ATTESTATION_SCHEMA: {
                 "job_id", "signature.signed_at", "signature.content_hash", "signature.signature",
             },
             vf.DELIVERED_ATTESTATION_SCHEMA_V3: {
                 "job_id", "signature.signed_at", "signature.content_hash", "signature.signature",
+                f"attested.{vf.REGRESSION_BASELINE}",
             },
             vf.UNVERSIONED_FINGERPRINT: RUN_FIELDS | {"created_at", "run_id", "build_identity.resolved_at"},
         })
