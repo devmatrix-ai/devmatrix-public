@@ -574,6 +574,9 @@ class TheComparison(unittest.TestCase):
             vf.DELIVERED_ATTESTATION_SCHEMA_V3: {
                 "job_id", "signature.signed_at", "signature.content_hash", "signature.signature",
                 f"attested.{vf.REGRESSION_BASELINE}",
+                # The digest of the run's own build inputs record, which names
+                # its job; the shipped verifier re-hashes the record instead.
+                f"attested.{vf.BUILD_INPUTS_DIGEST}",
             },
             vf.UNVERSIONED_FINGERPRINT: RUN_FIELDS | {"created_at", "run_id", "build_identity.resolved_at"},
         })

@@ -57,7 +57,13 @@
   first build, or `unreadable`), `prior_builds` (a count, or null) and
   `digest` (the SHA-256 of that input, 64 lower-case hex characters). A
   delivered `/3` is published as `/4` and binds to its seal as `/2` did to
-  `/3`.
+  `/3`. Both also state `target_language`, the language the build emitted
+  for (`java`, `python`, or `not stated` when the build's evidence names
+  none), and `emitted_modules`, the modules it emitted, sorted; a document
+  whose emitted modules are not the modules its emission rows name is
+  refused. A delivered `/3` also states `build_inputs_sha256` (`sha256:` and
+  64 lower-case hex characters), the digest of the build's inputs record;
+  it names the build's own job, so it is never compared between two runs.
 - **A delivered attestation is checked by its own signature.** With `-f`, a
   `fingerprint-attestation/2` or `/3` is checked against its closed table, its
   reproducible digest and its Ed25519 signature by a published production

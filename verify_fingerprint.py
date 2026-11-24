@@ -695,16 +695,48 @@ _REGRESSION_BASELINE = _object({
     "prior_builds": _prior_builds,
     "digest": _pattern(_HEX_DIGEST),
 })
-#: ``/4`` is ``/3`` with the runtime key in the identity and the regression
-#: baseline the build's gates ruled against.
+#: The language the build emitted for, as every evidence pack of the run
+#: states it, or ``not stated`` when none states one.
+TARGET_LANGUAGE = "target_language"
+TARGET_LANGUAGE_NOT_STATED = "not stated"
+TARGET_LANGUAGES = ("java", "python", TARGET_LANGUAGE_NOT_STATED)
+#: The modules the build emitted, sorted: the modules its emission rows name.
+EMITTED_MODULES = "emitted_modules"
+#: The digest of the run's build inputs record (``sha256:`` + 64 hex), stated
+#: in the delivered attested block: the record the runtime key and the
+#: baseline were read from. Run-side: never compared between two runs.
+BUILD_INPUTS_DIGEST = "build_inputs_sha256"
+_SHA256_PREFIXED = re.compile(r"sha256:[0-9a-f]{64}")
+#: The identity of ``/4`` and of the delivered attestation it publishes: the
+#: links of ``/3``, the runtime key, the language and the emitted modules.
+_V4_IDENTITY = _object({
+    **{name: _digest for name in IDENTITY_LINKS_V3},
+    RUNTIME_KEY: _pattern(_RUNTIME_KEY),
+    SERVICE_SPEC_HASHES: _module_map,
+    TARGET_LANGUAGE: _one_of(TARGET_LANGUAGES),
+    EMITTED_MODULES: _list(_MODULE),
+})
+
+
+def emitted_modules_problem(identity: dict, rows: object, where: str) -> str | None:
+    """Why the emitted modules an identity states are not the modules its
+    emission rows name, sorted and each once; None when they are."""
+    emitted = identity.get(EMITTED_MODULES)
+    named = [row.get("module") for row in rows if isinstance(row, dict)] if isinstance(rows, list) else None
+    if not isinstance(emitted, list) or emitted != sorted(set(emitted)):
+        return f"{where}.{EMITTED_MODULES}: is not a sorted list of distinct modules"
+    if named != emitted:
+        return f"{where}.{EMITTED_MODULES}: is not the list of modules the emission rows name"
+    return None
+
+
+#: ``/4`` is ``/3`` with the runtime key, the language and the emitted
+#: modules in the identity, and the regression baseline the build's gates
+#: ruled against.
 _V4_FIELDS: dict = dict(
     _V3_FIELDS,
     schema=_one_of((ATTESTATION_SCHEMA_V4,)),
-    identity=_object({
-        **{name: _digest for name in IDENTITY_LINKS_V3},
-        RUNTIME_KEY: _pattern(_RUNTIME_KEY),
-        SERVICE_SPEC_HASHES: _module_map,
-    }),
+    identity=_V4_IDENTITY,
     **{REGRESSION_BASELINE: _REGRESSION_BASELINE},
 )
 ATTESTATION_SCHEMAS: Mapping[str, Check] = {
@@ -1053,6 +1085,14 @@ def check_published_attestation(payload: dict) -> list[str]:
         lines.append(
             f"[OK] attestation: platform spec {identity['platform_spec_hash']}, "
             f"{len(identity[SERVICE_SPEC_HASHES])} module spec hashes"
+        )
+    if schema == ATTESTATION_SCHEMA_V4:
+        problem = emitted_modules_problem(identity, payload["modules"], "attestation.identity")
+        if problem is not None:
+            raise AttestationRefused(problem)
+        lines.append(
+            f"[OK] attestation: built for {identity[TARGET_LANGUAGE]}, "
+            f"{len(identity[EMITTED_MODULES])} emitted modules"
         )
     return lines
 
@@ -1667,24 +1707,35 @@ BASELINE_EXCLUDED = Excluded(
     "the input the regression gate ruled against: terminal_gate_verdict_hash is compared only when "
     "both documents state the same baseline digest"
 )
+#: The digest of the run's own build inputs record, which names its job.
+BUILD_INPUTS_EXCLUDED = Excluded(
+    "the digest of this run's build inputs record, which names this run's job: it differs between "
+    "every two runs; the shipped verifier re-hashes the record and checks it states this document's "
+    "runtime key and baseline"
+)
+#: The identity of a delivered ``/3`` and of a published ``/4``: the emitted
+#: modules are in order, the language and the runtime key compared whole.
+_IDENTITY_V4_RULE = Fields({
+    **_all_compared(IDENTITY_LINKS_V3), RUNTIME_KEY: COMPARED, SERVICE_SPEC_HASHES: Named(COMPARED),
+    TARGET_LANGUAGE: COMPARED, EMITTED_MODULES: OrderedList(COMPARED),
+})
 #: Why two verdicts ruled against different baselines are not compared.
 DIFFERENT_BASELINES = "not comparable: the builds ruled against different baselines"
 _DELIVERED_ATTESTATION_V3_RULES: "dict[str, FieldRule]" = {
     **_DELIVERED_ATTESTATION_RULES,
     "reproducible": Fields({
         **_DELIVERED_ATTESTATION_RULES["reproducible"].fields,
-        "identity": Fields({
-            **_all_compared(IDENTITY_LINKS_V3), RUNTIME_KEY: COMPARED, SERVICE_SPEC_HASHES: Named(COMPARED),
-        }),
+        "identity": _IDENTITY_V4_RULE,
     }),
     "attested": Fields({
         **_DELIVERED_ATTESTATION_RULES["attested"].fields,
         REGRESSION_BASELINE: BASELINE_EXCLUDED,
+        BUILD_INPUTS_DIGEST: BUILD_INPUTS_EXCLUDED,
     }),
 }
 _ATTESTATION_V4_RULES: "dict[str, FieldRule]" = {
     **_ATTESTATION_V3_RULES,
-    "identity": Fields({**_all_compared(IDENTITY_LINKS_V3), RUNTIME_KEY: COMPARED, SERVICE_SPEC_HASHES: Named(COMPARED)}),
+    "identity": _IDENTITY_V4_RULE,
     REGRESSION_BASELINE: BASELINE_EXCLUDED,
 }
 #: The build fingerprints published before documents named their schema.
@@ -2285,6 +2336,30 @@ def is_delivered_attestation(payload: object) -> bool:
     return isinstance(payload, dict) and payload.get("schema") in DELIVERED_ATTESTATION_SCHEMAS
 
 
+def delivered_v3_value_problems(document: dict) -> list[str]:
+    """The values of a delivered ``/3`` the comparison table does not check,
+    because they are excluded or compared whole: the identity's values, the
+    emitted modules against the emission rows, the baseline and the digest of
+    the build inputs record. Run on a document whose keys are its schema's."""
+    problems = []
+    identity = document["reproducible"]["identity"]
+    checks = (
+        (_V4_IDENTITY, identity, "reproducible.identity"),
+        (_REGRESSION_BASELINE, document["attested"][REGRESSION_BASELINE], f"attested.{REGRESSION_BASELINE}"),
+        (_pattern(_SHA256_PREFIXED), document["attested"][BUILD_INPUTS_DIGEST], f"attested.{BUILD_INPUTS_DIGEST}"),
+    )
+    for check, value, where in checks:
+        try:
+            check(value, where)
+        except AttestationRefused as exc:
+            problems.append(str(exc))
+    if not problems:
+        problem = emitted_modules_problem(identity, document["reproducible"]["modules"], "reproducible.identity")
+        if problem is not None:
+            problems.append(problem)
+    return problems
+
+
 def check_delivered_attestation(document: dict, keys: list[dict], accept: str = PRODUCTION) -> tuple[bool, str]:
     """Whether a delivered attestation is exactly its schema, unchanged since
     it was made and signed by a published DevMatrix key, and the line that
@@ -2294,13 +2369,8 @@ def check_delivered_attestation(document: dict, keys: list[dict], accept: str = 
     problems = shape_problems(COMPARISON_TABLES[schema].rules, document, "")
     if unsigned:
         problems = [problem for problem in problems if problem != "the document: lacks ['signature']"]
-    baseline = _at(document, ("attested", REGRESSION_BASELINE))
-    if schema == DELIVERED_ATTESTATION_SCHEMA_V3 and baseline is not _ABSENT:
-        # Not compared, so the table does not check it: its value is checked here.
-        try:
-            _REGRESSION_BASELINE(baseline, f"attested.{REGRESSION_BASELINE}")
-        except AttestationRefused as exc:
-            problems.append(str(exc))
+    if schema == DELIVERED_ATTESTATION_SCHEMA_V3 and not problems:
+        problems += delivered_v3_value_problems(document)
     if problems:
         shown = "; ".join(problems[:5]) + (f"; and {len(problems) - 5} more" if len(problems) > 5 else "")
         return False, f"{schema} is not exactly its schema: {shown}"

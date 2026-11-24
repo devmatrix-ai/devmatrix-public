@@ -98,7 +98,10 @@ Two builds are compared only as a determinism pair: they must share their
 identity inputs (the specification, the compiler toolchain and, from
 `published-attestation/4` and `fingerprint-attestation/3` on, the runtime
 key). Otherwise the comparison is refused with `not a determinism pair`,
-naming every input that differs. Whether two builds reproduced is decided by
+naming every input that differs. The language the build emitted for and the modules it emitted are
+part of the reproducible identity: two builds that reproduced state the
+same ones. The digest of a delivered `/3`'s build inputs record names the
+build's own job and is not compared. Whether two builds reproduced is decided by
 their reproducible block alone (identity, Merkle commitment, modules and its
 digest), printed as its own `determinism` line. The fields a run attests
 (determinism statuses, gate verdict, counts, who ran the tests) may depend on

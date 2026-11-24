@@ -51,6 +51,7 @@ _KEY = Ed25519PrivateKey.generate()
 _KEY_ID = "evidence-delivered-test"
 _RAW = _KEY.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
 _RUNTIME_KEY = "0123456789abcdef0123"
+_BUILD_INPUTS = "sha256:" + "b" * 64
 
 
 def _keys(key_class: str = "production") -> list[dict]:
@@ -83,11 +84,16 @@ def _baseline(state: str = "declared", prior_builds: "int | None" = 3, digest: s
 
 
 def _v3(document: dict, baseline: "dict | None" = None) -> dict:
-    """A delivered /2 written as /3: the runtime key and the regression baseline."""
+    """A delivered /2 written as /3: the runtime key, the language and the
+    emitted modules, the regression baseline and the build inputs digest."""
     document = copy.deepcopy(document)
     document["schema"] = vf.DELIVERED_ATTESTATION_SCHEMA_V3
-    document["reproducible"]["identity"][vf.RUNTIME_KEY] = _RUNTIME_KEY
+    identity = document["reproducible"]["identity"]
+    identity[vf.RUNTIME_KEY] = _RUNTIME_KEY
+    identity[vf.TARGET_LANGUAGE] = "python"
+    identity[vf.EMITTED_MODULES] = [row["module"] for row in document["reproducible"]["modules"]]
     document["attested"][vf.REGRESSION_BASELINE] = baseline if baseline is not None else _baseline()
+    document["attested"][vf.BUILD_INPUTS_DIGEST] = _BUILD_INPUTS
     document["reproducible_sha256"] = vf.reproducible_sha256(document["reproducible"])
     return document
 
@@ -96,6 +102,8 @@ def _published_v4(published: dict, baseline: "dict | None" = None) -> dict:
     published = copy.deepcopy(published)
     published["schema"] = vf.ATTESTATION_SCHEMA_V4
     published["identity"][vf.RUNTIME_KEY] = _RUNTIME_KEY
+    published["identity"][vf.TARGET_LANGUAGE] = "python"
+    published["identity"][vf.EMITTED_MODULES] = [row["module"] for row in published["modules"]]
     published[vf.REGRESSION_BASELINE] = baseline if baseline is not None else _baseline()
     return published
 
@@ -524,3 +532,95 @@ class TheCommandLine(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TheBuildInputsOfV4(unittest.TestCase):
+    """``published-attestation/4`` and the ``fingerprint-attestation/3`` it
+    publishes state the language the build emitted for (``java``, ``python``
+    or ``not stated``) and the modules it emitted, sorted and equal to the
+    modules its emission rows name; the delivered file also states the digest
+    of the run's build inputs record, which is never compared between runs.
+    MUT-RED: one of these accepted in another form, or the emitted modules
+    not held to the emission rows."""
+
+    def _published_refused(self, document: dict, reason: str) -> None:
+        with self.assertRaises(vf.AttestationRefused) as raised:
+            vf.check_published_attestation(document)
+        self.assertIn(reason, str(raised.exception))
+
+    def _delivered_refused(self, document: dict, reason: str) -> None:
+        passed, line = vf.check_delivered_attestation(_sealed(document), _keys())
+        self.assertFalse(passed, line)
+        self.assertIn(reason, line)
+
+    def test_a_published_v4_states_its_language_and_emitted_modules(self) -> None:
+        lines = vf.check_published_attestation(_published_v4(bind._published(bind._delivered())))
+        self.assertIn("built for python, 1 emitted modules", lines[-1])
+
+    def test_a_language_outside_the_three(self) -> None:
+        for language in ("Python", "go", "", None):
+            with self.subTest(language=language):
+                published = _published_v4(bind._published(bind._delivered()))
+                published["identity"][vf.TARGET_LANGUAGE] = language
+                self._published_refused(published, f"identity.{vf.TARGET_LANGUAGE}")
+                delivered = _v3(compare._delivered())
+                delivered["reproducible"]["identity"][vf.TARGET_LANGUAGE] = language
+                self._delivered_refused(delivered, f"reproducible.identity.{vf.TARGET_LANGUAGE}")
+        for language in vf.TARGET_LANGUAGES:
+            with self.subTest(language=language):
+                published = _published_v4(bind._published(bind._delivered()))
+                published["identity"][vf.TARGET_LANGUAGE] = language
+                vf.check_published_attestation(published)
+
+    def test_emitted_modules_that_are_not_the_emission_rows(self) -> None:
+        for change in ("reversed", "repeated", "dropped", "added", "missing"):
+            with self.subTest(change=change):
+                published = _published_v4(bind._published(bind._delivered()))
+                delivered = _v3(compare._delivered())
+                for identity, rows in (
+                    (published["identity"], published["modules"]),
+                    (delivered["reproducible"]["identity"], delivered["reproducible"]["modules"]),
+                ):
+                    # Two emission rows, so that an order can be wrong.
+                    rows.append(dict(copy.deepcopy(rows[0]), module="zz-second"))
+                    emitted = identity[vf.EMITTED_MODULES] = [row["module"] for row in rows]
+                    self.assertEqual(emitted, sorted(emitted))
+                    if change == "reversed":
+                        identity[vf.EMITTED_MODULES] = emitted[::-1]
+                    elif change == "repeated":
+                        identity[vf.EMITTED_MODULES] = sorted(emitted + emitted[:1])
+                    elif change == "dropped":
+                        identity[vf.EMITTED_MODULES] = emitted[1:]
+                    elif change == "added":
+                        identity[vf.EMITTED_MODULES] = sorted(emitted + ["zz-third"])
+                    else:
+                        del identity[vf.EMITTED_MODULES]
+                self._published_refused(published, f"identity.{vf.EMITTED_MODULES}" if change != "missing" else "lacks")
+                self._delivered_refused(delivered, vf.EMITTED_MODULES)
+
+    def test_a_delivered_build_inputs_digest_that_is_not_its_form(self) -> None:
+        for digest in ("b" * 64, "sha256:" + "B" * 64, "sha256:" + "b" * 63, None):
+            with self.subTest(digest=digest):
+                delivered = _v3(compare._delivered())
+                delivered["attested"][vf.BUILD_INPUTS_DIGEST] = digest
+                self._delivered_refused(delivered, f"attested.{vf.BUILD_INPUTS_DIGEST}")
+        delivered = _v3(compare._delivered())
+        del delivered["attested"][vf.BUILD_INPUTS_DIGEST]
+        self._delivered_refused(delivered, vf.BUILD_INPUTS_DIGEST)
+        passed, line = vf.check_delivered_attestation(_sealed(_v3(compare._delivered())), _keys())
+        self.assertTrue(passed, line)
+
+    def test_a_delivered_runtime_key_that_is_not_its_form(self) -> None:
+        delivered = _v3(compare._delivered())
+        delivered["reproducible"]["identity"][vf.RUNTIME_KEY] = "0123456789ABCDEF0123"
+        self._delivered_refused(delivered, f"reproducible.identity.{vf.RUNTIME_KEY}")
+
+    def test_two_runs_differ_in_their_build_inputs_digest_and_reproduce(self) -> None:
+        first = _sealed(_v3(compare._delivered()))
+        second = copy.deepcopy(first)
+        second["attested"][vf.BUILD_INPUTS_DIGEST] = "sha256:" + "c" * 64
+        second = _sealed(second)
+        self.assertTrue(vf.compare_fingerprints(first, second).passed)
+        other = copy.deepcopy(first)
+        other["reproducible"]["identity"][vf.TARGET_LANGUAGE] = "java"
+        self.assertFalse(vf.compare_fingerprints(first, _sealed(other)).passed)
