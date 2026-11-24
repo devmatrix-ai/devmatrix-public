@@ -2896,7 +2896,7 @@ def _not_run_tiers_problem(tiers: object) -> Failure | None:
 def _test_ref_bytes(ref: dict) -> bytes:
     """A test reference's canonical JSON bytes: what orders references and
     tells two apart."""
-    return json.dumps(ref, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    return json.dumps(ref, sort_keys=True, separators=(",", ":")).encode("ascii")
 
 
 def _test_ref_problem(ref: object, kinds: tuple[str, ...]) -> str | None:

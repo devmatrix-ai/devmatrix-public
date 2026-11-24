@@ -164,24 +164,58 @@ class ASealOfStatement8(unittest.TestCase):
         self.assertIn(f"      {_SERVICE}: {_SERVICE} · Security: 3 checks not run", out)
 
     def test_a_statement_that_refers_to_its_tests_otherwise(self) -> None:
-        """MUT-RED: each check of a reference removed in turn."""
+        """MUT-RED: each check of a reference removed in turn; each case names
+        the one check that refuses it, its counts kept whole."""
+        twin = dict(_UTS, tier="Behavior", tier_category="behavior")
         cases = {
-            "a name": lambda s: s["failed_tests"].__setitem__(0, _INTERNAL),
-            "another kind": lambda s: s["failed_tests"].__setitem__(0, dict(_UTS, kind="named")),
-            "a suite reference on a DevMatrix measure": lambda s: s["failed_tests"].__setitem__(
+            "a name": (lambda s: s["failed_tests"].__setitem__(0, _INTERNAL),
+                       "its failed tests list one that is not a test reference"),
+            "another kind": (lambda s: s["failed_tests"].__setitem__(0, dict(_UTS, kind="named")),
+                             "list one that is not a reference of the kind its basis names"),
+            "a suite reference on a DevMatrix measure": (lambda s: s["failed_tests"].__setitem__(
                 0, {"kind": "suite", "module_id": _SERVICE, "node_id": "tests/test_x.py::test_x"}),
-            "a field more": lambda s: s["failed_tests"].__setitem__(0, dict(_UTS, name=_INTERNAL)),
-            "no opaque id": lambda s: s["failed_tests"].__setitem__(0, dict(_UTS, id="x" * 33)),
-            "an unknown family": lambda s: s["failed_tests"].__setitem__(0, dict(_UTS, tier_category="other")),
-            "out of order": lambda s: s.__setitem__("not_judged_tests", list(reversed(s["not_judged_tests"]))),
-            "one id twice": lambda s: s["not_judged_tests"].insert(0, dict(_UTS, tier="Behavior")),
+                "list one that is not a reference of the kind its basis names"),
+            "a field more": (lambda s: s["failed_tests"].__setitem__(0, dict(_UTS, name=_INTERNAL)),
+                             "list one that is not exactly the fields of its kind"),
+            "a line break": (lambda s: s["failed_tests"].__setitem__(0, dict(_UTS, tier="Con\ntracts")),
+                             "list one that holds a field that is not printable text"),
+            "no opaque id": (lambda s: s["failed_tests"].__setitem__(0, dict(_UTS, id="x" * 33)),
+                             "list one that has no opaque test id"),
+            "an unknown family": (lambda s: s["failed_tests"].__setitem__(0, dict(_UTS, tier_category="other")),
+                                  "list one that names a family that is not a UTS tier family"),
+            "out of order": (lambda s: s.__setitem__("not_judged_tests", list(reversed(s["not_judged_tests"]))),
+                             "its tests not judged are not each referenced once, in order"),
+            "one id twice in a list": (lambda s: s.__setitem__("failed_tests", _ordered([dict(_UTS), twin])),
+                                       "its failed tests name one UTS test id twice"),
+            "a failed id also not judged": (
+                lambda s: s.__setitem__("not_judged_tests", _ordered([twin, s["not_judged_tests"][0]])),
+                "a UTS test id it names not judged is also named failed"),
         }
-        for case, edit in cases.items():
+        for case, (edit, text) in cases.items():
             with self.subTest(case=case):
                 build = _qa_build()
                 edit(build.statement["services"][0])
-                out = self._refused(build, f"{_SERVICE}: the signed statement is refused by its content: it ")
-                self.assertNotIn(_INTERNAL, out.replace(f"failed {_INTERNAL}", ""))
+                out = self._refused(build, text)
+                self.assertNotIn(_INTERNAL, out)
+
+    def test_a_self_attested_seal_names_no_uts_test_not_judged(self) -> None:
+        """MUT-RED: the kinds of a self-attested not judged list widened."""
+        build = OneBuild()
+        _run_by_client(build.document)
+        build.statement = _as_8(_on_the_client_run(build.document))
+        build.statement["services"][0]["not_judged_tests"] = [dict(_UTS)]
+        build.published = dict(_published(build.document), run_by="client", seal_class="self_attested")
+        self._refused(build, "its tests not judged list one that is not a reference of the kind its basis names")
+
+    def test_references_are_ordered_by_their_ascii_escaped_bytes(self) -> None:
+        """A node id beyond ASCII sorts by its escaped bytes, as the signer's
+        canonical JSON writes it. MUT-RED: the order taken from UTF-8 bytes."""
+        build = OneBuild()
+        build.statement = _as_8(_on_the_compile(build.document))
+        refs = [{"kind": "suite", "module_id": _SERVICE, "node_id": f"tests/t.py::test[{c}]"} for c in ("z", "é")]
+        build.statement["services"][0].update(not_judged_tests=_ordered(refs), not_judged_count=2, grade="A")
+        self.assertEqual(build.statement["services"][0]["not_judged_tests"][0]["node_id"], "tests/t.py::test[é]")
+        self._verified(build)
 
     def test_a_refusal_never_prints_what_a_reference_holds(self) -> None:
         """MUT-RED: a refusal text that repeats the reference."""
@@ -190,12 +224,16 @@ class ASealOfStatement8(unittest.TestCase):
         out = self._refused(build, "list one that is not exactly the fields of its kind")
         self.assertNotIn("internal-node-name-not-for-print", out)
 
-    def test_the_key_of_the_ids_is_a_key_id_never_key_material(self) -> None:
-        """MUT-RED: the key id shape or the exact field set not checked."""
+    def test_the_key_of_the_ids_is_named_by_a_key_id(self) -> None:
+        """MUT-RED: the key id shape or the exact field set not checked. The
+        shape refuses what no key id can be (padding, capitals, 64 characters
+        and more); a short lowercase string is a key id by shape, so that key
+        material never travels rests on the signer, not on this check."""
         cases = {
             "no key named": lambda s: s.pop("test_id_key"),
-            "key material": lambda s: s.__setitem__("test_id_key", "a2V5LW1hdGVyaWFs" * 4 + "=="),
-            "a hex key": lambda s: s.__setitem__("test_id_key", "0" * 64 + "Z"),
+            "base64 key material": lambda s: s.__setitem__("test_id_key", "a2V5LW1hdGVyaWFs" * 4 + "=="),
+            "longer than a key id": lambda s: s.__setitem__("test_id_key", "0" * 64),
+            "capitals": lambda s: s.__setitem__("test_id_key", "Sti-dev-2026-11"),
             "a field more": lambda s: s.__setitem__("test_id_secret", "k" * 32),
         }
         for case, edit in cases.items():
@@ -206,6 +244,7 @@ class ASealOfStatement8(unittest.TestCase):
                 out = self._refused(build, "the signed statement is refused by its content: it ")
                 self.assertNotIn("a2V5LW1hdGVyaWFs", out)
                 self.assertNotIn("k" * 32, out)
+                self.assertNotIn("Sti-dev", out)
 
     def test_a_tier_not_run_declared_as_before(self) -> None:
         build = OneBuild()
@@ -215,6 +254,26 @@ class ASealOfStatement8(unittest.TestCase):
             not_judged_count=3, grade="A",
         )
         self._refused(build, "a tier not run it declares is not a module, a tier, a family and a count")
+
+    def test_a_tier_not_run_declared_otherwise(self) -> None:
+        """MUT-RED: each check of a tier not run removed in turn."""
+        tier = {"module_id": _SERVICE, "tier": "Security", "tier_category": "security", "count": 3}
+        cases = {
+            "no module": ([dict(tier, module_id="")], "does not name its module and tier"),
+            "a line break": ([dict(tier, tier="Secu\nrity")], "does not name its module and tier"),
+            "an unknown family": ([dict(tier, tier_category="other")], "names a family that is not a UTS tier family"),
+            "no count": ([dict(tier, count=0)], "has no whole count above zero"),
+            "a part count": ([dict(tier, count=1.5)], "has no whole count above zero"),
+            "twice": ([tier, dict(tier, tier_category="behavior")], "its tiers not run are not each declared once"),
+            "out of order": ([dict(tier, tier="Security"), dict(tier, tier="Behavior")],
+                             "its tiers not run are not each declared once, in order"),
+        }
+        for case, (tiers, text) in cases.items():
+            with self.subTest(case=case):
+                build = OneBuild()
+                build.statement = _as_8(_on_the_compile(build.document))
+                build.statement["services"][0].update(not_run_tiers=tiers, grade="A")
+                self._refused(build, text)
 
     def test_a_qa_run_bound_otherwise(self) -> None:
         """MUT-RED: the sealed version or its source not checked."""
@@ -271,6 +330,12 @@ class TheSealedReport(unittest.TestCase):
         report["advisory_reds"] = [dict(report["reds"][0], id=_OTHER_ID, name=_INTERNAL)]
         out = self._tampered(report, "the sealed QA run report's advisory reds are not each a test reference")
         self.assertNotIn(_INTERNAL, out)
+
+    def test_a_red_listed_twice(self) -> None:
+        """MUT-RED: the reds' once-in-order check removed (the ids would fold)."""
+        report = _sealed_report()
+        report["reds"] = _ordered([report["reds"][0], dict(report["reds"][0], category="security")])
+        self._tampered(report, "the sealed QA run report's reds are not each once, in order")
 
     def test_a_report_projected_from_another_version(self) -> None:
         report = _sealed_report()
