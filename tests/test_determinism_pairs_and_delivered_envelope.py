@@ -240,6 +240,16 @@ class ADeterminismPair(unittest.TestCase):
         )
         self.assertTrue(comparison.reproducible_identical)
 
+    def test_a_reference_state_one_document_does_not_state_is_a_difference_not_a_state(self) -> None:
+        """MUT-RED: a missing reference state switches off the attested comparison."""
+        first = _v3(compare._delivered())
+        second = _v3(compare._delivered_rerun(first))
+        del second["attested"][vf.DETERMINISM_REFERENCE]
+        comparison = vf.compare_fingerprints(first, second)
+        self.assertFalse(comparison.passed)
+        self.assertEqual(comparison.differences, ["attested.determinism_reference: recorded only in the first document"])
+        self.assertNotIn("attested", comparison.excluded)
+
     def test_attested_fields_of_one_reference_state_are_compared(self) -> None:
         first = _v3(compare._delivered())
         second = _v3(compare._delivered_rerun(first))
@@ -405,6 +415,8 @@ class TheCommandLine(unittest.TestCase):
         self.assertIn("The comparison passed: the verdict is the comparison's. NOT verified: 2 of the 2 delivered "
                       "attestations compared", result.stdout)
         self.assertNotIn("Every check above passed.", result.stdout)
+        self.assertNotIn("VERIFICATION PASSED", result.stdout)
+        self.assertIn("COMPARISON PASSED (2 of 2 delivered attestations NOT verified)", result.stdout)
 
     def test_two_signed_runs_of_one_build_compare_equal(self) -> None:
         first = _sealed(compare._delivered())
@@ -414,6 +426,7 @@ class TheCommandLine(unittest.TestCase):
                           "--keys", _keys_file(Path(tmp)))
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertIn("Each delivered attestation compared is verified.", result.stdout)
+        self.assertIn("VERIFICATION PASSED", result.stdout)
 
     def test_unsigned_attestations_that_differ_fail_by_the_comparison(self) -> None:
         first = _sealed(compare._delivered())

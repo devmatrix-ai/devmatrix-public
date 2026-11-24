@@ -1998,10 +1998,10 @@ def compare_fingerprints(fp1: dict, fp2: dict) -> Comparison:
         if table.reference else (None, None)
     )
     rules = table.rules
-    if table.reference and _canonical_or_absent(_at(fp1, table.reference)) != _canonical_or_absent(_at(fp2, table.reference)):
+    if None not in states and states[0] != states[1]:
         not_comparable = Excluded(
-            f"not comparable: {DETERMINISM_REFERENCE} differs ({states[0] or 'not stated'} vs "
-            f"{states[1] or 'not stated'}): the run's attested results depend on it"
+            f"not comparable: {DETERMINISM_REFERENCE} differs ({states[0]} vs {states[1]}): "
+            "the run's attested results depend on it"
         )
         rules = Fields({
             **rules.fields, **{key: not_comparable for key in table.attested if key in rules.fields},
@@ -2014,9 +2014,6 @@ def compare_fingerprints(fp1: dict, fp2: dict) -> Comparison:
     _walk(rules, fp1, fp2, "", out)
     return out
 
-
-def _canonical_or_absent(value: object) -> str:
-    return "\u0000absent" if value is _ABSENT else _canonical(value)
 
 
 # ---------------------------------------------------------------------------
@@ -3593,7 +3590,10 @@ def determinism_lines(comparison: Comparison) -> list[str]:
     return lines
 
 
-def exit_with_verdict(passed: bool, trusted: TrustedKeys, failed: str, held: str = "Every check above passed.") -> None:
+def exit_with_verdict(
+    passed: bool, trusted: TrustedKeys, failed: str, held: str = "Every check above passed.",
+    banner: str = "VERIFICATION PASSED",
+) -> None:
     """Print the verdict, naming the keys it was reached with, and exit: 0
     only when every check passed against production keys; NOT_PRODUCTION_EXIT,
     with the label the keys file gives, when it passed against keys of any
@@ -3610,7 +3610,7 @@ def exit_with_verdict(passed: bool, trusted: TrustedKeys, failed: str, held: str
         print(f"Every check above held against {trusted.key_class!r} keys, which are NOT production keys.")
         print(keys_line(trusted))
         sys.exit(NOT_PRODUCTION_EXIT)
-    print("VERIFICATION PASSED")
+    print(banner)
     print(held)
     print(keys_line(trusted))
     sys.exit(0)
@@ -3835,7 +3835,7 @@ Examples:
             print("Use --spec and/or --output to verify hashes.")
             print("Use --compare to compare two fingerprints.")
 
-    held = "Every check above passed."
+    held, banner = "Every check above passed.", "VERIFICATION PASSED"
     if envelope_notes:
         unverified = sum(note.startswith("NOT verified") for note in envelope_notes)
         held = (
@@ -3843,7 +3843,9 @@ Examples:
             + (f"NOT verified: {unverified} of the {len(envelope_notes)} delivered attestations compared "
                "(see [NOTE] above)." if unverified else "Each delivered attestation compared is verified.")
         )
-    exit_with_verdict(all_passed, trusted, "At least one check above failed: see the [FAIL] lines.", held)
+        if unverified:
+            banner = f"COMPARISON PASSED ({unverified} of {len(envelope_notes)} delivered attestations NOT verified)"
+    exit_with_verdict(all_passed, trusted, "At least one check above failed: see the [FAIL] lines.", held, banner)
 
 
 if __name__ == "__main__":
