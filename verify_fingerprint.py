@@ -3647,7 +3647,7 @@ def _sealed_reds_problem(report: dict, failed: list) -> str | None:
     for what, rows in lists.items():
         if not (isinstance(rows, list) and all(
             isinstance(row, dict) and set(row) == SEALED_RED_FIELDS
-            and all(isinstance(row[f], str) and row[f] for f in SEALED_RED_FIELDS)
+            and all(isinstance(row[f], str) and row[f] and row[f].isprintable() for f in SEALED_RED_FIELDS)
             and row["tier_category"] in UTS_FAMILIES and _TEST_ID.fullmatch(row["id"])
             for row in rows
         )):

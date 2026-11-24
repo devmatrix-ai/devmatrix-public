@@ -583,6 +583,20 @@
         "unknown_version"
       ],
       "seal": "v9_unknown_version/seal"
+    },
+    {
+      "downloads": {
+        "app": "v8_qa_run_sealed_red_not_printable/downloads/app.json"
+      },
+      "evidence": "v8_qa_run_sealed_red_not_printable/evidence",
+      "expect": "FAILED",
+      "id": "v8_qa_run_sealed_red_not_printable",
+      "key_class": "fixture",
+      "keys": "keys.fixture.json",
+      "reason_classes": [
+        "evidence_tampered"
+      ],
+      "seal": "v8_qa_run_sealed_red_not_printable/seal"
     }
   ]
 }

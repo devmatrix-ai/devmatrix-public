@@ -16,7 +16,7 @@ VECTORS = ROOT / "conformance" / "seal-verifier-vectors"
 VECTORS_SCHEMA = "seal-verifier-vectors/2"
 #: sha256 over the set's files, as ``PIN.sha256`` states it: one line per
 #: file, ``<sha256>  <path>``, sorted by path, PIN.sha256 itself excluded.
-PINNED_SHA256 = "5dda83cbdc658ad287fe60c4a1d0c5bdcb23d5c1d8b6766de1aec55826143c04"
+PINNED_SHA256 = "f61aa65236526bd8322b791cfe8dcd3730913be485e91c59d3489972ddb4f3b9"
 #: The bundled verdicts of a run with a keys file, and of one without.
 VERDICTS = frozenset({"VERIFIED", "FAILED"})
 VERDICTS_WITHOUT_KEYS = frozenset({"CONSISTENT_ORIGIN_NOT_CHECKED", "FAILED"})
