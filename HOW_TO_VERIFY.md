@@ -292,8 +292,8 @@ is decided by the reproducible block alone. A delivered attestation
 (`fingerprint-attestation/2` or `/3`) checked with `-f` is checked against its
 closed table, its reproducible digest and its own Ed25519 signature by a
 published production `evidence-signing` key; compared with `--compare`, the
-comparison decides and each document's signature is stated apart, and when one
-is not verified the verdict reads `COMPARISON PASSED (N of M delivered
+comparison decides and each document's signature is stated apart (an unsigned
+one only with `--allow-unsigned`), and when one is not verified the verdict reads `COMPARISON PASSED (N of M delivered
 attestations NOT verified)`.
 
 ### Expected output

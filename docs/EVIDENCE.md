@@ -118,8 +118,9 @@ was made, and without the sections that record the build's history
 `convergence_proof`, `learning_impact`, `learning_snapshot`,
 `build_identity`), at any depth, signed with Ed25519 by a published production `evidence-signing`
 key. Compared with `--compare`, the comparison decides the verdict, and each
-document's signature is stated apart: one that is unsigned or does not verify
-is printed as `[NOTE] ... NOT verified`, never as verified, and the verdict line
+document's signature is stated apart: an unsigned one is compared only with
+`--allow-unsigned` (without it the run fails, naming it), and one that is
+unsigned or does not verify is printed as `[NOTE] ... NOT verified`, never as verified, and the verdict line
 then reads `COMPARISON PASSED (N of M delivered attestations NOT verified)`,
 not `VERIFICATION PASSED`.
 

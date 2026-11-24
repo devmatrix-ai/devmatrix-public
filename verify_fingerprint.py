@@ -3564,6 +3564,23 @@ def keys_line(trusted: TrustedKeys) -> str:
     return f"Keys: {trusted.source} ({trusted.key_class} keys)"
 
 
+def compared_envelope(
+    label: str, evidence: dict, keys: list[dict], accept: str, allow_unsigned: bool, notes: list[str],
+) -> bool:
+    """Print the envelope of a delivered attestation that is being compared,
+    apart from the comparison, and record it in ``notes``. An unsigned one is
+    compared only with ``allow_unsigned``: without it, it fails by name.
+    Whether it passes otherwise is the comparison's to say."""
+    suffix = f"  ({label})" if label else ""
+    verified, message = check_delivered_attestation(evidence, keys, accept)
+    if "signature" not in evidence and not allow_unsigned:
+        print(f"[FAIL] delivered attestation: {message}; --allow-unsigned compares an unsigned attestation{suffix}")
+        return False
+    notes.append(message if verified else f"NOT verified: {message}")
+    print(f"{'[OK]' if verified else '[NOTE]'} delivered attestation: {notes[-1]}{suffix}")
+    return True
+
+
 def determinism_lines(comparison: Comparison) -> list[str]:
     """The determinism verdict of a comparison, from the reproducible block
     alone, and what a difference in the attested fields means."""
@@ -3742,18 +3759,16 @@ Examples:
     print_identity(evidence)
     print()
 
-    delivered = [is_delivered_attestation(signed_payload(evidence))]
     #: A delivered attestation compared with another: the comparison decides,
     #: and the envelope of each is stated apart.
     envelope_notes: list[str] = []
-    if delivered[0]:
-        verified, message = check_delivered_attestation(evidence, keys, accept)
+    if is_delivered_attestation(signed_payload(evidence)):
         if args.compare:
-            envelope_notes.append(message if verified else f"NOT verified: {message}")
-            print(f"{'[OK]' if verified else '[NOTE]'} delivered attestation: {envelope_notes[-1]}")
+            all_passed = compared_envelope("", evidence, keys, accept, args.allow_unsigned, envelope_notes)
         else:
+            verified, message = check_delivered_attestation(evidence, keys, accept)
             print(f"{'[OK]' if verified else '[FAIL]'} delivered attestation: {message}")
-        all_passed = verified or bool(args.compare)
+            all_passed = verified
     else:
         all_passed = check_signature(
             "", evidence, keys, args.allow_unsigned, accept
@@ -3771,9 +3786,10 @@ Examples:
         print(f"Comparing with: {args.compare}")
         print_identity(evidence2)
         if is_delivered_attestation(signed_payload(evidence2)):
-            verified, message = check_delivered_attestation(evidence2, keys, accept)
-            envelope_notes.append(message if verified else f"NOT verified: {message}")
-            print(f"{'[OK]' if verified else '[NOTE]'} delivered attestation: {envelope_notes[-1]}  ({args.compare})")
+            if not compared_envelope(
+                str(args.compare), evidence2, keys, accept, args.allow_unsigned, envelope_notes,
+            ):
+                all_passed = False
         else:
             if not check_signature(
                 str(args.compare), evidence2, keys, args.allow_unsigned, accept

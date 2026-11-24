@@ -402,13 +402,27 @@ class TheCommandLine(unittest.TestCase):
         self.assertEqual(result.returncode, 1, result.stdout)
         self.assertIn("[FAIL] delivered attestation: fingerprint-attestation/2 is UNSIGNED", result.stdout)
 
+    def test_an_unsigned_attestation_is_compared_only_when_asked(self) -> None:
+        """MUT-RED: an unsigned delivered attestation is compared without --allow-unsigned."""
+        first = _sealed(compare._delivered())
+        second = compare._delivered_rerun(first)
+        del second["signature"]
+        with tempfile.TemporaryDirectory() as tmp:
+            result = _run("-f", _write(Path(tmp), "a.json", first), "--compare", _write(Path(tmp), "b.json", second),
+                          "--keys", _keys_file(Path(tmp)))
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("[OK] delivered attestation: fingerprint-attestation/2, Ed25519", result.stdout)
+        self.assertIn("[FAIL] delivered attestation: fingerprint-attestation/2 is UNSIGNED: nothing says DevMatrix "
+                      "made it; --allow-unsigned compares an unsigned attestation", result.stdout)
+        self.assertIn("VERIFICATION FAILED", result.stdout)
+
     def test_two_unsigned_attestations_that_compare_equal_pass_and_say_they_are_unsigned(self) -> None:
         first = _sealed(compare._delivered())
         second = compare._delivered_rerun(first)
         del first["signature"], second["signature"]
         with tempfile.TemporaryDirectory() as tmp:
             result = _run("-f", _write(Path(tmp), "a.json", first), "--compare", _write(Path(tmp), "b.json", second),
-                          "--keys", _keys_file(Path(tmp)))
+                          "--keys", _keys_file(Path(tmp)), "--allow-unsigned")
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertEqual(result.stdout.count("[NOTE] delivered attestation: NOT verified: fingerprint-attestation/2 is UNSIGNED"), 2)
         self.assertIn("[OK] determinism: the reproducible block is identical", result.stdout)
@@ -435,7 +449,7 @@ class TheCommandLine(unittest.TestCase):
         del first["signature"], second["signature"]
         with tempfile.TemporaryDirectory() as tmp:
             result = _run("-f", _write(Path(tmp), "a.json", first), "--compare", _write(Path(tmp), "b.json", second),
-                          "--keys", _keys_file(Path(tmp)))
+                          "--keys", _keys_file(Path(tmp)), "--allow-unsigned")
         self.assertEqual(result.returncode, 1, result.stdout)
         self.assertIn("[FAIL] attested.not_tested_count: DIFFERENT (0 vs 5)", result.stdout)
         self.assertIn("[NOTE] attested fields differ; these documents predate the reference state", result.stdout)

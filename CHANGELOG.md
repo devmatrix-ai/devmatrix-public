@@ -46,7 +46,8 @@
   reproducible digest and its Ed25519 signature by a published production
   `evidence-signing` key; it was refused as an unknown attestation schema.
   With `--compare`, the comparison decides and each document's signature is
-  stated apart; an unsigned one is said to be unsigned.
+  stated apart; an unsigned one is compared only with `--allow-unsigned`
+  and is said to be unsigned.
 - **Python 3.10.** The guide said 3.9; the verifier has needed 3.10 since its
   type annotations were written.
 
