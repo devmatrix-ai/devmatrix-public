@@ -82,8 +82,10 @@ its job and its own identifiers, the signature over a delivered attestation,
 and a published attestation's `attestation_sha256` (the digest of the whole
 delivered file, which carries the job). Each is printed as `[--] <path>: not
 compared (<reason>)`. A delivered `fingerprint-attestation/2` is compared by
-its own table; the paths it lists as not covered are read with each run's job
-in place of the job that names them.
+its own table. Of the paths it lists as not covered, only the spec copy a run
+files under its job (`specification/<job_id>/<module>`) is read without that
+job; every other path is compared as written, and a path listed twice counts
+twice.
 
 If any compared value differs, the two builds are not the same and the
 difference is named by its path. A value recorded by only one of the two

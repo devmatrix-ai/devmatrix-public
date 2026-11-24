@@ -1484,13 +1484,15 @@ class OrderedList:
 
 
 @dataclass(frozen=True)
-class JobScopedSet:
-    """A list of strings compared as a set, each read with its own
-    document's ``job_id`` in place of the job: a path the run names by its
-    job (``specification/<job_id>/<module>.dmx``) is the same file in both."""
+class JobScopedPaths:
+    """A list of paths compared as a multiset (a path listed twice counts
+    twice). The one path a run names by its job, ``specification/<job_id>/
+    <module>``, is read with a placeholder in place of that document's own
+    job, which must be a job identifier; nothing else is rewritten, and a
+    path that already holds the placeholder fails."""
 
 
-FieldRule = Compared | Excluded | Fields | Named | KeyedList | OrderedList | JobScopedSet
+FieldRule = Compared | Excluded | Fields | Named | KeyedList | OrderedList | JobScopedPaths
 
 COMPARED = Compared()
 _RUN_JOB = Excluded("the job that published this run: every run is its own job")
@@ -1502,6 +1504,9 @@ _WHOLE_DELIVERED_FILE = Excluded(
 )
 _SIGNATURE_OF_THE_RUN = Excluded(
     "the signature over this run's document, which names its job: it differs between every two runs"
+)
+_SIGNED_CONTENT_OF_THE_RUN = Excluded(
+    "the digest of this run's signed content, which names its job: it differs between every two runs"
 )
 JOB_PLACEHOLDER = "<job>"
 
@@ -1564,12 +1569,12 @@ _DELIVERED_ATTESTATION_RULES: "dict[str, FieldRule]" = {
     **_all_compared(("schema", "reproducible_sha256", "certificate_fingerprint")),
     "job_id": _RUN_JOB,
     "legacy_links": Fields(_all_compared(("gate_results_hash",))),
-    "coverage": Fields({**_all_compared(("covered", "delivered_files")), "not_covered": JobScopedSet()}),
+    "coverage": Fields({**_all_compared(("covered", "delivered_files")), "not_covered": JobScopedPaths()}),
     "signature": Fields({
         **_all_compared(("algorithm", "key_id", "verify_key")),
         "signed_fields": OrderedList(COMPARED),
         "signed_at": _RUN_TIME,
-        "content_hash": _SIGNATURE_OF_THE_RUN,
+        "content_hash": _SIGNED_CONTENT_OF_THE_RUN,
         "signature": _SIGNATURE_OF_THE_RUN,
     }),
     "reproducible": Fields({
@@ -1716,10 +1721,29 @@ def _keyed(items: list, key: str, path: str, which: str, out: Comparison) -> "di
     return by_key
 
 
-def _job_scoped(items: object, job: str) -> "set[str] | None":
+#: The directory a run names by its job: ``specification/<job_id>/<module>``.
+JOB_SCOPED_DIRECTORY = "specification"
+
+
+def _job_scoped(items: object, job: str, path: str, which: str, out: Comparison) -> "dict[str, int] | None":
+    """How many times each path is listed, the run's own job read as the
+    placeholder; ``None`` (a difference is recorded) when the list is not of
+    strings or a path already holds the placeholder."""
     if not isinstance(items, list) or not all(isinstance(item, str) for item in items):
+        out.differences.append(f"{path}: is not a list of paths in the {which} document")
         return None
-    return {item.replace(job, JOB_PLACEHOLDER) if job else item for item in items}
+    is_job = _JOB_ID.fullmatch(job) is not None
+    counts: "dict[str, int]" = {}
+    for item in items:
+        if JOB_PLACEHOLDER in item:
+            out.differences.append(f"{path}: {item!r} in the {which} document holds {JOB_PLACEHOLDER!r}")
+            return None
+        segments = item.split("/")
+        if is_job and len(segments) == 3 and segments[0] == JOB_SCOPED_DIRECTORY and segments[1] == job:
+            segments[1] = JOB_PLACEHOLDER
+        key = "/".join(segments)
+        counts[key] = counts.get(key, 0) + 1
+    return counts
 
 
 def _walk(rule: FieldRule, first: object, second: object, path: str, out: Comparison) -> None:
@@ -1730,18 +1754,21 @@ def _walk(rule: FieldRule, first: object, second: object, path: str, out: Compar
         where = "first" if second is _ABSENT else "second"
         out.differences.append(f"{path}: recorded only in the {where} document")
         return
-    if isinstance(rule, JobScopedSet):
-        scoped_first, scoped_second = _job_scoped(first, out.jobs[0]), _job_scoped(second, out.jobs[1])
+    if isinstance(rule, JobScopedPaths):
+        scoped_first = _job_scoped(first, out.jobs[0], path, "first", out)
+        scoped_second = _job_scoped(second, out.jobs[1], path, "second", out)
         if scoped_first is None or scoped_second is None:
-            out.differences.append(f"{path}: is not a list of strings in both documents")
             return
-        for item in sorted(scoped_first | scoped_second):
+        for item in sorted(set(scoped_first) | set(scoped_second)):
             out.compared += 1
-            if item in scoped_first and item in scoped_second:
+            times_first, times_second = scoped_first.get(item, 0), scoped_second.get(item, 0)
+            if times_first == times_second:
                 out.identical += 1
-            else:
-                where = "first" if item in scoped_first else "second"
+            elif not times_second or not times_first:
+                where = "first" if times_first else "second"
                 out.differences.append(f"{path}: {item!r} recorded only in the {where} document")
+            else:
+                out.differences.append(f"{path}: {item!r} listed {times_first} vs {times_second} times")
         return
     container = dict if isinstance(rule, (Fields, Named)) else list if isinstance(rule, (KeyedList, OrderedList)) else None
     walk_first = container is not None and isinstance(first, container)

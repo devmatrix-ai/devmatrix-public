@@ -475,6 +475,56 @@ class TheComparison(unittest.TestCase):
             ["coverage.not_covered: 'services/app/extra.txt' recorded only in the second document"],
         )
 
+    def test_only_the_job_directory_of_the_run_is_read_without_its_job(self) -> None:
+        """MUT-RED: the job is replaced anywhere in a path, or for a value
+        that is not a job identifier, so different paths compare identical."""
+        first = _delivered()
+        second = _delivered_rerun(first)
+        cases = {
+            "the job elsewhere in a path": (f"services/{first['job_id']}/x.txt", f"services/{second['job_id']}/x.txt"),
+            "another module under the job": (f"specification/{first['job_id']}/app.dmx",
+                                              f"specification/{second['job_id']}/other.dmx"),
+        }
+        for name, (path_first, path_second) in cases.items():
+            with self.subTest(name):
+                a, b = copy.deepcopy(first), copy.deepcopy(second)
+                a["coverage"]["not_covered"] = [path_first]
+                b["coverage"]["not_covered"] = [path_second]
+                self.assertFalse(vf.compare_fingerprints(a, b).passed)
+        short_first, short_second = copy.deepcopy(first), copy.deepcopy(second)
+        short_first["job_id"], short_second["job_id"] = "s", "z"
+        short_first["coverage"]["not_covered"] = ["services/app/README.md"]
+        short_second["coverage"]["not_covered"] = ["zervicez/app/README.md"]
+        self.assertFalse(vf.compare_fingerprints(short_first, short_second).passed)
+        not_a_job_first, not_a_job_second = copy.deepcopy(first), copy.deepcopy(second)
+        not_a_job_first["job_id"], not_a_job_second["job_id"] = "app", "other"
+        not_a_job_first["coverage"]["not_covered"] = ["specification/app/x.dmx"]
+        not_a_job_second["coverage"]["not_covered"] = ["specification/other/x.dmx"]
+        self.assertFalse(vf.compare_fingerprints(not_a_job_first, not_a_job_second).passed)
+
+    def test_a_path_holding_the_placeholder_fails(self) -> None:
+        """MUT-RED: a path written with the placeholder matches the other
+        run's job path."""
+        first = _delivered()
+        second = _delivered_rerun(first)
+        first["coverage"]["not_covered"] = [
+            f"specification/{vf.JOB_PLACEHOLDER}/app.dmx" if p.startswith("specification/") else p
+            for p in first["coverage"]["not_covered"]
+        ]
+        comparison = vf.compare_fingerprints(first, second)
+        self.assertFalse(comparison.passed)
+        self.assertIn("holds '<job>'", " ".join(comparison.differences))
+
+    def test_a_path_listed_twice_is_not_the_same_list(self) -> None:
+        """MUT-RED: the paths are compared as a set, dropping repeats."""
+        first = _delivered()
+        second = _delivered_rerun(first)
+        second["coverage"]["not_covered"] = [*second["coverage"]["not_covered"], "services/app/README.md"]
+        self.assertEqual(
+            vf.compare_fingerprints(first, second).differences,
+            ["coverage.not_covered: 'services/app/README.md' listed 1 vs 2 times"],
+        )
+
     def test_only_run_fields_are_excluded(self) -> None:
         def excluded(rule: vf.FieldRule, path: str) -> set[str]:
             if isinstance(rule, vf.Excluded):
