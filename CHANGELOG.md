@@ -17,8 +17,11 @@
 - **`--compare` compares every field of the schema, lists included.** Two
   documents are compared by a table declared for their schema: every field is
   compared or named as not compared with its reason (only when the run
-  happened, its job and its own identifiers), modules are matched by name,
-  the Merkle leaves in order, and every difference is named by its path. A
+  happened, its job and its own identifiers, the signature over a delivered
+  attestation, and `attestation_sha256`, the digest of the whole delivered
+  file, which carries the job), modules are matched by name,
+  the Merkle leaves in order, and every difference is named by its path. The
+  delivered `fingerprint-attestation/2` has its own table. A
   field the table does not know, two schemas, a schema with no table (`update
   the verifier`) or nothing compared fails. Earlier versions compared only
   the fields whose name ends in `_hash` outside lists — on a published

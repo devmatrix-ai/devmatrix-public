@@ -1426,6 +1426,10 @@ def signed_payload(evidence: dict) -> dict:
     return payload if isinstance(payload, dict) else evidence
 
 
+#: The fingerprint attestation a build's download carries.
+DELIVERED_ATTESTATION_SCHEMA = "fingerprint-attestation/2"
+
+
 # ---------------------------------------------------------------------------
 # Comparing two documents. Each schema this verifier compares has a declared
 # table: every field it may carry is compared, or excluded with the reason it
@@ -1479,12 +1483,27 @@ class OrderedList:
     item: "FieldRule"
 
 
-FieldRule = Compared | Excluded | Fields | Named | KeyedList | OrderedList
+@dataclass(frozen=True)
+class JobScopedSet:
+    """A list of strings compared as a set, each read with its own
+    document's ``job_id`` in place of the job: a path the run names by its
+    job (``specification/<job_id>/<module>.dmx``) is the same file in both."""
+
+
+FieldRule = Compared | Excluded | Fields | Named | KeyedList | OrderedList | JobScopedSet
 
 COMPARED = Compared()
 _RUN_JOB = Excluded("the job that published this run: every run is its own job")
 _RUN_TIME = Excluded("when this run happened")
 _RUN_ID = Excluded("this run's own identifier")
+_WHOLE_DELIVERED_FILE = Excluded(
+    "the digest of the whole delivered file, which carries this run's job, its signature and paths "
+    "named by the job: it differs between every two runs"
+)
+_SIGNATURE_OF_THE_RUN = Excluded(
+    "the signature over this run's document, which names its job: it differs between every two runs"
+)
+JOB_PLACEHOLDER = "<job>"
 
 
 def _all_compared(names: "tuple[str, ...] | Mapping[str, object]") -> "dict[str, FieldRule]":
@@ -1496,6 +1515,7 @@ _DETERMINISM_RULE = KeyedList("module", Fields(_all_compared(("module", "status"
 _ATTESTATION_V1_RULES: "dict[str, FieldRule]" = {
     **_all_compared(_V1_FIELDS),
     "job_id": _RUN_JOB,
+    "attestation_sha256": _WHOLE_DELIVERED_FILE,
     "identity": Named(COMPARED),
     "merkle": Fields({
         "nested_root": COMPARED,
@@ -1535,6 +1555,42 @@ _PUBLISHED_FINGERPRINT_V2_RULES: "dict[str, FieldRule]" = {
     "complexity_measurement": Fields({
         **_all_compared(COMPLEXITY_KEYS),
         "entitlement_reasons": OrderedList(COMPARED),
+    }),
+}
+#: The fingerprint attestation a build's download carries. Two runs of one
+#: build differ by construction in its job, the signature over it, and the
+#: job named in the paths it does not cover.
+_DELIVERED_ATTESTATION_RULES: "dict[str, FieldRule]" = {
+    **_all_compared(("schema", "reproducible_sha256", "certificate_fingerprint")),
+    "job_id": _RUN_JOB,
+    "legacy_links": Fields(_all_compared(("gate_results_hash",))),
+    "coverage": Fields({**_all_compared(("covered", "delivered_files")), "not_covered": JobScopedSet()}),
+    "signature": Fields({
+        **_all_compared(("algorithm", "key_id", "verify_key")),
+        "signed_fields": OrderedList(COMPARED),
+        "signed_at": _RUN_TIME,
+        "content_hash": _SIGNATURE_OF_THE_RUN,
+        "signature": _SIGNATURE_OF_THE_RUN,
+    }),
+    "reproducible": Fields({
+        "identity": Fields({**_all_compared(IDENTITY_LINKS_V3), SERVICE_SPEC_HASHES: Named(COMPARED)}),
+        "merkle": Fields({
+            **_all_compared(("algorithm", "leaf_formula", "emit_root", "nested_root")),
+            "sub_roots": Fields(_all_compared(SUB_ROOT_NAMES)),
+            "emit_leaves": OrderedList(Fields(_all_compared(("leaf_sha256", "path")))),
+        }),
+        "modules": _MODULES_RULE,
+    }),
+    "attested": Fields({
+        **_all_compared(("not_tested_count", "terminal_gate_verdict_hash")),
+        "customer_checks": Fields({
+            **_all_compared(("schema_id", "sealed_schema_id", "status", "scopes", "totals", "tests_absent_reason")),
+            "tests": Fields(_all_compared(PRE_NDA_TEST_KEYS)),
+        }),
+        "modules": KeyedList("module", Fields(_all_compared(("module", "status")))),
+        "platform_verdict": Fields(_all_compared((
+            "all_gates_passed", "outcome", "terminal_success", "uts_disposition", "uts_not_run_reason",
+        ))),
     }),
 }
 #: The build fingerprints published before documents named their schema.
@@ -1590,6 +1646,7 @@ COMPARISON_TABLES: "Mapping[str, Fields]" = {
     ATTESTATION_SCHEMA_V2: Fields(_ATTESTATION_V2_RULES),
     ATTESTATION_SCHEMA_V3: Fields(_ATTESTATION_V3_RULES),
     PUBLISHED_FINGERPRINT_SCHEMA_V2: Fields(_PUBLISHED_FINGERPRINT_V2_RULES),
+    DELIVERED_ATTESTATION_SCHEMA: Fields(_DELIVERED_ATTESTATION_RULES),
     UNVERSIONED_FINGERPRINT: Fields(_UNVERSIONED_FINGERPRINT_RULES),
 }
 UPDATE_THE_VERIFIER = "update the verifier"
@@ -1619,6 +1676,7 @@ class Comparison:
     document carries, with its reason."""
 
     schema: str
+    jobs: "tuple[str, str]" = ("", "")
     compared: int = 0
     identical: int = 0
     differences: "list[str]" = field(default_factory=list)
@@ -1658,6 +1716,12 @@ def _keyed(items: list, key: str, path: str, which: str, out: Comparison) -> "di
     return by_key
 
 
+def _job_scoped(items: object, job: str) -> "set[str] | None":
+    if not isinstance(items, list) or not all(isinstance(item, str) for item in items):
+        return None
+    return {item.replace(job, JOB_PLACEHOLDER) if job else item for item in items}
+
+
 def _walk(rule: FieldRule, first: object, second: object, path: str, out: Comparison) -> None:
     if isinstance(rule, Excluded):
         out.excluded[path] = rule.reason
@@ -1665,6 +1729,19 @@ def _walk(rule: FieldRule, first: object, second: object, path: str, out: Compar
     if first is _ABSENT or second is _ABSENT:
         where = "first" if second is _ABSENT else "second"
         out.differences.append(f"{path}: recorded only in the {where} document")
+        return
+    if isinstance(rule, JobScopedSet):
+        scoped_first, scoped_second = _job_scoped(first, out.jobs[0]), _job_scoped(second, out.jobs[1])
+        if scoped_first is None or scoped_second is None:
+            out.differences.append(f"{path}: is not a list of strings in both documents")
+            return
+        for item in sorted(scoped_first | scoped_second):
+            out.compared += 1
+            if item in scoped_first and item in scoped_second:
+                out.identical += 1
+            else:
+                where = "first" if item in scoped_first else "second"
+                out.differences.append(f"{path}: {item!r} recorded only in the {where} document")
         return
     container = dict if isinstance(rule, (Fields, Named)) else list if isinstance(rule, (KeyedList, OrderedList)) else None
     walk_first = container is not None and isinstance(first, container)
@@ -1723,7 +1800,8 @@ def compare_fingerprints(fp1: dict, fp2: dict) -> Comparison:
         raise ComparisonRefused(
             f"the two documents are of different schemas ({first}, {second}): they record different things"
         )
-    out = Comparison(schema=first)
+    jobs = tuple(job if isinstance(job, str) else "" for job in (fp1.get("job_id"), fp2.get("job_id")))
+    out = Comparison(schema=first, jobs=(jobs[0], jobs[1]))
     _walk(COMPARISON_TABLES[first], fp1, fp2, "", out)
     return out
 
@@ -1735,8 +1813,6 @@ def compare_fingerprints(fp1: dict, fp2: dict) -> Comparison:
 # file's bytes.
 # ---------------------------------------------------------------------------
 
-#: The fingerprint attestation a build's download carries.
-DELIVERED_ATTESTATION_SCHEMA = "fingerprint-attestation/2"
 #: The delivered attestation format before a seal could bind one: it states
 #: no platform verdict, so who ran the build's tests cannot be read from it.
 DELIVERED_ATTESTATION_SCHEMA_V1 = "fingerprint-attestation/1"

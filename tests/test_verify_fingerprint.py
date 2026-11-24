@@ -259,6 +259,71 @@ def _payload(name: str) -> dict:
     return vf.signed_payload(_evidence(name))
 
 
+def _delivered() -> dict:
+    """A delivered fingerprint-attestation/2 in every field its schema
+    carries, with a path not covered that names its job, as builds deliver it."""
+    job = "0f0e0d0c-0b0a-4909-8807-060504030201"
+    digest = "sha256:" + "a" * 64
+    tests = {key: 0 for key in vf.PRE_NDA_TEST_KEYS}
+    tests.update(ran=True, total=3, passed=3, planned=3, not_reached=0, pass_rate=1.0)
+    return {
+        "schema": vf.DELIVERED_ATTESTATION_SCHEMA,
+        "job_id": job,
+        "reproducible_sha256": digest,
+        "certificate_fingerprint": "sha256:" + "c" * 64,
+        "legacy_links": {"gate_results_hash": "d" * 64},
+        "coverage": {
+            "covered": 2, "delivered_files": 3,
+            "not_covered": [f"specification/{job}/app.dmx", "services/app/README.md"],
+        },
+        "signature": {
+            "algorithm": "Ed25519", "key_id": "dm-prod-2026-01", "verify_key": "e" * 44,
+            "signed_fields": ["attested", "coverage", "job_id", "reproducible", "schema"],
+            "signed_at": "2026-11-24T09:00:00+00:00", "content_hash": "f" * 64, "signature": "g" * 88,
+        },
+        "reproducible": {
+            "identity": {
+                **{name: digest for name in vf.IDENTITY_LINKS_V3},
+                vf.SERVICE_SPEC_HASHES: {"app": "b" * 64},
+            },
+            "merkle": {
+                "algorithm": "sha256", "leaf_formula": "sha256(path || content)",
+                "emit_root": "1" * 64, "nested_root": digest,
+                "sub_roots": {name: "2" * 64 for name in vf.SUB_ROOT_NAMES},
+                "emit_leaves": [
+                    {"leaf_sha256": "3" * 64, "path": "services/app/main.py"},
+                    {"leaf_sha256": "4" * 64, "path": "services/app/models.py"},
+                ],
+            },
+            "modules": [{"module": "app", "emission_sha256": "5" * 64}],
+        },
+        "attested": {
+            "not_tested_count": 0, "terminal_gate_verdict_hash": "6" * 64,
+            "customer_checks": {
+                "schema_id": "dmx_customer_checks/v9", "sealed_schema_id": "dmx_customer_checks/v9",
+                "status": "projected", "scopes": [], "totals": {"passed": 3}, "tests": tests,
+                "tests_absent_reason": None,
+            },
+            "modules": [{"module": "app", "status": "VERIFIED"}],
+            "platform_verdict": {
+                "all_gates_passed": True, "outcome": "succeeded", "terminal_success": True,
+                "uts_disposition": "PASSED", "uts_not_run_reason": None,
+            },
+        },
+    }
+
+
+def _delivered_rerun(first: dict) -> dict:
+    """Another run of the same build: its own job, signature and signing time."""
+    second = copy.deepcopy(first)
+    job = "11111111-2222-4333-8444-555555555555"
+    second["job_id"] = job
+    second["coverage"]["not_covered"] = [p.replace(first["job_id"], job) for p in first["coverage"]["not_covered"]]
+    second["signature"] = dict(first["signature"], signed_at="2027-01-01T00:00:00+00:00",
+                               content_hash="0" * 64, signature="AAAA")
+    return second
+
+
 def _attestation() -> dict:
     return copy.deepcopy(_payload(ATTESTATION_PAIR[0]))
 
@@ -378,6 +443,38 @@ class TheComparison(unittest.TestCase):
             with self.subTest(schema=schema):
                 self.assertEqual(set(vf.COMPARISON_TABLES[schema].fields), fields)
 
+    def test_a_delivered_attestation_compares_with_another_run_of_its_build(self) -> None:
+        """Two runs of one build: the job, the signature over each run and
+        the job named in the paths not covered differ; nothing else."""
+        first = _delivered()
+        second = _delivered_rerun(first)
+        comparison = vf.compare_fingerprints(first, second)
+        self.assertEqual(comparison.schema, vf.DELIVERED_ATTESTATION_SCHEMA)
+        self.assertTrue(comparison.passed, comparison.differences)
+        self.assertEqual(
+            set(comparison.excluded),
+            {"job_id", "signature.signed_at", "signature.content_hash", "signature.signature"},
+        )
+
+    def test_a_delivered_attestation_differing_in_one_emitted_leaf_fails_by_its_path(self) -> None:
+        """MUT-RED: the delivered table skips the Merkle leaves."""
+        first = _delivered()
+        second = _delivered_rerun(first)
+        second["reproducible"]["merkle"]["emit_leaves"][0]["leaf_sha256"] = "0" * 64
+        paths = [d.split(":")[0] for d in vf.compare_fingerprints(first, second).differences]
+        self.assertEqual(paths, ["reproducible.merkle.emit_leaves[0].leaf_sha256"])
+
+    def test_a_path_not_covered_is_read_without_the_job_that_names_it(self) -> None:
+        """MUT-RED: the paths are compared raw, so every two runs differ."""
+        first = _delivered()
+        second = _delivered_rerun(first)
+        self.assertTrue(vf.compare_fingerprints(first, second).passed)
+        second["coverage"]["not_covered"] = [*second["coverage"]["not_covered"], "services/app/extra.txt"]
+        self.assertEqual(
+            vf.compare_fingerprints(first, second).differences,
+            ["coverage.not_covered: 'services/app/extra.txt' recorded only in the second document"],
+        )
+
     def test_only_run_fields_are_excluded(self) -> None:
         def excluded(rule: vf.FieldRule, path: str) -> set[str]:
             if isinstance(rule, vf.Excluded):
@@ -392,10 +489,13 @@ class TheComparison(unittest.TestCase):
 
         found = {schema: excluded(table, "") for schema, table in vf.COMPARISON_TABLES.items()}
         self.assertEqual(found, {
-            vf.ATTESTATION_SCHEMA_V1: {"job_id"},
-            vf.ATTESTATION_SCHEMA_V2: {"job_id"},
-            vf.ATTESTATION_SCHEMA_V3: {"job_id"},
+            vf.ATTESTATION_SCHEMA_V1: {"job_id", "attestation_sha256"},
+            vf.ATTESTATION_SCHEMA_V2: {"job_id", "attestation_sha256"},
+            vf.ATTESTATION_SCHEMA_V3: {"job_id", "attestation_sha256"},
             vf.PUBLISHED_FINGERPRINT_SCHEMA_V2: {"job_id"},
+            vf.DELIVERED_ATTESTATION_SCHEMA: {
+                "job_id", "signature.signed_at", "signature.content_hash", "signature.signature",
+            },
             vf.UNVERSIONED_FINGERPRINT: RUN_FIELDS | {"created_at", "run_id", "build_identity.resolved_at"},
         })
 

@@ -77,9 +77,13 @@ Every field the schema carries is compared at any depth, lists included: a
 published attestation's modules are matched by name and each module's
 emission digest is compared, and the leaves of its Merkle commitment are
 compared in order, since their order is part of the commitment. The only
-fields not compared are the ones that name the run itself (when it happened,
-its job and its own identifiers); each is printed as `[--] <path>: not
-compared (<reason>)`.
+fields not compared are the ones that name the run itself: when it happened,
+its job and its own identifiers, the signature over a delivered attestation,
+and a published attestation's `attestation_sha256` (the digest of the whole
+delivered file, which carries the job). Each is printed as `[--] <path>: not
+compared (<reason>)`. A delivered `fingerprint-attestation/2` is compared by
+its own table; the paths it lists as not covered are read with each run's job
+in place of the job that names them.
 
 If any compared value differs, the two builds are not the same and the
 difference is named by its path. A value recorded by only one of the two
