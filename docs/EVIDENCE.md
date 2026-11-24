@@ -94,6 +94,30 @@ different schemas fail, a schema with no table fails with `update the
 verifier`, and comparing no value at all fails: nothing is compared in part,
 and an absent value is never reported as identical.
 
+Two builds are compared only as a determinism pair: they must share their
+identity inputs (the specification, the compiler toolchain and, from
+`published-attestation/4` and `fingerprint-attestation/3` on, the runtime
+key). Otherwise the comparison is refused with `not a determinism pair`,
+naming every input that differs. Whether two builds reproduced is decided by
+their reproducible block alone (identity, Merkle commitment, modules and its
+digest), printed as its own `determinism` line. The fields a run attests
+(determinism statuses, gate verdict, counts, who ran the tests) depend on the
+build's history: from `/4` and `/3` on, each document states the determinism
+reference state it ran from (`absent`, `candidate` or `promoted`), and those
+fields are compared only when both state the same one; otherwise they are
+listed as `not comparable`. Documents of earlier versions state no reference
+state: their attested fields are still compared, and when only those differ
+the output says the documents predate the reference state, so the difference
+is not evidence of a determinism break.
+
+A delivered attestation checked with `-f` is checked against its own table and
+its own signature: the SHA-256 of its JSON (keys sorted, default separators)
+without its signature and without the fields that say when or in which run it
+was made, signed with Ed25519 by a published production `evidence-signing`
+key. Compared with `--compare`, the comparison decides the verdict, and each
+document's signature is stated apart: one that is unsigned or does not verify
+is printed as `[NOTE] ... NOT verified`, never as verified.
+
 Earlier versions of the verifier compared only the fields whose name ends
 in `_hash` outside lists: on a published attestation, its identity hashes and
 its gate verdict hash. An `identical` from such a verifier does not cover the

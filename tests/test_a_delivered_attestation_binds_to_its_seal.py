@@ -505,7 +505,8 @@ class TheCommand(unittest.TestCase):
             "[FAIL] published attestation: published-attestation/2 names the attestation by the digest "
             "of a compact re-serialization, not of the delivered file, so it cannot be bound to the "
             "delivered file; republish the build's attestation (it is published as "
-            "published-attestation/3) and verify again",
+            "published-attestation/3 from a fingerprint-attestation/2, published-attestation/4 from a "
+            "fingerprint-attestation/3) and verify again",
             result.stdout,
         )
         for line in (

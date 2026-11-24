@@ -109,7 +109,9 @@ including attestations and every failure case, is
   emitted file's leaf of the Merkle commitment), and that the only fields not
   compared are the ones the verifier names with the reason; a value recorded
   by one build only, a field the verifier does not know, or a schema it has no
-  table for fails.
+  table for fails. Two builds of different specifications, toolchains or
+  runtimes are refused as not a determinism pair, and whether they reproduced
+  is decided by their reproducible block alone.
 
 **It does not prove:**
 

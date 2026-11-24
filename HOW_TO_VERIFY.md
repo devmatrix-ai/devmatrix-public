@@ -98,6 +98,7 @@ A build's attestation is published to this repository's `attestations/` director
 
 | Schema | Who ran the tests |
 |--------|-------------------|
+| `published-attestation/4` | As in `/3`. `/4` also states `identity.platform_runtime_key` (20 lower-case hex characters naming the runtime the build ran for) and `determinism_reference.state`, the determinism reference the build ran from: `absent`, `candidate` or `promoted`. A delivered `fingerprint-attestation/3` is published as `/4`. |
 | `published-attestation/3` | As in `/2`. `/3` also states the build's spec identity: `identity.platform_spec_hash` (the SHA-256 of the platform source), `identity.service_spec_hashes` (each module's source hash) and `identity.service_spec_hashes_sha256`, the digest of that map, which the verifier recomputes. Its `attestation_sha256` is the SHA-256 of the delivered attestation file's bytes, the digest a seal signs. |
 | `published-attestation/2` | `run_by` is `devmatrix` or `client`, and `seal_class` is `sealed` or `self_attested`. The only valid pairs are `devmatrix` with `sealed` (DevMatrix ran the tests) and `client` with `self_attested` (the client ran them on its own machine). |
 | `published-attestation/1` | Not stated. A `/1` document carries neither key, and the verifier reports none. |
@@ -133,7 +134,7 @@ python verify_fingerprint.py --seal <unzipped seal bundle> \
 It passes only when all of these hold:
 
 1. the seal statement's signature verifies with the key `keys.json` publishes for the statement's `key_id` as a production `seal-signing` key whose window holds `sealed_at`, and, when that key is retired, before the instant it retired (`status_since`); the key inside the bundle proves nothing by itself;
-2. the published attestation's signature verifies as above, and it is a `published-attestation/3` document (`/1` and `/2` state the digest of another serialization, so they cannot be bound to the file);
+2. the published attestation's signature verifies as above, and it is a `published-attestation/3` document, or a `/4` for a delivered `fingerprint-attestation/3` (`/1` and `/2` state the digest of another serialization, so they cannot be bound to the file);
 3. the SHA-256 of the delivered file is the `document_sha256` the seal signed for the service, and the published `attestation_sha256`;
 4. the file's `reproducible_sha256` is the digest of its reproducible block, and the seal and the published attestation state the same one;
 5. the file's platform spec hash and its hash for the service are the seal's `platform.spec_hash` and the service's `spec_hash`;

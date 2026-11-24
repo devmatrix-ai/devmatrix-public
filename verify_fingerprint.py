@@ -659,11 +659,39 @@ _V3_FIELDS: dict = dict(
         optional=frozenset({"cause"}),
     )),
 )
+ATTESTATION_SCHEMA_V4 = "published-attestation/4"
+#: The runtime a build ran for: a key derived from the platform, with no raw
+#: identifier in it, of 20 lower-case hex characters.
+_RUNTIME_KEY = re.compile(r"[0-9a-f]{20}")
+RUNTIME_KEY = "platform_runtime_key"
+#: Whether the build had a determinism reference when it ran: none yet, a
+#: first candidate, or one promoted by a byte-equal rebuild. A build's
+#: gates that rule against a baseline apply only once one exists, so two
+#: builds' attested verdicts are comparable only from the same state.
+DETERMINISM_REFERENCE = "determinism_reference"
+DETERMINISM_REFERENCE_STATES = ("absent", "candidate", "promoted")
+_DETERMINISM_REFERENCE = _object({"state": _one_of(DETERMINISM_REFERENCE_STATES)})
+#: ``/4`` is ``/3`` with the runtime key in the identity and the determinism
+#: reference the build ran with.
+_V4_FIELDS: dict = dict(
+    _V3_FIELDS,
+    schema=_one_of((ATTESTATION_SCHEMA_V4,)),
+    identity=_object({
+        **{name: _digest for name in IDENTITY_LINKS_V3},
+        RUNTIME_KEY: _pattern(_RUNTIME_KEY),
+        SERVICE_SPEC_HASHES: _module_map,
+    }),
+    **{DETERMINISM_REFERENCE: _DETERMINISM_REFERENCE},
+)
 ATTESTATION_SCHEMAS: Mapping[str, Check] = {
     ATTESTATION_SCHEMA_V1: _object(_V1_FIELDS),
     ATTESTATION_SCHEMA_V2: _object(_V2_FIELDS),
     ATTESTATION_SCHEMA_V3: _object(_V3_FIELDS),
+    ATTESTATION_SCHEMA_V4: _object(_V4_FIELDS),
 }
+#: The published attestations that name the attestation by the digest of the
+#: delivered document, so they can be bound to it.
+BINDABLE_ATTESTATION_SCHEMAS = (ATTESTATION_SCHEMA_V3, ATTESTATION_SCHEMA_V4)
 
 
 #: The published fingerprint: the public projection of a build's fingerprint
@@ -991,7 +1019,7 @@ def check_published_attestation(payload: dict) -> list[str]:
     lines = [
         f"[OK] attestation: {schema}; tests run by {payload['run_by']}, seal {payload['seal_class']}"
     ]
-    if schema == ATTESTATION_SCHEMA_V3:
+    if schema in BINDABLE_ATTESTATION_SCHEMAS:
         identity = payload["identity"]
         link = identity["service_spec_hashes_sha256"].removeprefix("sha256:")
         if service_spec_hashes_sha256(identity[SERVICE_SPEC_HASHES]) != link:
@@ -1428,6 +1456,15 @@ def signed_payload(evidence: dict) -> dict:
 
 #: The fingerprint attestation a build's download carries.
 DELIVERED_ATTESTATION_SCHEMA = "fingerprint-attestation/2"
+#: ``/3`` is ``/2`` with the runtime key in the reproducible identity and the
+#: determinism reference the build ran with in its attested block.
+DELIVERED_ATTESTATION_SCHEMA_V3 = "fingerprint-attestation/3"
+DELIVERED_ATTESTATION_SCHEMAS = (DELIVERED_ATTESTATION_SCHEMA, DELIVERED_ATTESTATION_SCHEMA_V3)
+#: The published attestation each delivered attestation is published as.
+PUBLISHED_SCHEMA_OF_DELIVERED = {
+    DELIVERED_ATTESTATION_SCHEMA: ATTESTATION_SCHEMA_V3,
+    DELIVERED_ATTESTATION_SCHEMA_V3: ATTESTATION_SCHEMA_V4,
+}
 
 
 # ---------------------------------------------------------------------------
@@ -1455,9 +1492,11 @@ class Excluded:
 
 @dataclass(frozen=True)
 class Fields:
-    """An object whose keys are the closed set the table names."""
+    """An object whose keys are the closed set the table names; ``nullable``
+    when the document may state null in its place."""
 
     fields: "Mapping[str, FieldRule]"
+    nullable: bool = False
 
 
 @dataclass(frozen=True)
@@ -1555,7 +1594,7 @@ _PUBLISHED_FINGERPRINT_V2_RULES: "dict[str, FieldRule]" = {
         **_all_compared((
             "schema_id", "sealed_schema_id", "status", "reason", "scopes", "totals", "tests_absent_reason",
         )),
-        "tests": Fields(_all_compared(PRE_NDA_TEST_KEYS)),
+        "tests": Fields(_all_compared(PRE_NDA_TEST_KEYS), nullable=True),
     }),
     "complexity_measurement": Fields({
         **_all_compared(COMPLEXITY_KEYS),
@@ -1590,13 +1629,31 @@ _DELIVERED_ATTESTATION_RULES: "dict[str, FieldRule]" = {
         **_all_compared(("not_tested_count", "terminal_gate_verdict_hash")),
         "customer_checks": Fields({
             **_all_compared(("schema_id", "sealed_schema_id", "status", "scopes", "totals", "tests_absent_reason")),
-            "tests": Fields(_all_compared(PRE_NDA_TEST_KEYS)),
+            "tests": Fields(_all_compared(PRE_NDA_TEST_KEYS), nullable=True),
         }),
         "modules": KeyedList("module", Fields(_all_compared(("module", "status")))),
         "platform_verdict": Fields(_all_compared((
             "all_gates_passed", "outcome", "terminal_success", "uts_disposition", "uts_not_run_reason",
         ))),
     }),
+}
+_DELIVERED_ATTESTATION_V3_RULES: "dict[str, FieldRule]" = {
+    **_DELIVERED_ATTESTATION_RULES,
+    "reproducible": Fields({
+        **_DELIVERED_ATTESTATION_RULES["reproducible"].fields,
+        "identity": Fields({
+            **_all_compared(IDENTITY_LINKS_V3), RUNTIME_KEY: COMPARED, SERVICE_SPEC_HASHES: Named(COMPARED),
+        }),
+    }),
+    "attested": Fields({
+        **_DELIVERED_ATTESTATION_RULES["attested"].fields,
+        DETERMINISM_REFERENCE: Fields(_all_compared(("state",))),
+    }),
+}
+_ATTESTATION_V4_RULES: "dict[str, FieldRule]" = {
+    **_ATTESTATION_V3_RULES,
+    "identity": Fields({**_all_compared(IDENTITY_LINKS_V3), RUNTIME_KEY: COMPARED, SERVICE_SPEC_HASHES: Named(COMPARED)}),
+    DETERMINISM_REFERENCE: Fields(_all_compared(("state",))),
 }
 #: The build fingerprints published before documents named their schema.
 #: The two runs of one specification under ``fingerprints/`` differ in the
@@ -1645,14 +1702,66 @@ _UNVERSIONED_FINGERPRINT_RULES: "dict[str, FieldRule]" = {
         "blocked", "digest_hash", "executed", "failed", "skipped", "skipped_dedup", "total",
     ))),
 }
+@dataclass(frozen=True)
+class ComparisonTable:
+    """How two documents of one schema are compared.
+
+    ``rules`` classes every field. ``reproducible`` names the top-level
+    fields of the reproducible block: they alone decide whether two builds
+    are deterministic. ``attested`` names the fields the run attests, which
+    may depend on the build's history. ``inputs`` are the identity inputs two
+    builds must share to be a determinism pair at all, and ``reference`` the
+    path of the determinism reference state, when the schema states one.
+    """
+
+    rules: Fields
+    reproducible: "frozenset[str]" = frozenset()
+    attested: "frozenset[str]" = frozenset()
+    inputs: "tuple[tuple[str, ...], ...]" = ()
+    reference: "tuple[str, ...]" = ()
+
+
+_PUBLISHED_REPRODUCIBLE = frozenset({"identity", "merkle", "modules", "reproducible_sha256"})
+_PUBLISHED_ATTESTED = frozenset({"determinism", "terminal_gate_verdict_hash", "not_tested_count"})
+_PUBLISHED_ATTESTED_V2 = _PUBLISHED_ATTESTED | {"run_by", "seal_class"}
+_SPEC_INPUTS_V1: "tuple[tuple[str, ...], ...]" = (
+    ("identity", "compiler_toolchain_hash"), ("identity", "spec_hash"), ("identity", "platform_spec_hash"),
+)
+_SPEC_INPUTS_V3: "tuple[tuple[str, ...], ...]" = (
+    ("identity", "compiler_toolchain_hash"), ("identity", "platform_spec_hash"), ("identity", SERVICE_SPEC_HASHES),
+)
+_DELIVERED_REPRODUCIBLE = frozenset({"reproducible", "reproducible_sha256"})
+_DELIVERED_ATTESTED = frozenset({"attested"})
+_DELIVERED_INPUTS: "tuple[tuple[str, ...], ...]" = tuple(("reproducible", *path) for path in _SPEC_INPUTS_V3)
 #: The comparison table of each kind of document this verifier compares.
-COMPARISON_TABLES: "Mapping[str, Fields]" = {
-    ATTESTATION_SCHEMA_V1: Fields(_ATTESTATION_V1_RULES),
-    ATTESTATION_SCHEMA_V2: Fields(_ATTESTATION_V2_RULES),
-    ATTESTATION_SCHEMA_V3: Fields(_ATTESTATION_V3_RULES),
-    PUBLISHED_FINGERPRINT_SCHEMA_V2: Fields(_PUBLISHED_FINGERPRINT_V2_RULES),
-    DELIVERED_ATTESTATION_SCHEMA: Fields(_DELIVERED_ATTESTATION_RULES),
-    UNVERSIONED_FINGERPRINT: Fields(_UNVERSIONED_FINGERPRINT_RULES),
+COMPARISON_TABLES: "Mapping[str, ComparisonTable]" = {
+    ATTESTATION_SCHEMA_V1: ComparisonTable(
+        Fields(_ATTESTATION_V1_RULES), _PUBLISHED_REPRODUCIBLE, _PUBLISHED_ATTESTED, _SPEC_INPUTS_V1,
+    ),
+    ATTESTATION_SCHEMA_V2: ComparisonTable(
+        Fields(_ATTESTATION_V2_RULES), _PUBLISHED_REPRODUCIBLE, _PUBLISHED_ATTESTED_V2, _SPEC_INPUTS_V1,
+    ),
+    ATTESTATION_SCHEMA_V3: ComparisonTable(
+        Fields(_ATTESTATION_V3_RULES), _PUBLISHED_REPRODUCIBLE, _PUBLISHED_ATTESTED_V2, _SPEC_INPUTS_V3,
+    ),
+    ATTESTATION_SCHEMA_V4: ComparisonTable(
+        Fields(_ATTESTATION_V4_RULES), _PUBLISHED_REPRODUCIBLE, _PUBLISHED_ATTESTED_V2 | {DETERMINISM_REFERENCE},
+        (("identity", RUNTIME_KEY), *_SPEC_INPUTS_V3), (DETERMINISM_REFERENCE, "state"),
+    ),
+    PUBLISHED_FINGERPRINT_SCHEMA_V2: ComparisonTable(
+        Fields(_PUBLISHED_FINGERPRINT_V2_RULES), inputs=(("spec_hash",),),
+    ),
+    DELIVERED_ATTESTATION_SCHEMA: ComparisonTable(
+        Fields(_DELIVERED_ATTESTATION_RULES), _DELIVERED_REPRODUCIBLE, _DELIVERED_ATTESTED, _DELIVERED_INPUTS,
+    ),
+    DELIVERED_ATTESTATION_SCHEMA_V3: ComparisonTable(
+        Fields(_DELIVERED_ATTESTATION_V3_RULES), _DELIVERED_REPRODUCIBLE, _DELIVERED_ATTESTED,
+        (("reproducible", "identity", RUNTIME_KEY), *_DELIVERED_INPUTS),
+        ("attested", DETERMINISM_REFERENCE, "state"),
+    ),
+    UNVERSIONED_FINGERPRINT: ComparisonTable(
+        Fields(_UNVERSIONED_FINGERPRINT_RULES), inputs=(("spec_hash",), ("compiler_version",)),
+    ),
 }
 UPDATE_THE_VERIFIER = "update the verifier"
 
@@ -1682,14 +1791,47 @@ class Comparison:
 
     schema: str
     jobs: "tuple[str, str]" = ("", "")
+    reproducible_keys: "frozenset[str]" = frozenset()
+    attested_keys: "frozenset[str]" = frozenset()
+    #: The determinism reference state each document states, or ``None``.
+    reference_states: "tuple[str | None, str | None]" = (None, None)
     compared: int = 0
     identical: int = 0
+    reproducible_compared: int = 0
     differences: "list[str]" = field(default_factory=list)
+    #: The top-level field of each difference, in the same order.
+    difference_keys: "list[str]" = field(default_factory=list)
     excluded: "dict[str, str]" = field(default_factory=dict)
+
+    def differ(self, path: str, text: str) -> None:
+        self.differences.append(text)
+        self.difference_keys.append(_top_key(path))
+
+    def tally(self, path: str, same: bool) -> None:
+        self.compared += 1
+        self.identical += same
+        if _top_key(path) in self.reproducible_keys:
+            self.reproducible_compared += 1
 
     @property
     def passed(self) -> bool:
         return self.compared > 0 and not self.differences
+
+    @property
+    def reproducible_identical(self) -> bool:
+        """Whether the reproducible block, which alone decides determinism,
+        compared identical (and was compared at all)."""
+        return self.reproducible_compared > 0 and not any(
+            key in self.reproducible_keys for key in self.difference_keys
+        )
+
+    @property
+    def only_attested_differ(self) -> bool:
+        return bool(self.differences) and all(key in self.attested_keys for key in self.difference_keys)
+
+
+def _top_key(path: str) -> str:
+    return re.split(r"[.\[]", path, maxsplit=1)[0]
 
 
 class _Absent:
@@ -1715,7 +1857,7 @@ def _keyed(items: list, key: str, path: str, which: str, out: Comparison) -> "di
     for index, item in enumerate(items):
         name = item.get(key) if isinstance(item, dict) else None
         if not isinstance(name, str) or name in by_key:
-            out.differences.append(f"{path}[{index}] in the {which} document: is not an item with a unique {key}")
+            out.differ(path, f"{path}[{index}] in the {which} document: is not an item with a unique {key}")
             return None
         by_key[name] = item
     return by_key
@@ -1730,13 +1872,13 @@ def _job_scoped(items: object, job: str, path: str, which: str, out: Comparison)
     placeholder; ``None`` (a difference is recorded) when the list is not of
     strings or a path already holds the placeholder."""
     if not isinstance(items, list) or not all(isinstance(item, str) for item in items):
-        out.differences.append(f"{path}: is not a list of paths in the {which} document")
+        out.differ(path, f"{path}: is not a list of paths in the {which} document")
         return None
     is_job = _JOB_ID.fullmatch(job) is not None
     counts: "dict[str, int]" = {}
     for item in items:
         if JOB_PLACEHOLDER in item:
-            out.differences.append(f"{path}: {item!r} in the {which} document holds {JOB_PLACEHOLDER!r}")
+            out.differ(path, f"{path}: {item!r} in the {which} document holds {JOB_PLACEHOLDER!r}")
             return None
         segments = item.split("/")
         if is_job and len(segments) == 3 and segments[0] == JOB_SCOPED_DIRECTORY and segments[1] == job:
@@ -1752,7 +1894,7 @@ def _walk(rule: FieldRule, first: object, second: object, path: str, out: Compar
         return
     if first is _ABSENT or second is _ABSENT:
         where = "first" if second is _ABSENT else "second"
-        out.differences.append(f"{path}: recorded only in the {where} document")
+        out.differ(path, f"{path}: recorded only in the {where} document")
         return
     if isinstance(rule, JobScopedPaths):
         scoped_first = _job_scoped(first, out.jobs[0], path, "first", out)
@@ -1760,34 +1902,33 @@ def _walk(rule: FieldRule, first: object, second: object, path: str, out: Compar
         if scoped_first is None or scoped_second is None:
             return
         for item in sorted(set(scoped_first) | set(scoped_second)):
-            out.compared += 1
             times_first, times_second = scoped_first.get(item, 0), scoped_second.get(item, 0)
+            out.tally(path, times_first == times_second)
             if times_first == times_second:
-                out.identical += 1
-            elif not times_second or not times_first:
+                continue
+            if not times_second or not times_first:
                 where = "first" if times_first else "second"
-                out.differences.append(f"{path}: {item!r} recorded only in the {where} document")
+                out.differ(path, f"{path}: {item!r} recorded only in the {where} document")
             else:
-                out.differences.append(f"{path}: {item!r} listed {times_first} vs {times_second} times")
+                out.differ(path, f"{path}: {item!r} listed {times_first} vs {times_second} times")
         return
     container = dict if isinstance(rule, (Fields, Named)) else list if isinstance(rule, (KeyedList, OrderedList)) else None
     walk_first = container is not None and isinstance(first, container)
     walk_second = container is not None and isinstance(second, container)
     if walk_first != walk_second:
-        out.differences.append(f"{path}: DIFFERENT ({_shown(first)} vs {_shown(second)})")
+        out.differ(path, f"{path}: DIFFERENT ({_shown(first)} vs {_shown(second)})")
         return
     if not walk_first:
-        out.compared += 1
-        if _canonical(first) == _canonical(second):
-            out.identical += 1
-        else:
-            out.differences.append(f"{path}: DIFFERENT ({_shown(first)} vs {_shown(second)})")
+        same = _canonical(first) == _canonical(second)
+        out.tally(path, same)
+        if not same:
+            out.differ(path, f"{path}: DIFFERENT ({_shown(first)} vs {_shown(second)})")
         return
     if isinstance(rule, Fields):
         for key in sorted(set(first) | set(second)):
             sub = f"{path}.{key}" if path else key
             if key not in rule.fields:
-                out.differences.append(f"{sub}: not in this verifier's table for {out.schema}: {UPDATE_THE_VERIFIER}")
+                out.differ(sub, f"{sub}: not in this verifier's table for {out.schema}: {UPDATE_THE_VERIFIER}")
                 continue
             _walk(rule.fields[key], first.get(key, _ABSENT), second.get(key, _ABSENT), sub, out)
     elif isinstance(rule, Named):
@@ -1802,7 +1943,7 @@ def _walk(rule: FieldRule, first: object, second: object, path: str, out: Compar
             _walk(rule.item, keyed_first.get(key, _ABSENT), keyed_second.get(key, _ABSENT), f"{path}[{key}]", out)
     elif isinstance(rule, OrderedList):
         if len(first) != len(second):
-            out.differences.append(f"{path}: {len(first)} items vs {len(second)}")
+            out.differ(path, f"{path}: {len(first)} items vs {len(second)}")
         for index in range(max(len(first), len(second))):
             _walk(
                 rule.item,
@@ -1813,24 +1954,69 @@ def _walk(rule: FieldRule, first: object, second: object, path: str, out: Compar
             )
 
 
+def _at(document: object, path: "tuple[str, ...]") -> object:
+    for key in path:
+        if not isinstance(document, dict) or key not in document:
+            return _ABSENT
+        document = document[key]
+    return document
+
+
+def _same_input(first: object, second: object) -> bool:
+    if first is _ABSENT or second is _ABSENT:
+        return first is second
+    return _canonical(first) == _canonical(second)
+
+
+def _stated_state(value: object) -> "str | None":
+    return value if isinstance(value, str) else None
+
+
 def compare_fingerprints(fp1: dict, fp2: dict) -> Comparison:
     """Compare two signed documents by the table of their schema.
 
-    Every field the table compares is compared at any depth, lists included;
-    a field recorded by one document only fails; a field the table does not
-    name fails; a schema with no table, or two documents of different
-    schemas, is refused. Comparing nothing fails: no value was shown
-    identical.
+    Two documents of different schemas, a schema with no table, or two
+    builds whose identity inputs differ (they are not a determinism pair,
+    and every differing input is named) are refused. Otherwise every field
+    the table compares is compared at any depth, lists included; a field
+    recorded by one document only fails; a field the table does not name
+    fails; comparing nothing fails. The fields a run attests are not
+    compared when the two documents state different determinism reference
+    states: they are not comparable, and are named so.
     """
     first, second = comparison_schema(fp1), comparison_schema(fp2)
     if first != second:
         raise ComparisonRefused(
             f"the two documents are of different schemas ({first}, {second}): they record different things"
         )
+    table = COMPARISON_TABLES[first]
+    differing = [".".join(path) for path in table.inputs if not _same_input(_at(fp1, path), _at(fp2, path))]
+    if differing:
+        raise ComparisonRefused("not a determinism pair: " + "; ".join(f"{path} differs" for path in differing))
+    states = (
+        (_stated_state(_at(fp1, table.reference)), _stated_state(_at(fp2, table.reference)))
+        if table.reference else (None, None)
+    )
+    rules = table.rules
+    if table.reference and _canonical_or_absent(_at(fp1, table.reference)) != _canonical_or_absent(_at(fp2, table.reference)):
+        not_comparable = Excluded(
+            f"not comparable: {DETERMINISM_REFERENCE} differs ({states[0] or 'not stated'} vs "
+            f"{states[1] or 'not stated'}): the run's attested results depend on it"
+        )
+        rules = Fields({
+            **rules.fields, **{key: not_comparable for key in table.attested if key in rules.fields},
+        })
     jobs = tuple(job if isinstance(job, str) else "" for job in (fp1.get("job_id"), fp2.get("job_id")))
-    out = Comparison(schema=first, jobs=(jobs[0], jobs[1]))
-    _walk(COMPARISON_TABLES[first], fp1, fp2, "", out)
+    out = Comparison(
+        schema=first, jobs=(jobs[0], jobs[1]), reproducible_keys=table.reproducible,
+        attested_keys=table.attested, reference_states=states,
+    )
+    _walk(rules, fp1, fp2, "", out)
     return out
+
+
+def _canonical_or_absent(value: object) -> str:
+    return "\u0000absent" if value is _ABSENT else _canonical(value)
 
 
 # ---------------------------------------------------------------------------
@@ -1972,8 +2158,10 @@ def _delivered(path: Path) -> tuple[bytes, dict]:
             "format a seal can bind; compile again and seal again to verify offline",
             "attestation_identity",
         )
-    if not parsed or not isinstance(document, dict) or document.get("schema") != DELIVERED_ATTESTATION_SCHEMA:
-        raise BindingRefused(f"{path} is not a {DELIVERED_ATTESTATION_SCHEMA} document", "attestation_identity")
+    if not parsed or not isinstance(document, dict) or document.get("schema") not in DELIVERED_ATTESTATION_SCHEMAS:
+        raise BindingRefused(
+            f"{path} is not a {' or '.join(DELIVERED_ATTESTATION_SCHEMAS)} document", "attestation_identity",
+        )
     reproducible = document.get("reproducible")
     identity = reproducible.get("identity") if isinstance(reproducible, dict) else None
     if not isinstance(identity, dict) or not isinstance(identity.get(SERVICE_SPEC_HASHES), dict):
@@ -1981,6 +2169,138 @@ def _delivered(path: Path) -> tuple[bytes, dict]:
     if reproducible_sha256(reproducible) != document.get("reproducible_sha256"):
         raise BindingRefused(f"{path}: reproducible_sha256 is not the digest of its reproducible block", "attestation_digest")
     return data, document
+
+
+# ---------------------------------------------------------------------------
+# A delivered attestation's own signature. The build signs the document it
+# delivers: the SHA-256 of its JSON (keys sorted, the default separators,
+# ASCII) with every ``signature`` object, every field that names when or in
+# which run it was made, and every section that records the build's history
+# removed at any depth; the Ed25519 signature is over that digest written in
+# hex. The signing key must be a published ``evidence-signing`` key.
+# ---------------------------------------------------------------------------
+
+#: The fields removed, at any depth, before a delivered attestation is signed:
+#: when and in which run it was made.
+SIGNING_VOLATILE_KEYS = frozenset({
+    "build_id", "build_timestamp", "completed_at", "created_at", "finished_at", "generated_at",
+    "published_at", "run_at", "run_id", "seal_timestamp", "sealed_at", "signed_at", "spec_fingerprint",
+    "started_at", "time_range_end", "time_range_start", "timestamp", "updated_at",
+})
+#: The sections removed, at any depth, before it is signed: the build's history.
+SIGNING_HISTORY_SECTIONS = frozenset({
+    "convergence_metrics", "convergence_curve", "convergence_narrative", "convergence_proof",
+    "learning_impact", "learning_snapshot", "build_identity",
+})
+DELIVERED_SIGNATURE_ALGORITHM = "ed25519"
+
+
+def signing_view(value: object) -> object:
+    """What a delivered attestation's signature covers (see above)."""
+    if isinstance(value, dict):
+        return {
+            key: signing_view(item) for key, item in value.items()
+            if key != "signature" and key not in SIGNING_VOLATILE_KEYS and key not in SIGNING_HISTORY_SECTIONS
+        }
+    if isinstance(value, list):
+        return [signing_view(item) for item in value]
+    return value
+
+
+def signed_content_hash(document: dict) -> str:
+    """The hex SHA-256 a delivered attestation's signature is over."""
+    return hashlib.sha256(json.dumps(signing_view(document), sort_keys=True).encode("utf-8")).hexdigest()
+
+
+def shape_problems(rule: "FieldRule", value: object, path: str) -> list[str]:
+    """Where ``value`` is not of the form the comparison table gives it: an
+    object with exactly the fields named (null only where it may be null),
+    a list where a list goes, and paths where paths go."""
+    where = path or "the document"
+    if isinstance(rule, Fields):
+        if value is None and rule.nullable:
+            return []
+        if not isinstance(value, dict):
+            return [f"{where}: is not an object"]
+        problems = []
+        missing = sorted(set(rule.fields) - set(value))
+        undeclared = sorted(set(value) - set(rule.fields))
+        if missing:
+            problems.append(f"{where}: lacks {missing}")
+        if undeclared:
+            problems.append(f"{where}: carries undeclared keys {undeclared}")
+        for key in sorted(set(rule.fields) & set(value)):
+            problems += shape_problems(rule.fields[key], value[key], f"{path}.{key}".lstrip("."))
+        return problems
+    if isinstance(rule, Named):
+        if not isinstance(value, dict):
+            return [f"{where}: is not an object"]
+        return [problem for key in sorted(value) for problem in shape_problems(rule.value, value[key], f"{path}.{key}")]
+    if isinstance(rule, (KeyedList, OrderedList)):
+        if not isinstance(value, list):
+            return [f"{where}: is not a list"]
+        return [problem for index, item in enumerate(value) for problem in shape_problems(rule.item, item, f"{path}[{index}]")]
+    if isinstance(rule, JobScopedPaths):
+        if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+            return [f"{where}: is not a list of paths"]
+    return []
+
+
+def is_delivered_attestation(payload: object) -> bool:
+    return isinstance(payload, dict) and payload.get("schema") in DELIVERED_ATTESTATION_SCHEMAS
+
+
+def check_delivered_attestation(document: dict, keys: list[dict], accept: str = PRODUCTION) -> tuple[bool, str]:
+    """Whether a delivered attestation is exactly its schema, unchanged since
+    it was made and signed by a published DevMatrix key, and the line that
+    says so; an unsigned one is said to be unsigned, never verified."""
+    schema = document["schema"]
+    unsigned = "signature" not in document
+    problems = shape_problems(COMPARISON_TABLES[schema].rules, document, "")
+    if unsigned:
+        problems = [problem for problem in problems if problem != "the document: lacks ['signature']"]
+    if problems:
+        shown = "; ".join(problems[:5]) + (f"; and {len(problems) - 5} more" if len(problems) > 5 else "")
+        return False, f"{schema} is not exactly its schema: {shown}"
+    if reproducible_sha256(document["reproducible"]) != document["reproducible_sha256"]:
+        return False, f"{schema}: reproducible_sha256 is not the digest of its reproducible block: changed after it was made"
+    if unsigned:
+        return False, f"{schema} is UNSIGNED: nothing says DevMatrix made it"
+    signature = document["signature"]
+    if signature.get("algorithm") != DELIVERED_SIGNATURE_ALGORITHM:
+        return False, f"{schema}: signed with {signature.get('algorithm')!r}, not {DELIVERED_SIGNATURE_ALGORITHM}"
+    content_hash = signed_content_hash(document)
+    if signature.get("content_hash") != content_hash:
+        return False, f"{schema} CHANGED AFTER SIGNING: its content is not the content its signature names"
+    key_id = signature.get("key_id")
+    try:
+        raw_key = bytes.fromhex(signature["verify_key"]) if isinstance(signature.get("verify_key"), str) else b""
+    except ValueError:
+        raw_key = b""
+    if len(raw_key) != 32:
+        return False, f"{schema}: its verify_key is not an Ed25519 public key in hex"
+    try:
+        entry = published_key(
+            keys, key_id, base64.b64encode(raw_key).decode("ascii"), "evidence-signing", "evidence",
+            signature.get("signed_at"), "signed",
+        )
+    except ValueError as exc:
+        return False, f"{schema}: NOT signed by a published key: {exc}"
+    refusal = class_refusal(entry, key_id, accept, "attestation")
+    if refusal is not None:
+        return False, f"{schema}: {refusal}"
+    try:
+        from cryptography.exceptions import InvalidSignature
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+    except ImportError:
+        return False, f"{schema}: the 'cryptography' package is required to check its signature"
+    try:
+        Ed25519PublicKey.from_public_bytes(raw_key).verify(
+            _b64(signature.get("signature"), "signature"), content_hash.encode("utf-8"),
+        )
+    except (InvalidSignature, ValueError):
+        return False, f"{schema}: the signature is INVALID for key {key_id!r}"
+    return True, f"{schema}, Ed25519, key {key_id!r} ({entry.get('class')}), signed {signature.get('signed_at')}"
 
 
 #: Who measured a sealed build, as the seal statement states it from
@@ -2056,8 +2376,13 @@ def project_published(document: dict, data: bytes) -> dict:
             "attestation version states; bind it to its seal without --published",
             "published_deferred",
         )
+    schema = PUBLISHED_SCHEMA_OF_DELIVERED[document["schema"]]
+    stated_reference = (
+        {DETERMINISM_REFERENCE: _field(attested, DETERMINISM_REFERENCE)} if schema == ATTESTATION_SCHEMA_V4 else {}
+    )
     return {
-        "schema": ATTESTATION_SCHEMA_V3,
+        **stated_reference,
+        "schema": schema,
         "job_id": _field(document, "job_id"),
         "attestation_sha256": _sha256_prefixed(data),
         "reproducible_sha256": _field(document, "reproducible_sha256"),
@@ -2686,11 +3011,13 @@ def _published_for_binding(
         lines += check_published_attestation(payload)
     except AttestationRefused as refusal:
         return None, lines, [Failure(str(refusal), "attestation_identity")]
-    if payload.get("schema") != ATTESTATION_SCHEMA_V3:
+    if payload.get("schema") not in BINDABLE_ATTESTATION_SCHEMAS:
         return None, lines, [Failure(
             f"published attestation: {payload.get('schema')} names the attestation by the digest of a compact "
             "re-serialization, not of the delivered file, so it cannot be bound to the delivered file; "
-            f"republish the build's attestation (it is published as {ATTESTATION_SCHEMA_V3}) and verify again",
+            "republish the build's attestation (it is published as "
+            + ", ".join(f"{published} from a {delivered}" for delivered, published in PUBLISHED_SCHEMA_OF_DELIVERED.items())
+            + ") and verify again",
             "attestation_digest",
         )]
     return payload, lines, []
@@ -3240,7 +3567,33 @@ def keys_line(trusted: TrustedKeys) -> str:
     return f"Keys: {trusted.source} ({trusted.key_class} keys)"
 
 
-def exit_with_verdict(passed: bool, trusted: TrustedKeys, failed: str) -> None:
+def determinism_lines(comparison: Comparison) -> list[str]:
+    """The determinism verdict of a comparison, from the reproducible block
+    alone, and what a difference in the attested fields means."""
+    if not comparison.reproducible_keys:
+        return []
+    if comparison.reproducible_compared == 0:
+        return ["[FAIL] determinism: no value of the reproducible block was compared"]
+    lines = [
+        f"[OK] determinism: the reproducible block is identical ({comparison.reproducible_compared} values)"
+        if comparison.reproducible_identical
+        else "[FAIL] determinism: the reproducible block differs: these builds did not reproduce"
+    ]
+    if comparison.only_attested_differ:
+        if comparison.reference_states == (None, None):
+            lines.append(
+                "[NOTE] attested fields differ; these documents predate the reference state, "
+                "so this is not evidence of a determinism break"
+            )
+        else:
+            lines.append(
+                "[NOTE] attested fields differ under the same determinism reference state "
+                f"({comparison.reference_states[0]})"
+            )
+    return lines
+
+
+def exit_with_verdict(passed: bool, trusted: TrustedKeys, failed: str, held: str = "Every check above passed.") -> None:
     """Print the verdict, naming the keys it was reached with, and exit: 0
     only when every check passed against production keys; NOT_PRODUCTION_EXIT,
     with the label the keys file gives, when it passed against keys of any
@@ -3258,7 +3611,7 @@ def exit_with_verdict(passed: bool, trusted: TrustedKeys, failed: str) -> None:
         print(keys_line(trusted))
         sys.exit(NOT_PRODUCTION_EXIT)
     print("VERIFICATION PASSED")
-    print("Every check above passed.")
+    print(held)
     print(keys_line(trusted))
     sys.exit(0)
 
@@ -3389,11 +3742,24 @@ Examples:
     print_identity(evidence)
     print()
 
-    all_passed = check_signature(
-        "", evidence, keys, args.allow_unsigned, accept
-    )
-    if not check_attestation("", evidence, keys, accept):
-        all_passed = False
+    delivered = [is_delivered_attestation(signed_payload(evidence))]
+    #: A delivered attestation compared with another: the comparison decides,
+    #: and the envelope of each is stated apart.
+    envelope_notes: list[str] = []
+    if delivered[0]:
+        verified, message = check_delivered_attestation(evidence, keys, accept)
+        if args.compare:
+            envelope_notes.append(message if verified else f"NOT verified: {message}")
+            print(f"{'[OK]' if verified else '[NOTE]'} delivered attestation: {envelope_notes[-1]}")
+        else:
+            print(f"{'[OK]' if verified else '[FAIL]'} delivered attestation: {message}")
+        all_passed = verified or bool(args.compare)
+    else:
+        all_passed = check_signature(
+            "", evidence, keys, args.allow_unsigned, accept
+        )
+        if not check_attestation("", evidence, keys, accept):
+            all_passed = False
 
     # Mode 1: Compare two fingerprints
     if args.compare:
@@ -3404,12 +3770,17 @@ Examples:
         evidence2 = read_json(args.compare)
         print(f"Comparing with: {args.compare}")
         print_identity(evidence2)
-        if not check_signature(
-            str(args.compare), evidence2, keys, args.allow_unsigned, accept
-        ):
-            all_passed = False
-        if not check_attestation(str(args.compare), evidence2, keys, accept):
-            all_passed = False
+        if is_delivered_attestation(signed_payload(evidence2)):
+            verified, message = check_delivered_attestation(evidence2, keys, accept)
+            envelope_notes.append(message if verified else f"NOT verified: {message}")
+            print(f"{'[OK]' if verified else '[NOTE]'} delivered attestation: {envelope_notes[-1]}  ({args.compare})")
+        else:
+            if not check_signature(
+                str(args.compare), evidence2, keys, args.allow_unsigned, accept
+            ):
+                all_passed = False
+            if not check_attestation(str(args.compare), evidence2, keys, accept):
+                all_passed = False
         print()
 
         try:
@@ -3428,6 +3799,8 @@ Examples:
                 print("[FAIL] comparison: no value compared, so none was shown identical")
             for difference in comparison.differences:
                 print(f"[FAIL] {difference}")
+            for line in determinism_lines(comparison):
+                print(line)
             if comparison.passed:
                 print(f"[OK] every compared value is identical ({comparison.compared})")
             else:
@@ -3462,7 +3835,15 @@ Examples:
             print("Use --spec and/or --output to verify hashes.")
             print("Use --compare to compare two fingerprints.")
 
-    exit_with_verdict(all_passed, trusted, "At least one check above failed: see the [FAIL] lines.")
+    held = "Every check above passed."
+    if envelope_notes:
+        unverified = sum(note.startswith("NOT verified") for note in envelope_notes)
+        held = (
+            "The comparison passed: the verdict is the comparison's. "
+            + (f"NOT verified: {unverified} of the {len(envelope_notes)} delivered attestations compared "
+               "(see [NOTE] above)." if unverified else "Each delivered attestation compared is verified.")
+        )
+    exit_with_verdict(all_passed, trusted, "At least one check above failed: see the [FAIL] lines.", held)
 
 
 if __name__ == "__main__":

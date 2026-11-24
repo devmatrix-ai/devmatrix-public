@@ -28,6 +28,25 @@
   attestation, the identity hashes and the gate verdict hash, 5 to 6 fields —
   so an `identical` from an earlier verifier did not cover each module's
   emission digest nor the Merkle commitment.
+- **A comparison is of a determinism pair.** Two builds whose specification,
+  toolchain or (from `/4` and `/3` on) runtime differ are refused with `not a
+  determinism pair`, naming every input that differs. Whether they reproduced
+  is decided by the reproducible block alone, printed as its own
+  `determinism` line. The fields a run attests are compared only when both
+  documents ran from the same determinism reference state; otherwise they are
+  listed as not comparable. Documents that state no reference state predate
+  it: when only their attested fields differ, the output says so, and that
+  this is not evidence of a determinism break.
+- **`published-attestation/4` and `fingerprint-attestation/3`.** Both state
+  the runtime key the build ran for and its determinism reference state
+  (`absent`, `candidate`, `promoted`). A delivered `/3` is published as `/4`
+  and binds to its seal as `/2` did to `/3`.
+- **A delivered attestation is checked by its own signature.** With `-f`, a
+  `fingerprint-attestation/2` or `/3` is checked against its closed table, its
+  reproducible digest and its Ed25519 signature by a published production
+  `evidence-signing` key; it was refused as an unknown attestation schema.
+  With `--compare`, the comparison decides and each document's signature is
+  stated apart; an unsigned one is said to be unsigned.
 - **Python 3.10.** The guide said 3.9; the verifier has needed 3.10 since its
   type annotations were written.
 

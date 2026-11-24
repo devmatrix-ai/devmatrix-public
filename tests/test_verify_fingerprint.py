@@ -401,9 +401,9 @@ class TheComparison(unittest.TestCase):
 
     def test_a_value_recorded_by_one_document_only_fails(self) -> None:
         first, second = (_payload(n) for n in PRODUCTION_PAIR)
-        second = {k: v for k, v in second.items() if k != "spec_hash"}
+        second = {k: v for k, v in second.items() if k != "ir_semantic_hash"}
         comparison = vf.compare_fingerprints(first, second)
-        self.assertEqual(comparison.differences, ["spec_hash: recorded only in the first document"])
+        self.assertEqual(comparison.differences, ["ir_semantic_hash: recorded only in the first document"])
 
     def test_comparing_nothing_fails(self) -> None:
         comparison = vf.compare_fingerprints({}, {})
@@ -437,11 +437,12 @@ class TheComparison(unittest.TestCase):
             vf.ATTESTATION_SCHEMA_V1: set(vf._V1_FIELDS),
             vf.ATTESTATION_SCHEMA_V2: set(vf._V2_FIELDS),
             vf.ATTESTATION_SCHEMA_V3: set(vf._V3_FIELDS),
+            vf.ATTESTATION_SCHEMA_V4: set(vf._V4_FIELDS),
             vf.PUBLISHED_FINGERPRINT_SCHEMA_V2: set(vf.PUBLISHED_FINGERPRINT_KEYS),
         }
         for schema, fields in declared.items():
             with self.subTest(schema=schema):
-                self.assertEqual(set(vf.COMPARISON_TABLES[schema].fields), fields)
+                self.assertEqual(set(vf.COMPARISON_TABLES[schema].rules.fields), fields)
 
     def test_a_delivered_attestation_compares_with_another_run_of_its_build(self) -> None:
         """Two runs of one build: the job, the signature over each run and
@@ -537,13 +538,17 @@ class TheComparison(unittest.TestCase):
                 return excluded(rule.item, f"{path}[]")
             return set()
 
-        found = {schema: excluded(table, "") for schema, table in vf.COMPARISON_TABLES.items()}
+        found = {schema: excluded(table.rules, "") for schema, table in vf.COMPARISON_TABLES.items()}
         self.assertEqual(found, {
             vf.ATTESTATION_SCHEMA_V1: {"job_id", "attestation_sha256"},
             vf.ATTESTATION_SCHEMA_V2: {"job_id", "attestation_sha256"},
             vf.ATTESTATION_SCHEMA_V3: {"job_id", "attestation_sha256"},
+            vf.ATTESTATION_SCHEMA_V4: {"job_id", "attestation_sha256"},
             vf.PUBLISHED_FINGERPRINT_SCHEMA_V2: {"job_id"},
             vf.DELIVERED_ATTESTATION_SCHEMA: {
+                "job_id", "signature.signed_at", "signature.content_hash", "signature.signature",
+            },
+            vf.DELIVERED_ATTESTATION_SCHEMA_V3: {
                 "job_id", "signature.signed_at", "signature.content_hash", "signature.signature",
             },
             vf.UNVERSIONED_FINGERPRINT: RUN_FIELDS | {"created_at", "run_id", "build_identity.resolved_at"},
