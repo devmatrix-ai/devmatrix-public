@@ -1,0 +1,32 @@
+{
+  "absent": [],
+  "files": [
+    {
+      "path": "proofs/00000000-0000-0000-0000-000000000027.json",
+      "sha256": "9d859955d7a56f11f0135024d8dcc0a624a1ee49af22f38d4e88a5453ab29c6e",
+      "size_bytes": 254
+    },
+    {
+      "path": "qa-runs/00000000-0000-0000-0000-000000000027/report.json",
+      "sha256": "f5eca9690209aaa40d0cd411ddfc5203926a41d0f3bf72160f8fc42242bab991",
+      "size_bytes": 1437
+    },
+    {
+      "path": "seal-public-key.pem",
+      "sha256": "57bcd66d884c2be455d78f869d2af0d99eac2bf418802d5d8d9b819bb70fe90c",
+      "size_bytes": 113
+    },
+    {
+      "path": "seal-statement.json",
+      "sha256": "697c15307bafad6ae538fb130883e1038f59c9045facadc32dbeb53e3ccaa98e",
+      "size_bytes": 2477
+    },
+    {
+      "path": "seal-statement.sig.b64",
+      "sha256": "9656193a596da072e0c0633e12d85dcfc189911abfcb4615bb404a82073e28d0",
+      "size_bytes": 89
+    }
+  ],
+  "schema": "seal-evidence-bundle/1",
+  "seal_hash": "c27e192775a87546d3a39dc62e80b6633818bf2feb00eca952b1c8f6c44e5b69"
+}

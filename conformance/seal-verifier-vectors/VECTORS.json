@@ -424,17 +424,165 @@
     },
     {
       "downloads": {
-        "app": "v8_unknown_version/downloads/app.json"
+        "app": "v8_compile_devmatrix/downloads/app.json"
+      },
+      "evidence": null,
+      "expect": "VERIFIED",
+      "id": "v8_compile_devmatrix",
+      "key_class": "fixture",
+      "keys": "keys.fixture.json",
+      "reason_classes": [],
+      "seal": "v8_compile_devmatrix/seal"
+    },
+    {
+      "downloads": {
+        "app": "v8_qa_run_deferred/downloads/app.json"
+      },
+      "evidence": "v8_qa_run_deferred/evidence",
+      "expect": "VERIFIED",
+      "id": "v8_qa_run_deferred",
+      "key_class": "fixture",
+      "keys": "keys.fixture.json",
+      "reason_classes": [],
+      "seal": "v8_qa_run_deferred/seal"
+    },
+    {
+      "downloads": {
+        "app": "v8_client_run_client/downloads/app.json"
+      },
+      "evidence": null,
+      "expect": "VERIFIED",
+      "id": "v8_client_run_client",
+      "key_class": "fixture",
+      "keys": "keys.fixture.json",
+      "reason_classes": [],
+      "seal": "v8_client_run_client/seal"
+    },
+    {
+      "downloads": {
+        "app": "v8_qa_run_report_tampered/downloads/app.json"
+      },
+      "evidence": "v8_qa_run_report_tampered/evidence",
+      "expect": "FAILED",
+      "id": "v8_qa_run_report_tampered",
+      "key_class": "fixture",
+      "keys": "keys.fixture.json",
+      "reason_classes": [
+        "evidence_tampered"
+      ],
+      "seal": "v8_qa_run_report_tampered/seal"
+    },
+    {
+      "downloads": {
+        "app": "v8_qa_run_failed_id_not_the_reports/downloads/app.json"
+      },
+      "evidence": "v8_qa_run_failed_id_not_the_reports/evidence",
+      "expect": "FAILED",
+      "id": "v8_qa_run_failed_id_not_the_reports",
+      "key_class": "fixture",
+      "keys": "keys.fixture.json",
+      "reason_classes": [
+        "evidence_tampered"
+      ],
+      "seal": "v8_qa_run_failed_id_not_the_reports/seal"
+    },
+    {
+      "downloads": {
+        "app": "v8_failed_test_by_name/downloads/app.json"
+      },
+      "evidence": "v8_failed_test_by_name/evidence",
+      "expect": "FAILED",
+      "id": "v8_failed_test_by_name",
+      "key_class": "fixture",
+      "keys": "keys.fixture.json",
+      "reason_classes": [
+        "statement_version"
+      ],
+      "seal": "v8_failed_test_by_name/seal"
+    },
+    {
+      "downloads": {
+        "app": "v8_malformed_test_id/downloads/app.json"
+      },
+      "evidence": "v8_malformed_test_id/evidence",
+      "expect": "FAILED",
+      "id": "v8_malformed_test_id",
+      "key_class": "fixture",
+      "keys": "keys.fixture.json",
+      "reason_classes": [
+        "statement_version"
+      ],
+      "seal": "v8_malformed_test_id/seal"
+    },
+    {
+      "downloads": {
+        "app": "v8_one_test_id_twice/downloads/app.json"
+      },
+      "evidence": "v8_one_test_id_twice/evidence",
+      "expect": "FAILED",
+      "id": "v8_one_test_id_twice",
+      "key_class": "fixture",
+      "keys": "keys.fixture.json",
+      "reason_classes": [
+        "statement_version"
+      ],
+      "seal": "v8_one_test_id_twice/seal"
+    },
+    {
+      "downloads": {
+        "app": "v8_tier_not_run_as_a_group/downloads/app.json"
       },
       "evidence": null,
       "expect": "FAILED",
-      "id": "v8_unknown_version",
+      "id": "v8_tier_not_run_as_a_group",
+      "key_class": "fixture",
+      "keys": "keys.fixture.json",
+      "reason_classes": [
+        "statement_version"
+      ],
+      "seal": "v8_tier_not_run_as_a_group/seal"
+    },
+    {
+      "downloads": {
+        "app": "v8_no_test_id_key/downloads/app.json"
+      },
+      "evidence": null,
+      "expect": "FAILED",
+      "id": "v8_no_test_id_key",
+      "key_class": "fixture",
+      "keys": "keys.fixture.json",
+      "reason_classes": [
+        "statement_version"
+      ],
+      "seal": "v8_no_test_id_key/seal"
+    },
+    {
+      "downloads": {
+        "app": "v8_key_material_for_the_key_id/downloads/app.json"
+      },
+      "evidence": null,
+      "expect": "FAILED",
+      "id": "v8_key_material_for_the_key_id",
+      "key_class": "fixture",
+      "keys": "keys.fixture.json",
+      "reason_classes": [
+        "statement_version"
+      ],
+      "seal": "v8_key_material_for_the_key_id/seal"
+    },
+    {
+      "downloads": {
+        "app": "v9_unknown_version/downloads/app.json"
+      },
+      "evidence": null,
+      "expect": "FAILED",
+      "id": "v9_unknown_version",
       "key_class": "fixture",
       "keys": "keys.fixture.json",
       "reason_classes": [
         "unknown_version"
       ],
-      "seal": "v8_unknown_version/seal"
+      "seal": "v9_unknown_version/seal"
     }
   ]
 }
