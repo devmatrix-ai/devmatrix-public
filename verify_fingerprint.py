@@ -235,6 +235,15 @@ def keys_of(document: object, path: str) -> list[dict]:
         kids.add(key["kid"])
         if key["status"] not in KEY_STATUSES:
             raise ValueError(f"{path}: key {i} status {key['status']!r} is not one of {sorted(KEY_STATUSES)}")
+        if key["status"] in VERIFYING_STATUSES:
+            try:
+                _instant(key["created_at"], "created_at")
+            except ValueError:
+                raise ValueError(
+                    f"{path}: key {i} ({key['key_id']!r}) is {key['status']} and states no start "
+                    "(created_at, an ISO 8601 instant with a time zone): a key that verifies "
+                    "names the instant it started signing"
+                ) from None
     return keys
 
 

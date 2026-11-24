@@ -13,6 +13,7 @@ import json
 import re
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -196,12 +197,32 @@ class TheKeysFile(unittest.TestCase):
                 "a kid that is not its key's": {"schema_id": vf.KEYS_SCHEMA_ID, "keys": [dict(KEYS[0], kid="sha256:" + "0" * 64)]},
                 "one key listed twice": {"schema_id": vf.KEYS_SCHEMA_ID, "keys": [KEYS[0], dict(KEYS[0], status="revoked")]},
                 "an unknown status": {"schema_id": vf.KEYS_SCHEMA_ID, "keys": [dict(KEYS[0], status="compromised")]},
+                "an active key with no start": {"schema_id": vf.KEYS_SCHEMA_ID, "keys": [dict(KEYS[1], created_at=None)]},
+                "a retired key with no start": {"schema_id": vf.KEYS_SCHEMA_ID, "keys": [dict(KEYS[0], created_at=None)]},
+                "a start that names no zone": {
+                    "schema_id": vf.KEYS_SCHEMA_ID, "keys": [dict(KEYS[1], created_at="2026-09-16T11:01:14")],
+                },
+                "a start that is no instant": {"schema_id": vf.KEYS_SCHEMA_ID, "keys": [dict(KEYS[1], created_at="soon")]},
             }
             for case, document in cases.items():
                 with self.subTest(case=case):
                     path.write_text(json.dumps(document), encoding="utf-8")
                     with self.assertRaises(ValueError):
                         vf.load_keys(path)
+
+    def test_a_live_key_with_no_start_is_refused_when_the_keys_are_read(self) -> None:
+        """A key that verifies names the instant it started signing; a revoked
+        key verifies nothing and needs none. MUT-RED: the start check on read
+        is removed."""
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "keys.json"
+            path.write_text(json.dumps({"schema_id": vf.KEYS_SCHEMA_ID, "keys": [dict(KEYS[1], created_at=None)]}),
+                            encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, r"key 0 \('dm-prod-2026-01'\) is active and states no start"):
+                vf.load_keys(path)
+            path.write_text(json.dumps({"schema_id": vf.KEYS_SCHEMA_ID,
+                                        "keys": [dict(KEYS[1], created_at=None, status="revoked")]}), encoding="utf-8")
+            self.assertIsNone(vf.load_keys(path)[0]["created_at"])
 
     def test_a_revoked_key_never_verifies(self) -> None:
         name = next(iter(EXPECTED))

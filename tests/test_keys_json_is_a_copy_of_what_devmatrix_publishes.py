@@ -272,6 +272,14 @@ class TheRefusals(unittest.TestCase):
                 self._refused(_document(_RETIRED, retired, successor, _SEAL),
                               "REFUSED:", "is not an ISO 8601 instant with a time zone")
 
+    def test_a_live_key_published_with_no_start(self) -> None:
+        """A new key, or one keys.json lists, served with a null start is
+        refused before it is compared. MUT-RED: the start check on read."""
+        self._refused(_document(_RETIRED, _EVIDENCE, dict(_SEAL, created_at=None)),
+                      "REFUSED:", "('dm-seal-1') is active and states no start")
+        self._refused(_document(_RETIRED, dict(_EVIDENCE, created_at=None), _SEAL),
+                      "REFUSED:", "('dm-evidence-2') is active and states no start")
+
     def test_a_revocation_dated_before_the_retirement(self) -> None:
         revoked = dict(_RETIRED, status="revoked", status_since="2026-07-01T00:00:00+00:00")
         self._refused(_document(revoked, _EVIDENCE, _SEAL), "status_since moved back")
