@@ -233,7 +233,7 @@ class ASealOfStatement8(unittest.TestCase):
             "no key named": lambda s: s.pop("test_id_key"),
             "base64 key material": lambda s: s.__setitem__("test_id_key", "a2V5LW1hdGVyaWFs" * 4 + "=="),
             "longer than a key id": lambda s: s.__setitem__("test_id_key", "0" * 64),
-            "capitals": lambda s: s.__setitem__("test_id_key", "Sti-dev-2026-11"),
+            "capitals": lambda s: s.__setitem__("test_id_key", "Sti-test-2026-11"),
             "a field more": lambda s: s.__setitem__("test_id_secret", "k" * 32),
         }
         for case, edit in cases.items():
@@ -244,7 +244,7 @@ class ASealOfStatement8(unittest.TestCase):
                 out = self._refused(build, "the signed statement is refused by its content: it ")
                 self.assertNotIn("a2V5LW1hdGVyaWFs", out)
                 self.assertNotIn("k" * 32, out)
-                self.assertNotIn("Sti-dev", out)
+                self.assertNotIn("Sti-test", out)
 
     def test_a_tier_not_run_declared_as_before(self) -> None:
         build = OneBuild()
