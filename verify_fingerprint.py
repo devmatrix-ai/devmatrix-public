@@ -28,7 +28,7 @@ import re
 import stat
 import sys
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
@@ -1426,46 +1426,306 @@ def signed_payload(evidence: dict) -> dict:
     return payload if isinstance(payload, dict) else evidence
 
 
-def hash_fields(fingerprint: dict, prefix: str = "") -> dict[str, str]:
-    """Every hash a fingerprint records, by its path (``ir_hashes.spec_hash``,
-    ``modules.<name>.code_bundle_hash``, ``code_bundle_hash``): each non-empty
-    string field whose name ends in ``_hash``, at any depth. Fingerprint
-    schemas changed over time; comparing by path compares what both files
-    record under the same name and never renames one schema's field into
-    another's."""
-    fields: dict[str, str] = {}
-    for key, value in fingerprint.items():
-        path = f"{prefix}.{key}" if prefix else key
-        if isinstance(value, dict):
-            fields.update(hash_fields(value, path))
-        elif isinstance(value, str) and key.endswith("_hash") and value:
-            fields[path] = value
-    return fields
+# ---------------------------------------------------------------------------
+# Comparing two documents. Each schema this verifier compares has a declared
+# table: every field it may carry is compared, or excluded with the reason it
+# differs between two honest runs. Lists are walked: by the identity of their
+# items where order is not content, by position where it is. A field the
+# table does not name, or a schema with no table, fails: nothing is compared
+# in part.
+# ---------------------------------------------------------------------------
 
 
-def compare_fingerprints(fp1: dict, fp2: dict) -> list[tuple[str, bool, str]]:
-    """Compare every hash the two fingerprints record, by path.
+@dataclass(frozen=True)
+class Compared:
+    """A value compared as a whole: a scalar, or a structure this verifier
+    does not walk, compared by its canonical JSON."""
 
-    A hash recorded by only one of them fails (the two fingerprints do not
-    record the same things), and two fingerprints that record no hash at all
-    fail: nothing was compared, so nothing was shown identical.
-    """
-    first, second = hash_fields(fp1), hash_fields(fp2)
-    paths = sorted(set(first) | set(second))
-    if not paths:
-        return [("hashes", False, "no hash recorded in either fingerprint: nothing compared")]
 
-    results = []
-    for path in paths:
-        v1, v2 = first.get(path), second.get(path)
-        if v1 is None or v2 is None:
-            where = "first" if v2 is None else "second"
-            results.append((path, False, f"{path}: recorded only in the {where} fingerprint"))
-        elif v1 == v2:
-            results.append((path, True, f"{path}: IDENTICAL ({v1[:16]}...)"))
+@dataclass(frozen=True)
+class Excluded:
+    """A field that differs between two honest runs, never compared."""
+
+    reason: str
+
+
+@dataclass(frozen=True)
+class Fields:
+    """An object whose keys are the closed set the table names."""
+
+    fields: "Mapping[str, FieldRule]"
+
+
+@dataclass(frozen=True)
+class Named:
+    """An object whose keys are content (a module, a digest name): every key
+    either document carries is compared."""
+
+    value: "FieldRule"
+
+
+@dataclass(frozen=True)
+class KeyedList:
+    """A list whose order is not content: items are matched by ``key``."""
+
+    key: str
+    item: "FieldRule"
+
+
+@dataclass(frozen=True)
+class OrderedList:
+    """A list whose order is content: items are matched by position."""
+
+    item: "FieldRule"
+
+
+FieldRule = Compared | Excluded | Fields | Named | KeyedList | OrderedList
+
+COMPARED = Compared()
+_RUN_JOB = Excluded("the job that published this run: every run is its own job")
+_RUN_TIME = Excluded("when this run happened")
+_RUN_ID = Excluded("this run's own identifier")
+
+
+def _all_compared(names: "tuple[str, ...] | Mapping[str, object]") -> "dict[str, FieldRule]":
+    return {name: COMPARED for name in names}
+
+
+_MODULES_RULE = KeyedList("module", Fields(_all_compared(("module", "emission_sha256"))))
+_DETERMINISM_RULE = KeyedList("module", Fields(_all_compared(("module", "status", "cause"))))
+_ATTESTATION_V1_RULES: "dict[str, FieldRule]" = {
+    **_all_compared(_V1_FIELDS),
+    "job_id": _RUN_JOB,
+    "identity": Named(COMPARED),
+    "merkle": Fields({
+        "nested_root": COMPARED,
+        "sub_roots": Named(COMPARED),
+        "emit_root": COMPARED,
+        "emit_leaf_sha256": OrderedList(COMPARED),
+    }),
+    "modules": _MODULES_RULE,
+    "determinism": _DETERMINISM_RULE,
+    "coverage": Fields(_all_compared(("delivered_files", "covered"))),
+}
+_ATTESTATION_V2_RULES: "dict[str, FieldRule]" = {
+    **_ATTESTATION_V1_RULES, **_all_compared(("run_by", "seal_class")),
+}
+_ATTESTATION_V3_RULES: "dict[str, FieldRule]" = {
+    **_ATTESTATION_V2_RULES,
+    "identity": Fields({**_all_compared(IDENTITY_LINKS_V3), SERVICE_SPEC_HASHES: Named(COMPARED)}),
+    "merkle": Fields({
+        "nested_root": COMPARED,
+        "sub_roots": Fields(_all_compared(SUB_ROOT_NAMES)),
+        "emit_root": COMPARED,
+        "emit_leaf_sha256": OrderedList(COMPARED),
+    }),
+}
+_PUBLISHED_FINGERPRINT_V2_RULES: "dict[str, FieldRule]" = {
+    **_all_compared(PUBLISHED_FINGERPRINT_KEYS),
+    "job_id": _RUN_JOB,
+    "merkle_root": Fields(_all_compared(MERKLE_ROOT_KEYS)),
+    "determinism": Fields(_all_compared(("status", "cause", "deterministic"))),
+    "seal": Fields(_all_compared(("passed",))),
+    "customer_checks": Fields({
+        **_all_compared((
+            "schema_id", "sealed_schema_id", "status", "reason", "scopes", "totals", "tests_absent_reason",
+        )),
+        "tests": Fields(_all_compared(PRE_NDA_TEST_KEYS)),
+    }),
+    "complexity_measurement": Fields({
+        **_all_compared(COMPLEXITY_KEYS),
+        "entitlement_reasons": OrderedList(COMPARED),
+    }),
+}
+#: The build fingerprints published before documents named their schema.
+#: The two runs of one specification under ``fingerprints/`` differ in the
+#: fields excluded here, and in no other.
+UNVERSIONED_FINGERPRINT = "build fingerprint (no schema named)"
+_UNVERSIONED_FINGERPRINT_RULES: "dict[str, FieldRule]" = {
+    **_all_compared((
+        "build_id", "build_identity_fingerprint", "code_bundle_hash", "compiler_version", "deterministic",
+        "deterministic_build_id", "deterministic_seed", "fingerprint", "gate_results_hash",
+        "ir_semantic_hash", "ir_structural_hash", "llm_calls", "merkle_root", "model_config_hash",
+        "module_id", "pipeline_version", "platform_build_id", "provenance_attestable",
+        "provenance_complete", "provenance_hash_method", "schema_version", "security_arc_hash",
+        "service_name", "source_map_hash", "spec_hash", "spec_name", "total_llm_calls",
+    )),
+    "build_timestamp": _RUN_TIME,
+    "created_at": _RUN_TIME,
+    "run_id": _RUN_ID,
+    "compile_attempt_id": _RUN_ID,
+    "compiler_run_id": _RUN_ID,
+    "build_identity": Fields({
+        **_all_compared((
+            "build_id", "build_seq", "fingerprint", "learning_enabled", "parent_build_seq",
+            "platform_id", "platform_id_source", "resolution_method",
+        )),
+        "resolved_at": _RUN_TIME,
+    }),
+    "convergence": Fields(_all_compared((
+        "builds_analyzed", "convergence_score", "convergence_trend", "defect_rate", "gates_skipped_count",
+        "insufficient_builds", "issue_density", "regression_detected", "total_gates_executed",
+        "trend_confidence",
+    ))),
+    "determinism": Fields(_all_compared(("deterministic",))),
+    "dmx_build_identity": Fields({
+        **_all_compared(("artifact_family", "platform_build_id", "schema")),
+        "compile_attempt_id": _RUN_ID,
+        "compiler_run_id": _RUN_ID,
+        "scope": Fields(_all_compared(("module_id", "type"))),
+    }),
+    "git": Fields(_all_compared(("commit_date", "commit_sha", "dirty"))),
+    "ir_hashes": Fields(_all_compared(("semantic_hash", "spec_hash", "structural_hash"))),
+    "logging_policy": Fields(_all_compared((
+        "format_provider", "log_crud_success", "propagate_actor_id", "propagate_correlation_id",
+        "redact_sensitive_fields", "sanitize_db_errors", "sensitive_patterns_count", "structured",
+    ))),
+    "pass_run_ledger": Fields(_all_compared((
+        "blocked", "digest_hash", "executed", "failed", "skipped", "skipped_dedup", "total",
+    ))),
+}
+#: The comparison table of each kind of document this verifier compares.
+COMPARISON_TABLES: "Mapping[str, Fields]" = {
+    ATTESTATION_SCHEMA_V1: Fields(_ATTESTATION_V1_RULES),
+    ATTESTATION_SCHEMA_V2: Fields(_ATTESTATION_V2_RULES),
+    ATTESTATION_SCHEMA_V3: Fields(_ATTESTATION_V3_RULES),
+    PUBLISHED_FINGERPRINT_SCHEMA_V2: Fields(_PUBLISHED_FINGERPRINT_V2_RULES),
+    UNVERSIONED_FINGERPRINT: Fields(_UNVERSIONED_FINGERPRINT_RULES),
+}
+UPDATE_THE_VERIFIER = "update the verifier"
+
+
+class ComparisonRefused(ValueError):
+    """The two documents cannot be compared field by field: a schema has no
+    table here, or the two are of different schemas."""
+
+
+def comparison_schema(payload: dict) -> str:
+    """The kind of document whose table compares ``payload``: the schema it
+    names, or the unversioned build fingerprint when it names none. A schema
+    with no table is refused, never compared in part."""
+    if "schema" not in payload:
+        return UNVERSIONED_FINGERPRINT
+    schema = payload["schema"]
+    if isinstance(schema, str) and schema != UNVERSIONED_FINGERPRINT and schema in COMPARISON_TABLES:
+        return schema
+    raise ComparisonRefused(f"schema {schema!r} has no comparison table in this verifier: {UPDATE_THE_VERIFIER}")
+
+
+@dataclass
+class Comparison:
+    """What comparing two documents found: how many values were compared and
+    were identical, every difference by path, and every excluded field either
+    document carries, with its reason."""
+
+    schema: str
+    compared: int = 0
+    identical: int = 0
+    differences: "list[str]" = field(default_factory=list)
+    excluded: "dict[str, str]" = field(default_factory=dict)
+
+    @property
+    def passed(self) -> bool:
+        return self.compared > 0 and not self.differences
+
+
+class _Absent:
+    """The value of a field a document does not carry."""
+
+
+_ABSENT = _Absent()
+
+
+def _shown(value: object) -> str:
+    text = json.dumps(value, sort_keys=True, ensure_ascii=False)
+    return text if len(text) <= 40 else text[:37] + "..."
+
+
+def _canonical(value: object) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def _keyed(items: list, key: str, path: str, which: str, out: Comparison) -> "dict[str, object] | None":
+    """The items of a keyed list by their key, or ``None`` (a difference is
+    recorded) when an item is not an object with a unique string key."""
+    by_key: "dict[str, object]" = {}
+    for index, item in enumerate(items):
+        name = item.get(key) if isinstance(item, dict) else None
+        if not isinstance(name, str) or name in by_key:
+            out.differences.append(f"{path}[{index}] in the {which} document: is not an item with a unique {key}")
+            return None
+        by_key[name] = item
+    return by_key
+
+
+def _walk(rule: FieldRule, first: object, second: object, path: str, out: Comparison) -> None:
+    if isinstance(rule, Excluded):
+        out.excluded[path] = rule.reason
+        return
+    if first is _ABSENT or second is _ABSENT:
+        where = "first" if second is _ABSENT else "second"
+        out.differences.append(f"{path}: recorded only in the {where} document")
+        return
+    container = dict if isinstance(rule, (Fields, Named)) else list if isinstance(rule, (KeyedList, OrderedList)) else None
+    walk_first = container is not None and isinstance(first, container)
+    walk_second = container is not None and isinstance(second, container)
+    if walk_first != walk_second:
+        out.differences.append(f"{path}: DIFFERENT ({_shown(first)} vs {_shown(second)})")
+        return
+    if not walk_first:
+        out.compared += 1
+        if _canonical(first) == _canonical(second):
+            out.identical += 1
         else:
-            results.append((path, False, f"{path}: DIFFERENT ({v1[:16]}... vs {v2[:16]}...)"))
-    return results
+            out.differences.append(f"{path}: DIFFERENT ({_shown(first)} vs {_shown(second)})")
+        return
+    if isinstance(rule, Fields):
+        for key in sorted(set(first) | set(second)):
+            sub = f"{path}.{key}" if path else key
+            if key not in rule.fields:
+                out.differences.append(f"{sub}: not in this verifier's table for {out.schema}: {UPDATE_THE_VERIFIER}")
+                continue
+            _walk(rule.fields[key], first.get(key, _ABSENT), second.get(key, _ABSENT), sub, out)
+    elif isinstance(rule, Named):
+        for key in sorted(set(first) | set(second)):
+            _walk(rule.value, first.get(key, _ABSENT), second.get(key, _ABSENT), f"{path}.{key}", out)
+    elif isinstance(rule, KeyedList):
+        keyed_first = _keyed(first, rule.key, path, "first", out)
+        keyed_second = _keyed(second, rule.key, path, "second", out)
+        if keyed_first is None or keyed_second is None:
+            return
+        for key in sorted(set(keyed_first) | set(keyed_second)):
+            _walk(rule.item, keyed_first.get(key, _ABSENT), keyed_second.get(key, _ABSENT), f"{path}[{key}]", out)
+    elif isinstance(rule, OrderedList):
+        if len(first) != len(second):
+            out.differences.append(f"{path}: {len(first)} items vs {len(second)}")
+        for index in range(max(len(first), len(second))):
+            _walk(
+                rule.item,
+                first[index] if index < len(first) else _ABSENT,
+                second[index] if index < len(second) else _ABSENT,
+                f"{path}[{index}]",
+                out,
+            )
+
+
+def compare_fingerprints(fp1: dict, fp2: dict) -> Comparison:
+    """Compare two signed documents by the table of their schema.
+
+    Every field the table compares is compared at any depth, lists included;
+    a field recorded by one document only fails; a field the table does not
+    name fails; a schema with no table, or two documents of different
+    schemas, is refused. Comparing nothing fails: no value was shown
+    identical.
+    """
+    first, second = comparison_schema(fp1), comparison_schema(fp2)
+    if first != second:
+        raise ComparisonRefused(
+            f"the two documents are of different schemas ({first}, {second}): they record different things"
+        )
+    out = Comparison(schema=first)
+    _walk(COMPARISON_TABLES[first], fp1, fp2, "", out)
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -2935,7 +3195,7 @@ Examples:
     parser.add_argument(
         "--compare",
         type=Path,
-        help="Path to another fingerprint to compare (for determinism testing)"
+        help="Path to another document of the same schema to compare, field by field (for determinism testing)"
     )
 
     parser.add_argument(
@@ -3049,14 +3309,25 @@ Examples:
             all_passed = False
         print()
 
-        results = compare_fingerprints(signed_payload(evidence), signed_payload(evidence2))
-        compared = sum(1 for _, passed, _ in results if passed)
-        print(f"Hashes compared by path: {len(results)}, identical: {compared}")
-
-        for key, passed, message in results:
-            status = "[OK]" if passed else "[FAIL]"
-            print(f"{status} {message}")
-            if not passed:
+        try:
+            comparison = compare_fingerprints(signed_payload(evidence), signed_payload(evidence2))
+        except ComparisonRefused as refused:
+            print(f"[FAIL] comparison: {refused}")
+            all_passed = False
+        else:
+            print(
+                f"Compared by the {comparison.schema} table: {comparison.compared} values, "
+                f"identical: {comparison.identical}"
+            )
+            for path, reason in sorted(comparison.excluded.items()):
+                print(f"[--] {path}: not compared ({reason})")
+            if comparison.compared == 0:
+                print("[FAIL] comparison: no value compared, so none was shown identical")
+            for difference in comparison.differences:
+                print(f"[FAIL] {difference}")
+            if comparison.passed:
+                print(f"[OK] every compared value is identical ({comparison.compared})")
+            else:
                 all_passed = False
 
     # Mode 2: Verify against actual files

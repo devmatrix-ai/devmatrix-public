@@ -67,15 +67,17 @@ python verify_fingerprint.py \
 ```
 
 It ends with `VERIFICATION PASSED` and exit code 0 only when both signatures
-verify against a production key in `keys.json` and every hash the two builds
-record is identical:
+verify against a production key in `keys.json` and every value the two builds
+record is identical, except the fields that name the run itself (when it ran
+and its own identifiers), which are listed as not compared:
 
 ```
 [OK] signature: Ed25519, key 'dm-prod-2026-01' (production), signed 2026-10-06T13:03:14.317248+00:00
 ...
-Hashes compared by path: 5, identical: 5
-[OK] code_bundle_hash: IDENTICAL (e94b30ea389c9658...)
+Compared by the build fingerprint (no schema named) table: 22 values, identical: 22
+[--] build_timestamp: not compared (when this run happened)
 ...
+[OK] every compared value is identical (22)
 VERIFICATION PASSED
 ```
 
@@ -102,8 +104,12 @@ including attestations and every failure case, is
   `key_id`, and has not been changed since;
 - the key is a **production** key, and the time the signature claims falls
   inside that key's validity window;
-- with `--compare`, that the two builds recorded the same hash for every field
-  either of them records (a hash recorded by one build only fails).
+- with `--compare`, that the two builds recorded the same value in every field
+  their schema compares, lists included (each module's emission digest, every
+  emitted file's leaf of the Merkle commitment), and that the only fields not
+  compared are the ones the verifier names with the reason; a value recorded
+  by one build only, a field the verifier does not know, or a schema it has no
+  table for fails.
 
 **It does not prove:**
 

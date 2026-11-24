@@ -18,7 +18,8 @@ python verify_fingerprint.py \
   --spec original_spec.md \
   --output generated/
 
-# Compare two published evidence files: every hash both record, by path
+# Compare two published evidence files of one schema: every field its table
+# compares, lists included; the fields naming the run are listed, not compared
 # (their signatures are checked too)
 python verify_fingerprint.py \
   --fingerprint fingerprint1.json \
@@ -221,7 +222,7 @@ The verification script (`verify_fingerprint.py`) works on:
 - macOS
 - Windows
 
-Requirements: Python 3.9+. The hash checks use the standard library only; the signature check needs the `cryptography` package (`pip install cryptography`).
+Requirements: Python 3.10+. The hash checks use the standard library only; the signature check needs the `cryptography` package (`pip install cryptography`).
 
 **Recommendation**: The Python verifier is cross-platform and recommended on all operating systems, including Windows where shell-based hash verification differs from Unix systems.
 

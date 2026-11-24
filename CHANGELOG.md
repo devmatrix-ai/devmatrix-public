@@ -14,6 +14,20 @@
 
 ## Verifier
 
+- **`--compare` compares every field of the schema, lists included.** Two
+  documents are compared by a table declared for their schema: every field is
+  compared or named as not compared with its reason (only when the run
+  happened, its job and its own identifiers), modules are matched by name,
+  the Merkle leaves in order, and every difference is named by its path. A
+  field the table does not know, two schemas, a schema with no table (`update
+  the verifier`) or nothing compared fails. Earlier versions compared only
+  the fields whose name ends in `_hash` outside lists — on a published
+  attestation, the identity hashes and the gate verdict hash, 5 to 6 fields —
+  so an `identical` from an earlier verifier did not cover each module's
+  emission digest nor the Merkle commitment.
+- **Python 3.10.** The guide said 3.9; the verifier has needed 3.10 since its
+  type annotations were written.
+
 - **A self-attested seal-statement/4 states its share.** Each service its
   client tested states a whole share from 1 to 100%, counts that hold, enough
   tests passed to meet that share, and every test that did not pass named once,
@@ -149,9 +163,10 @@
   claimed signing time must fall inside that key's window, and the key must be
   a production key. A key of any other class is refused, and no option
   accepts it.
-- **Comparison by path.** `--compare` compares every hash field at any depth of
-  the two signed fingerprints. A hash recorded by one side only fails, and two
-  fingerprints that record no hash fail.
+- **Comparison by path** (replaced: see the first entry, on `--compare`).
+  `--compare` compared every hash field at any depth of the two signed
+  fingerprints outside lists. A hash recorded by one side only failed, and two
+  fingerprints that recorded no hash failed.
 - An unsigned flat fingerprint fails unless `--allow-unsigned` is passed.
   Without the `cryptography` package the signature check fails; it is never
   skipped.

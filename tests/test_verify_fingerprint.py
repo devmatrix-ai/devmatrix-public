@@ -8,6 +8,7 @@ Run from the repository root: python -m unittest discover -s tests
 from __future__ import annotations
 
 import base64
+import copy
 import json
 import re
 import subprocess
@@ -241,55 +242,162 @@ PRODUCTION_PAIR = (
     "fingerprints/ae86be9a-cb25-4178-9bb1-39bc0aacd0d3/ae86be9a-cb25-4178-9bb1-39bc0aacd0d3.json",
 )
 
-#: Evidence files whose fingerprint records no hash at all.
-RECORDS_NO_HASH = {"fingerprints/20260330_modular_hip_demo_1_20260323_001610_f210ce5a.json"}
+#: The two published attestations of one specification, schema /2.
+ATTESTATION_PAIR = (
+    "attestations/attestation/054abbd7-ef45-4e2f-a252-2f2ff833ad2d.json",
+    "attestations/attestation/137c2ad3-a293-4173-ae39-2a4133ee136a.json",
+)
+#: The fields two runs of one specification differ in: when the run happened
+#: and its own identifiers. The pair above shows it.
+RUN_FIELDS = {
+    "build_timestamp", "compile_attempt_id", "compiler_run_id",
+    "dmx_build_identity.compile_attempt_id", "dmx_build_identity.compiler_run_id",
+}
 
 
 def _payload(name: str) -> dict:
     return vf.signed_payload(_evidence(name))
 
 
+def _attestation() -> dict:
+    return copy.deepcopy(_payload(ATTESTATION_PAIR[0]))
+
+
 class TheComparison(unittest.TestCase):
-    def test_two_runs_of_one_specification_compare_every_hash_identical(self) -> None:
-        results = vf.compare_fingerprints(*(_payload(n) for n in PRODUCTION_PAIR))
-        self.assertEqual(
-            [path for path, _, _ in results],
-            ["code_bundle_hash", "ir_semantic_hash", "ir_structural_hash", "security_arc_hash", "spec_hash"],
+    def test_two_runs_of_one_specification_compare_identical_but_for_their_run(self) -> None:
+        comparison = vf.compare_fingerprints(*(_payload(n) for n in PRODUCTION_PAIR))
+        self.assertTrue(comparison.passed, comparison.differences)
+        self.assertEqual(comparison.schema, vf.UNVERSIONED_FINGERPRINT)
+        self.assertEqual((comparison.compared, comparison.identical), (22, 22))
+        self.assertEqual(set(comparison.excluded), RUN_FIELDS)
+
+    def test_one_module_emission_digest_differing_fails_by_its_path(self) -> None:
+        """MUT-RED: lists are not walked (the module list is skipped)."""
+        first = _attestation()
+        second = _attestation()
+        module = second["modules"][0]
+        module["emission_sha256"] = "0" * 64
+        comparison = vf.compare_fingerprints(first, second)
+        self.assertFalse(comparison.passed)
+        self.assertEqual(len(comparison.differences), 1, comparison.differences)
+        self.assertTrue(
+            comparison.differences[0].startswith(f"modules[{module['module']}].emission_sha256: DIFFERENT"),
+            comparison.differences,
         )
-        self.assertTrue(all(passed for _, passed, _ in results), results)
 
-    def test_nested_hashes_are_compared_by_their_path(self) -> None:
-        nested = {"ir_hashes": {"spec_hash": "a" * 64}}
-        results = vf.compare_fingerprints(nested, dict(nested))
-        self.assertIn("ir_hashes.spec_hash", [path for path, _, _ in results])
+    def test_modules_are_matched_by_name_not_by_position(self) -> None:
+        first = _attestation()
+        extra = {"module": "zz_second", "emission_sha256": "1" * 64}
+        first["modules"] = [*first["modules"], extra]
+        second = copy.deepcopy(first)
+        second["modules"].reverse()
+        self.assertTrue(vf.compare_fingerprints(first, second).passed)
+        second["modules"] = [m for m in second["modules"] if m["module"] != "zz_second"]
+        comparison = vf.compare_fingerprints(first, second)
+        self.assertEqual(comparison.differences, ["modules[zz_second]: recorded only in the first document"])
 
-    def test_a_changed_hash_fails(self) -> None:
-        first, second = (_payload(n) for n in PRODUCTION_PAIR)
-        second = dict(second, code_bundle_hash="0" * 64)
-        results = dict((path, passed) for path, passed, _ in vf.compare_fingerprints(first, second))
-        self.assertFalse(results["code_bundle_hash"])
+    def test_the_order_of_the_emitted_leaves_is_content(self) -> None:
+        first = _attestation()
+        second = _attestation()
+        leaves = second["merkle"]["emit_leaf_sha256"]
+        leaves[0], leaves[1] = leaves[1], leaves[0]
+        paths = [d.split(":")[0] for d in vf.compare_fingerprints(first, second).differences]
+        self.assertEqual(paths, ["merkle.emit_leaf_sha256[0]", "merkle.emit_leaf_sha256[1]"])
 
-    def test_a_hash_recorded_by_one_fingerprint_only_fails(self) -> None:
+    def test_a_run_field_differing_alone_compares_identical(self) -> None:
+        first = _attestation()
+        second = dict(_attestation(), job_id="00000000-0000-4000-8000-000000000000")
+        comparison = vf.compare_fingerprints(first, second)
+        self.assertTrue(comparison.passed, comparison.differences)
+        self.assertIn("job_id", comparison.excluded)
+        flat = _payload(PRODUCTION_PAIR[0])
+        later = dict(flat, build_timestamp="2027-01-01T00:00:00")
+        self.assertTrue(vf.compare_fingerprints(flat, later).passed)
+
+    def test_a_field_unknown_to_the_table_fails_and_asks_for_an_update(self) -> None:
+        first = _attestation()
+        second = dict(_attestation(), new_digest="sha256:" + "2" * 64)
+        comparison = vf.compare_fingerprints(first, second)
+        self.assertEqual(
+            comparison.differences,
+            [f"new_digest: not in this verifier's table for {vf.ATTESTATION_SCHEMA_V2}: update the verifier"],
+        )
+
+    def test_a_schema_with_no_table_is_refused_never_compared_in_part(self) -> None:
+        for schema in ("published-attestation/9", "published-platform-seal/1", None):
+            with self.subTest(schema=schema):
+                document = dict(_attestation(), schema=schema)
+                with self.assertRaisesRegex(vf.ComparisonRefused, "update the verifier"):
+                    vf.compare_fingerprints(document, document)
+
+    def test_two_schemas_are_not_compared(self) -> None:
+        with self.assertRaisesRegex(vf.ComparisonRefused, "different schemas"):
+            vf.compare_fingerprints(_attestation(), _payload(PRODUCTION_PAIR[0]))
+
+    def test_a_value_recorded_by_one_document_only_fails(self) -> None:
         first, second = (_payload(n) for n in PRODUCTION_PAIR)
         second = {k: v for k, v in second.items() if k != "spec_hash"}
-        results = {path: (passed, message) for path, passed, message in vf.compare_fingerprints(first, second)}
-        self.assertFalse(results["spec_hash"][0])
-        self.assertIn("only in the first", results["spec_hash"][1])
+        comparison = vf.compare_fingerprints(first, second)
+        self.assertEqual(comparison.differences, ["spec_hash: recorded only in the first document"])
 
-    def test_two_fingerprints_with_no_hash_fail(self) -> None:
-        (name,) = RECORDS_NO_HASH
-        results = vf.compare_fingerprints(_payload(name), _payload(name))
-        self.assertEqual(len(results), 1)
-        self.assertFalse(results[0][1])
-        self.assertIn("nothing compared", results[0][2])
+    def test_comparing_nothing_fails(self) -> None:
+        comparison = vf.compare_fingerprints({}, {})
+        self.assertEqual(comparison.compared, 0)
+        self.assertFalse(comparison.passed)
 
-    def test_the_signature_is_not_compared_as_a_hash(self) -> None:
-        paths = vf.hash_fields(_payload(PRODUCTION_PAIR[0]))
-        self.assertNotIn("signed_payload_hash", " ".join(paths))
+    def test_every_published_document_compares_with_itself(self) -> None:
+        names = sorted(EXPECTED) + sorted(
+            str(p.relative_to(ROOT)) for p in (ROOT / "attestations").rglob("*.json")
+        )
+        self.assertGreater(len(names), len(EXPECTED))
+        for name in names:
+            with self.subTest(name=name):
+                comparison = vf.compare_fingerprints(_payload(name), _payload(name))
+                self.assertTrue(comparison.passed, comparison.differences)
+                self.assertGreater(comparison.compared, 0)
 
-    def test_which_evidence_records_hashes(self) -> None:
-        empty = {name for name in EXPECTED if not vf.hash_fields(_payload(name))}
-        self.assertEqual(empty, RECORDS_NO_HASH)
+    def test_two_published_runs_are_compared_on_their_emitted_files(self) -> None:
+        """The two /2 attestations of one specification record the same
+        module digests and differ in emitted files: the comparison names them."""
+        comparison = vf.compare_fingerprints(*(_payload(n) for n in ATTESTATION_PAIR))
+        paths = {d.split(":")[0] for d in comparison.differences}
+        self.assertFalse(comparison.passed)
+        self.assertIn("merkle.emit_root", paths)
+        self.assertIn("merkle.emit_leaf_sha256[5]", paths)
+        self.assertFalse(any(path.startswith("modules[") for path in paths))
+
+    def test_each_table_names_exactly_the_fields_its_schema_declares(self) -> None:
+        """MUT-RED: a schema gains a field and its comparison table does not."""
+        declared = {
+            vf.ATTESTATION_SCHEMA_V1: set(vf._V1_FIELDS),
+            vf.ATTESTATION_SCHEMA_V2: set(vf._V2_FIELDS),
+            vf.ATTESTATION_SCHEMA_V3: set(vf._V3_FIELDS),
+            vf.PUBLISHED_FINGERPRINT_SCHEMA_V2: set(vf.PUBLISHED_FINGERPRINT_KEYS),
+        }
+        for schema, fields in declared.items():
+            with self.subTest(schema=schema):
+                self.assertEqual(set(vf.COMPARISON_TABLES[schema].fields), fields)
+
+    def test_only_run_fields_are_excluded(self) -> None:
+        def excluded(rule: vf.FieldRule, path: str) -> set[str]:
+            if isinstance(rule, vf.Excluded):
+                return {path}
+            if isinstance(rule, vf.Fields):
+                return set().union(*(excluded(r, f"{path}.{k}".lstrip(".")) for k, r in rule.fields.items()))
+            if isinstance(rule, (vf.Named, vf.OrderedList)):
+                return excluded(rule.value if isinstance(rule, vf.Named) else rule.item, f"{path}[]")
+            if isinstance(rule, vf.KeyedList):
+                return excluded(rule.item, f"{path}[]")
+            return set()
+
+        found = {schema: excluded(table, "") for schema, table in vf.COMPARISON_TABLES.items()}
+        self.assertEqual(found, {
+            vf.ATTESTATION_SCHEMA_V1: {"job_id"},
+            vf.ATTESTATION_SCHEMA_V2: {"job_id"},
+            vf.ATTESTATION_SCHEMA_V3: {"job_id"},
+            vf.PUBLISHED_FINGERPRINT_SCHEMA_V2: {"job_id"},
+            vf.UNVERSIONED_FINGERPRINT: RUN_FIELDS | {"created_at", "run_id", "build_identity.resolved_at"},
+        })
 
 
 class TheCommandLine(unittest.TestCase):
@@ -297,7 +405,8 @@ class TheCommandLine(unittest.TestCase):
         result = _run("-f", PRODUCTION_PAIR[0], "--compare", PRODUCTION_PAIR[1])
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertIn("[OK] signature", result.stdout)
-        self.assertIn("Hashes compared by path: 5, identical: 5", result.stdout)
+        self.assertIn("Compared by the build fingerprint (no schema named) table: 22 values, identical: 22", result.stdout)
+        self.assertIn("[OK] every compared value is identical (22)", result.stdout)
 
     def test_a_key_of_another_class_is_refused_and_no_option_accepts_it(self) -> None:
         import tempfile

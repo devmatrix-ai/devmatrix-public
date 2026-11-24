@@ -64,22 +64,34 @@ python verify_fingerprint.py \
 
 Two separate compiler runs of the same specification (different
 `compiler_run_id` and `compile_attempt_id`), each signed with the production
-key: both signatures verify and the five hashes both runs record are identical
+key: both signatures verify and every value both runs record is identical, except
+when each run happened and its own identifiers
 (see [HOW_TO_VERIFY.md](../HOW_TO_VERIFY.md#verifying-the-signature)).
 
-**Expected result**: both signatures verify and every compared hash is `IDENTICAL` (`Hashes compared by path: 5, identical: 5`).
+**Expected result**: both signatures verify and every compared value is identical (`Compared by the build fingerprint (no schema named) table: 22 values, identical: 22`).
 
 ### What the script compares
 
-The script compares every hash the two fingerprints record, by its path in the
-fingerprint: each field whose name ends in `_hash`, at any depth (for example
-`spec_hash`, `code_bundle_hash`, `ir_semantic_hash`, `ir_structural_hash`,
-`ir_hashes.spec_hash` or `modules.<module>.code_bundle_hash`, depending on the
-fingerprint's schema version).
+The script compares the two documents by a table declared for their schema.
+Every field the schema carries is compared at any depth, lists included: a
+published attestation's modules are matched by name and each module's
+emission digest is compared, and the leaves of its Merkle commitment are
+compared in order, since their order is part of the commitment. The only
+fields not compared are the ones that name the run itself (when it happened,
+its job and its own identifiers); each is printed as `[--] <path>: not
+compared (<reason>)`.
 
-If any compared hash differs, determinism is broken. A hash recorded by only
-one of the two fingerprints fails too, and so do two fingerprints that record
-no hash at all: an absent hash is never reported as identical.
+If any compared value differs, the two builds are not the same and the
+difference is named by its path. A value recorded by only one of the two
+documents fails, a field the table does not name fails, two documents of
+different schemas fail, a schema with no table fails with `update the
+verifier`, and comparing no value at all fails: nothing is compared in part,
+and an absent value is never reported as identical.
+
+Earlier versions of the verifier compared only the fields whose name ends
+in `_hash` outside lists: on a published attestation, its identity hashes and
+its gate verdict hash. An `identical` from such a verifier does not cover the
+per-module emission digests or the Merkle commitment.
 
 ---
 

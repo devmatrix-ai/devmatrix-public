@@ -227,6 +227,21 @@ class TheCommandLine(unittest.TestCase):
         self.assertIn("tests run by client, seal self_attested", result.stdout)
         self.assertIn("[FAIL] attestation.seal_class", result.stdout)
 
+    def test_two_documents_differing_in_one_module_digest_fail_by_its_path(self) -> None:
+        """MUT-RED: a difference found by the comparison does not fail the run."""
+        other = _attestation_v2()
+        other["modules"] = [dict(other["modules"][0], emission_sha256="0" * 64), *other["modules"][1:]]
+        result = self._run(_attestation_v2(), compare_with=other)
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        module = other["modules"][0]["module"]
+        self.assertIn(f"[FAIL] modules[{module}].emission_sha256: DIFFERENT", result.stdout)
+        self.assertIn("[--] job_id: not compared", result.stdout)
+
+    def test_a_document_compared_with_itself_passes_and_says_how_many_values(self) -> None:
+        result = self._run(_attestation_v2())
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertRegex(result.stdout, r"Compared by the published-attestation/2 table: [1-9][0-9]* values")
+
     def test_a_misspelled_or_missing_schema_is_checked_not_skipped(self) -> None:
         for payload in (
             dict(_attestation_v2(), schema="Published-Attestation/2"),
