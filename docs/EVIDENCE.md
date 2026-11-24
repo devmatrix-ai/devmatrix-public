@@ -114,7 +114,9 @@ A delivered attestation checked with `-f` is checked against its own table and
 its own signature: the SHA-256 of its JSON (keys sorted, default separators)
 without its signature, without the fields that say when or in which run it
 was made, and without the sections that record the build's history
-(`convergence_*`, `learning_*`, `build_identity`), at any depth, signed with Ed25519 by a published production `evidence-signing`
+(`convergence_metrics`, `convergence_curve`, `convergence_narrative`,
+`convergence_proof`, `learning_impact`, `learning_snapshot`,
+`build_identity`), at any depth, signed with Ed25519 by a published production `evidence-signing`
 key. Compared with `--compare`, the comparison decides the verdict, and each
 document's signature is stated apart: one that is unsigned or does not verify
 is printed as `[NOTE] ... NOT verified`, never as verified, and the verdict line
