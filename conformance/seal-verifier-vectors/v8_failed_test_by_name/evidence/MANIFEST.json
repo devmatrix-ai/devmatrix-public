@@ -18,12 +18,12 @@
     },
     {
       "path": "seal-statement.json",
-      "sha256": "a39c9d04c78023a001582c92b1928d38315c8877705aad33b1bdd87b44b33816",
-      "size_bytes": 2256
+      "sha256": "88558b37545be3a0768580be6ca06b4320483e41a90abc463075be92948ccb44",
+      "size_bytes": 2247
     },
     {
       "path": "seal-statement.sig.b64",
-      "sha256": "80208b69619d5fbad8586126f4ae287844358635e706f1d2bf90628e315491a4",
+      "sha256": "560c5c15907e21ac6d25005adc201b9d8409b5837163e9f74893897c43c26f3c",
       "size_bytes": 89
     }
   ],
